@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@blindtest/game-logic": ["../../packages/game-logic/src"],
+      "@blindtest/ui": ["../../packages/ui/src"]
+    }
+  }
+}

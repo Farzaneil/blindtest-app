@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Blindtest",
+    "slug": "blindtest-app",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#1A1A1A"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "app.blindtest.mobile"
+    },
+    "android": {
+      "package": "app.blindtest.mobile"
+    },
+    "plugins": [
+      "expo-speech-recognition"
+    ]
+  }
+}
