@@ -11,10 +11,12 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.blindtest.mobile"
+      "bundleIdentifier": "app.blindtest.mobile",
+      "newArchEnabled": true
     },
     "android": {
-      "package": "app.blindtest.mobile"
+      "package": "app.blindtest.mobile",
+      "newArchEnabled": true
     }
   }
 }
