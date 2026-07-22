@@ -1,0 +1,804 @@
+diff --git a/apps/mobile/App.tsx b/apps/mobile/App.tsx
+index c13cc72..7c6c3e9 100644
+--- a/apps/mobile/App.tsx
++++ b/apps/mobile/App.tsx
+@@ -3,24 +3,27 @@ import { SafeAreaView, StatusBar } from "react-native";
+ import { JoinRoomScreen } from "./src/screens/JoinRoomScreen";
+ import { BuzzerScreen } from "./src/screens/BuzzerScreen";
+ 
++type Session = { roomId: string; playerId: string };
++
+ /**
+  * Point d'entrée de l'appli mobile.
+  *
+  * Rappel du modèle : il n'y a pas d'écran "hôte" à part entière ici. Une fois
+- * dans une room, un joueur avec `is_host = true` voit simplement des
+- * contrôles supplémentaires (lancer le morceau, manche suivante) au-dessus
+- * du même écran de buzz que tout le monde. Voir src/screens/BuzzerScreen.tsx.
++ * dans une room, un joueur avec `is_host = true` pourra voir des contrôles
++ * supplémentaires au-dessus du même écran de buzz que tout le monde (pas
++ * encore câblé dans cette itération : le lancement de manche se fait depuis
++ * apps/web-host pour l'instant, voir BuzzerScreen.tsx).
+  */
+ export default function App() {
+-  const [roomId, setRoomId] = useState<string | null>(null);
++  const [session, setSession] = useState<Session | null>(null);
+ 
+   return (
+     <SafeAreaView style={{ flex: 1, backgroundColor: "#1A1A1A" }}>
+       <StatusBar barStyle="light-content" />
+-      {roomId ? (
+-        <BuzzerScreen roomId={roomId} />
++      {session ? (
++        <BuzzerScreen roomId={session.roomId} playerId={session.playerId} />
+       ) : (
+-        <JoinRoomScreen onJoined={setRoomId} />
++        <JoinRoomScreen onJoined={setSession} />
+       )}
+     </SafeAreaView>
+   );
+diff --git a/apps/mobile/src/lib/rooms.ts b/apps/mobile/src/lib/rooms.ts
+new file mode 100644
+index 0000000..59e59a9
+--- /dev/null
++++ b/apps/mobile/src/lib/rooms.ts
+@@ -0,0 +1,74 @@
++import { supabase } from "./supabase";
++
++export type Round = {
++  id: string;
++  status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
++  buzzed_by_player_id: string | null;
++  title: string;
++  artist: string;
++};
++
++function generateDeviceId(): string {
++  return `dev_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
++}
++
++// TODO: persister via AsyncStorage pour garder le même device_id entre deux
++// ouvertures de l'app. Pour l'instant, un nouvel id est généré à chaque
++// lancement (sans conséquence pour tester le buzz entre potes).
++export const deviceId = generateDeviceId();
++
++export async function joinRoomByCode(code: string, displayName: string) {
++  const { data: room, error: roomError } = await supabase
++    .from("rooms")
++    .select("id, code, status")
++    .eq("code", code.toUpperCase())
++    .single();
++
++  if (roomError || !room) {
++    throw new Error("Code de partie introuvable. Vérifie qu'il est bien affiché sur l'écran hôte.");
++  }
++
++  const { data: player, error: playerError } = await supabase
++    .from("players")
++    .insert({ room_id: room.id, display_name: displayName, device_id: deviceId })
++    .select()
++    .single();
++
++  if (playerError || !player) {
++    throw new Error("Impossible de rejoindre la partie, réessaie.");
++  }
++
++  return { room, player };
++}
++
++export function subscribeToCurrentRound(roomId: string, onChange: (round: Round | null) => void) {
++  const fetchAndEmit = async () => {
++    const { data } = await supabase
++      .from("rounds")
++      .select("id, status, buzzed_by_player_id, title, artist")
++      .eq("room_id", roomId)
++      .order("order_index", { ascending: false })
++      .limit(1)
++      .maybeSingle();
++    onChange((data as Round) ?? null);
++  };
++  fetchAndEmit();
++
++  const channel = supabase
++    .channel(`rounds-mobile:${roomId}`)
++    .on(
++      "postgres_changes",
++      { event: "*", schema: "public", table: "rounds", filter: `room_id=eq.${roomId}` },
++      fetchAndEmit
++    )
++    .subscribe();
++
++  return () => {
++    supabase.removeChannel(channel);
++  };
++}
++
++export async function sendBuzz(roundId: string, playerId: string): Promise<void> {
++  const { error } = await supabase.from("buzzes").insert({ round_id: roundId, player_id: playerId });
++  if (error) throw error;
++}
+diff --git a/apps/mobile/src/screens/BuzzerScreen.tsx b/apps/mobile/src/screens/BuzzerScreen.tsx
+index 6e745bb..7e38045 100644
+--- a/apps/mobile/src/screens/BuzzerScreen.tsx
++++ b/apps/mobile/src/screens/BuzzerScreen.tsx
+@@ -1,71 +1,73 @@
+-import React, { useState } from "react";
++import React, { useEffect, useState } from "react";
+ import { View, Text, Pressable } from "react-native";
+ import * as Haptics from "expo-haptics";
++import { subscribeToCurrentRound, sendBuzz, type Round } from "../lib/rooms";
+ 
+-type Props = { roomId: string };
++type Props = { roomId: string; playerId: string };
+ 
+ /**
+  * Écran principal joueur — et hôte si `player.is_host` est vrai (voir
+- * HostControls plus bas). Le gros bouton de buzz domine l'écran, pensé pour
+- * une prise en main à une main (cf. blueprint, section 6).
+- *
+- * TODO: remplacer isHost par la valeur réelle chargée depuis Supabase pour
+- * ce joueur, et brancher onBuzz() sur un insert dans la table `buzzes`
+- * (l'horodatage qui fait foi est `server_received_at`, généré par la base,
+- * jamais l'horloge du téléphone).
++ * HostControls plus bas, pas encore branché dans cette itération : le
++ * lancement de manche se fait depuis apps/web-host pour l'instant).
+  */
+-export function BuzzerScreen({ roomId }: Props) {
+-  const [isHost] = useState(false); // TODO: charger depuis Supabase
+-  const [buzzed, setBuzzed] = useState(false);
++export function BuzzerScreen({ roomId, playerId }: Props) {
++  const [round, setRound] = useState<Round | null>(null);
++  const [sending, setSending] = useState(false);
+ 
+-  const onBuzz = () => {
+-    if (buzzed) return;
++  useEffect(() => {
++    return subscribeToCurrentRound(roomId, setRound);
++  }, [roomId]);
++
++  const alreadyBuzzed = round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
++  const canBuzz = round?.status === "playing" && !sending;
++  const iWon = alreadyBuzzed && round?.buzzed_by_player_id === playerId;
++
++  const onBuzz = async () => {
++    if (!round || !canBuzz) return;
++    setSending(true);
+     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+-    setBuzzed(true);
+-    // TODO: insert dans `buzzes` via Supabase, room courante = roomId
++    try {
++      await sendBuzz(round.id, playerId);
++    } finally {
++      setSending(false);
++    }
+   };
+ 
+   return (
+-    <View style={{ flex: 1, padding: 16 }}>
+-      {isHost && <HostControls roomId={roomId} />}
++    <View style={{ flex: 1, padding: 16, justifyContent: "center", alignItems: "center" }}>
++      {!round && (
++        <Text style={{ color: "#888", fontSize: 18, textAlign: "center" }}>
++          En attente du lancement d'une manche par l'hôte…
++        </Text>
++      )}
+ 
+-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+-        <Pressable
+-          onPress={onBuzz}
+-          disabled={buzzed}
+-          style={{
+-            width: 220,
+-            height: 220,
+-            borderRadius: 110,
+-            backgroundColor: buzzed ? "#3A2A5C" : "#6C2BD9",
+-            justifyContent: "center",
+-            alignItems: "center",
+-          }}
+-        >
+-          <Text style={{ color: "white", fontSize: 32, fontWeight: "900" }}>
+-            {buzzed ? "BUZZÉ !" : "BUZZ"}
+-          </Text>
+-        </Pressable>
+-      </View>
+-    </View>
+-  );
+-}
++      {round && (
++        <>
++          <Pressable
++            onPress={onBuzz}
++            disabled={!canBuzz}
++            style={{
++              width: 220,
++              height: 220,
++              borderRadius: 110,
++              backgroundColor: canBuzz ? "#6C2BD9" : "#3A2A5C",
++              justifyContent: "center",
++              alignItems: "center",
++              marginBottom: 24,
++            }}
++          >
++            <Text style={{ color: "white", fontSize: 32, fontWeight: "900" }}>
++              {alreadyBuzzed ? "BUZZÉ !" : "BUZZ"}
++            </Text>
++          </Pressable>
+ 
+-/**
+- * Panneau de contrôle affiché en plus, uniquement pour le joueur qui a
+- * is_host = true. C'est ce qui permet à un seul téléphone de projeter le son
+- * (via Spotify Connect / une enceinte) ET de jouer normalement.
+- */
+-function HostControls({ roomId }: { roomId: string }) {
+-  return (
+-    <View style={{ backgroundColor: "#2A1B4D", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+-      <Text style={{ color: "#C9B6F5", fontSize: 12, fontWeight: "700", marginBottom: 8 }}>
+-        CONTRÔLES HÔTE — Partie {roomId}
+-      </Text>
+-      <Text style={{ color: "white", fontSize: 14 }}>
+-        Lancer le morceau · Manche suivante · Voir le classement
+-      </Text>
+-      {/* TODO: brancher sur l'App Remote SDK Spotify + mise à jour de rounds.status */}
++          {alreadyBuzzed && (
++            <Text style={{ color: iWon ? "#1DB954" : "#E5484D", fontSize: 20, fontWeight: "700" }}>
++              {iWon ? "Tu as buzzé en premier !" : "Trop tard, un autre joueur a buzzé avant toi."}
++            </Text>
++          )}
++        </>
++      )}
+     </View>
+   );
+ }
+diff --git a/apps/mobile/src/screens/JoinRoomScreen.tsx b/apps/mobile/src/screens/JoinRoomScreen.tsx
+index 6a06ac9..06bf4ae 100644
+--- a/apps/mobile/src/screens/JoinRoomScreen.tsx
++++ b/apps/mobile/src/screens/JoinRoomScreen.tsx
+@@ -1,28 +1,66 @@
+ import React, { useState } from "react";
+-import { View, Text, TextInput, Pressable } from "react-native";
++import { View, Text, TextInput, Pressable, ActivityIndicator } from "react-native";
++import { joinRoomByCode } from "../lib/rooms";
+ 
+-type Props = { onJoined: (roomId: string) => void };
++type Props = {
++  onJoined: (info: { roomId: string; playerId: string }) => void;
++};
+ 
+ /**
+- * Écran de saisie du code de partie (ex: "BZR482") affiché sur l'écran hôte.
+- * TODO: appeler Supabase pour résoudre le code -> room_id, puis créer la ligne
+- * `players` correspondante (voir packages/api-clients pour le futur client
+- * Supabase partagé).
++ * Écran de saisie du code de partie (affiché sur l'écran hôte) + pseudo.
++ * Rejoint réellement la room via Supabase (insertion dans `players`).
+  */
+ export function JoinRoomScreen({ onJoined }: Props) {
+   const [code, setCode] = useState("");
++  const [name, setName] = useState("");
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const canSubmit = code.trim().length > 0 && name.trim().length > 0 && !loading;
++
++  const onSubmit = async () => {
++    setError(null);
++    setLoading(true);
++    try {
++      const { room, player } = await joinRoomByCode(code.trim(), name.trim());
++      onJoined({ roomId: room.id, playerId: player.id });
++    } catch (e: any) {
++      setError(e?.message ?? "Une erreur est survenue.");
++    } finally {
++      setLoading(false);
++    }
++  };
+ 
+   return (
+     <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24 }}>
+       <Text style={{ color: "white", fontSize: 28, fontWeight: "800", marginBottom: 24 }}>
+         Rejoindre une partie
+       </Text>
++
+       <TextInput
+         value={code}
+         onChangeText={setCode}
+         placeholder="Code de la partie"
+         placeholderTextColor="#888"
+         autoCapitalize="characters"
++        style={{
++          borderWidth: 2,
++          borderColor: "#6C2BD9",
++          borderRadius: 12,
++          color: "white",
++          fontSize: 20,
++          padding: 14,
++          width: "100%",
++          textAlign: "center",
++          marginBottom: 14,
++        }}
++      />
++
++      <TextInput
++        value={name}
++        onChangeText={setName}
++        placeholder="Ton pseudo"
++        placeholderTextColor="#888"
+         style={{
+           borderWidth: 2,
+           borderColor: "#6C2BD9",
+@@ -35,11 +73,26 @@ export function JoinRoomScreen({ onJoined }: Props) {
+           marginBottom: 20,
+         }}
+       />
++
++      {error && (
++        <Text style={{ color: "#E5484D", marginBottom: 16, textAlign: "center" }}>{error}</Text>
++      )}
++
+       <Pressable
+-        onPress={() => code.trim() && onJoined(code.trim())}
+-        style={{ backgroundColor: "#6C2BD9", paddingVertical: 14, paddingHorizontal: 32, borderRadius: 999 }}
++        onPress={onSubmit}
++        disabled={!canSubmit}
++        style={{
++          backgroundColor: canSubmit ? "#6C2BD9" : "#3A2A5C",
++          paddingVertical: 14,
++          paddingHorizontal: 32,
++          borderRadius: 999,
++        }}
+       >
+-        <Text style={{ color: "white", fontSize: 18, fontWeight: "700" }}>Rejoindre</Text>
++        {loading ? (
++          <ActivityIndicator color="white" />
++        ) : (
++          <Text style={{ color: "white", fontSize: 18, fontWeight: "700" }}>Rejoindre</Text>
++        )}
+       </Pressable>
+     </View>
+   );
+diff --git a/apps/web-host/next-env.d.ts b/apps/web-host/next-env.d.ts
+new file mode 100644
+index 0000000..40c3d68
+--- /dev/null
++++ b/apps/web-host/next-env.d.ts
+@@ -0,0 +1,5 @@
++/// <reference types="next" />
++/// <reference types="next/image-types/global" />
++
++// NOTE: This file should not be edited
++// see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
+diff --git a/apps/web-host/src/app/page.tsx b/apps/web-host/src/app/page.tsx
+index f9505f9..48f779e 100644
+--- a/apps/web-host/src/app/page.tsx
++++ b/apps/web-host/src/app/page.tsx
+@@ -1,47 +1,114 @@
++"use client";
++
++// Page volontairement non pré-générée statiquement : elle crée une
++// nouvelle partie à chaque chargement, ça n'a pas de sens de la figer
++// au moment du build.
++export const dynamic = "force-dynamic";
++
++import { useEffect, useState } from "react";
++import {
++  createRoom,
++  subscribeToPlayers,
++  subscribeToRounds,
++  startTestRound,
++  type Player,
++  type Round,
++} from "../lib/rooms";
++
+ /**
+- * Écran hôte / "TV" — pensé pour être projeté (laptop branché en HDMI, ou
+- * navigateur ouvert sur une TV connectée) pendant qu'une enceinte diffuse le
+- * son (Spotify Connect / Web Playback SDK piloté par le compte Premium de
+- * l'hôte).
+- *
+- * RÈGLE IMPORTANTE (cf. blueprint, section 2 et discussion sur le modèle) :
+- * cette page ne doit JAMAIS afficher les réponses privées d'un joueur avant
+- * que la manche passe en statut "revealed". Elle n'affiche que l'état commun :
+- * question en cours, ordre des buzz, classement. Ça reste vrai même si
+- * l'hôte joue depuis son propre téléphone en parallèle (voir
+- * apps/mobile/src/screens/BuzzerScreen.tsx) — les deux écrans sont
+- * indépendants et alimentés par les mêmes tables partagées (`rooms`,
+- * `rounds`), jamais par `answers`.
+- *
+- * TODO: brancher sur Supabase Realtime (table `rounds` + `players` du room
+- * courant) pour remplacer ces données statiques.
++ * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
++ * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
++ * n'affiche jamais de réponse privée, seulement l'état commun de la partie
++ * (joueurs connectés, manche en cours, qui a buzzé).
+  */
+ export default function HostScreen() {
+-  const roomCode = "BZR482"; // TODO: généré à la création de la room
+-  const scoreboard = [
+-    { name: "Léa", score: 30 },
+-    { name: "Tom", score: 20 },
+-    { name: "Sam", score: 10 },
+-  ];
++  const [room, setRoom] = useState<{ id: string; code: string } | null>(null);
++  const [players, setPlayers] = useState<Player[]>([]);
++  const [round, setRound] = useState<Round | null>(null);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    createRoom()
++      .then((r) => setRoom({ id: r.id, code: r.code }))
++      .catch((e) => setError(e?.message ?? "Erreur de connexion à Supabase"));
++  }, []);
++
++  useEffect(() => {
++    if (!room) return;
++    const unsubPlayers = subscribeToPlayers(room.id, setPlayers);
++    const unsubRounds = subscribeToRounds(room.id, setRound);
++    return () => {
++      unsubPlayers();
++      unsubRounds();
++    };
++  }, [room]);
++
++  if (error) {
++    return (
++      <main className="flex items-center justify-center min-h-screen p-10 text-center">
++        <p className="text-xl text-red-400">
++          {error}
++          <br />
++          Vérifie que apps/web-host/.env.local contient bien NEXT_PUBLIC_SUPABASE_URL et
++          NEXT_PUBLIC_SUPABASE_ANON_KEY, puis relance `npm run web-host`.
++        </p>
++      </main>
++    );
++  }
++
++  if (!room) {
++    return (
++      <main className="flex items-center justify-center min-h-screen">
++        <p className="text-xl text-gray-400">Création de la partie…</p>
++      </main>
++    );
++  }
++
++  const winner = round?.buzzed_by_player_id
++    ? players.find((p) => p.id === round.buzzed_by_player_id)
++    : null;
++
++  const canStartRound = !round || round.status === "revealed" || round.status === "scored";
+ 
+   return (
+     <main className="flex flex-col items-center justify-center min-h-screen gap-10 p-10">
+       <div className="text-center">
+         <p className="text-lg text-gray-400">Rejoignez la partie avec le code</p>
+-        <p className="text-6xl font-black tracking-widest text-accent">{roomCode}</p>
++        <p className="text-6xl font-black tracking-widest text-accent">{room.code}</p>
+       </div>
+ 
+       <div className="w-full max-w-xl">
+-        <h2 className="text-2xl font-bold mb-4">Classement</h2>
++        <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
+         <ul className="space-y-2">
+-          {scoreboard.map((p, i) => (
+-            <li key={p.name} className="flex justify-between bg-white/5 rounded-lg px-4 py-3 text-xl">
+-              <span>{i + 1}. {p.name}</span>
++          {players.length === 0 && <li className="text-gray-500">En attente de joueurs…</li>}
++          {players.map((p) => (
++            <li
++              key={p.id}
++              className="flex justify-between bg-white/5 rounded-lg px-4 py-3 text-xl"
++            >
++              <span>{p.display_name}</span>
+               <span className="font-bold">{p.score} pts</span>
+             </li>
+           ))}
+         </ul>
+       </div>
++
++      <div className="w-full max-w-xl text-center">
++        {canStartRound ? (
++          <button
++            onClick={() => startTestRound(room.id)}
++            className="bg-accent px-8 py-4 rounded-full text-xl font-bold"
++          >
++            Lancer une manche de test
++          </button>
++        ) : round?.status === "playing" ? (
++          <p className="text-2xl">🎵 Manche en cours — en attente d'un buzz…</p>
++        ) : (
++          <p className="text-3xl font-bold text-accent2">
++            🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
++          </p>
++        )}
++      </div>
+     </main>
+   );
+ }
+diff --git a/apps/web-host/src/lib/rooms.ts b/apps/web-host/src/lib/rooms.ts
+new file mode 100644
+index 0000000..eb863f2
+--- /dev/null
++++ b/apps/web-host/src/lib/rooms.ts
+@@ -0,0 +1,129 @@
++import { supabase } from "./supabase";
++import { generateRoomCode } from "@blindtest/game-logic";
++
++export type Room = {
++  id: string;
++  code: string;
++  status: "lobby" | "in_progress" | "finished";
++};
++
++export type Player = {
++  id: string;
++  room_id: string;
++  display_name: string;
++  is_host: boolean;
++  score: number;
++  connected: boolean;
++};
++
++export type Round = {
++  id: string;
++  room_id: string;
++  order_index: number;
++  title: string;
++  artist: string;
++  status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
++  buzzed_by_player_id: string | null;
++};
++
++/**
++ * Crée une nouvelle partie et retourne son code + id. Réessaie avec un
++ * nouveau code si celui généré existe déjà (collision très rare vu
++ * l'alphabet à 32 caractères ^ 6).
++ */
++export async function createRoom(): Promise<Room> {
++  for (let attempt = 0; attempt < 5; attempt++) {
++    const code = generateRoomCode();
++    const { data, error } = await supabase
++      .from("rooms")
++      .insert({ code, status: "lobby" })
++      .select()
++      .single();
++
++    if (!error && data) return data as Room;
++    if (error && error.code !== "23505") throw error; // 23505 = violation de contrainte unique
++  }
++  throw new Error("Impossible de générer un code de partie unique après plusieurs tentatives.");
++}
++
++export function subscribeToPlayers(roomId: string, onChange: (players: Player[]) => void) {
++  const fetchAndEmit = async () => {
++    const { data } = await supabase
++      .from("players")
++      .select("*")
++      .eq("room_id", roomId)
++      .order("joined_at");
++    onChange((data as Player[]) ?? []);
++  };
++  fetchAndEmit();
++
++  const channel = supabase
++    .channel(`players:${roomId}`)
++    .on(
++      "postgres_changes",
++      { event: "*", schema: "public", table: "players", filter: `room_id=eq.${roomId}` },
++      fetchAndEmit
++    )
++    .subscribe();
++
++  return () => {
++    supabase.removeChannel(channel);
++  };
++}
++
++export function subscribeToRounds(roomId: string, onChange: (round: Round | null) => void) {
++  const fetchAndEmit = async () => {
++    const { data } = await supabase
++      .from("rounds")
++      .select("*")
++      .eq("room_id", roomId)
++      .order("order_index", { ascending: false })
++      .limit(1)
++      .maybeSingle();
++    onChange((data as Round) ?? null);
++  };
++  fetchAndEmit();
++
++  const channel = supabase
++    .channel(`rounds:${roomId}`)
++    .on(
++      "postgres_changes",
++      { event: "*", schema: "public", table: "rounds", filter: `room_id=eq.${roomId}` },
++      fetchAndEmit
++    )
++    .subscribe();
++
++  return () => {
++    supabase.removeChannel(channel);
++  };
++}
++
++/**
++ * Lance une manche "factice" (pas de vrai morceau) pour tester le mécanisme
++ * de buzz sans dépendre de la lecture Spotify, qui n'est pas encore câblée.
++ * À remplacer quand la vraie playlist sera branchée : la manche sera créée
++ * avec le titre réel tiré de la playlist en cours.
++ */
++export async function startTestRound(roomId: string): Promise<void> {
++  const { data: existing } = await supabase
++    .from("rounds")
++    .select("order_index")
++    .eq("room_id", roomId)
++    .order("order_index", { ascending: false })
++    .limit(1)
++    .maybeSingle();
++
++  const nextIndex = (existing?.order_index ?? -1) + 1;
++
++  await supabase.from("rounds").insert({
++    room_id: roomId,
++    order_index: nextIndex,
++    source_track_id: "test-track",
++    title: "Morceau de test",
++    artist: "Artiste de test",
++    status: "playing",
++    started_at: new Date().toISOString(),
++  });
++
++  await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
++}
+diff --git a/apps/web-host/tsconfig.json b/apps/web-host/tsconfig.json
+index bd19933..4326eb5 100644
+--- a/apps/web-host/tsconfig.json
++++ b/apps/web-host/tsconfig.json
+@@ -1,16 +1,41 @@
+ {
+   "compilerOptions": {
+     "target": "ES2020",
+-    "lib": ["dom", "dom.iterable", "esnext"],
++    "lib": [
++      "dom",
++      "dom.iterable",
++      "esnext"
++    ],
+     "jsx": "preserve",
+     "module": "esnext",
+     "moduleResolution": "bundler",
+     "strict": true,
+     "skipLibCheck": true,
+     "paths": {
+-      "@blindtest/game-logic": ["../../packages/game-logic/src"],
+-      "@blindtest/ui": ["../../packages/ui/src"]
+-    }
++      "@blindtest/game-logic": [
++        "../../packages/game-logic/src"
++      ],
++      "@blindtest/ui": [
++        "../../packages/ui/src"
++      ]
++    },
++    "allowJs": true,
++    "noEmit": true,
++    "incremental": true,
++    "esModuleInterop": true,
++    "resolveJsonModule": true,
++    "isolatedModules": true,
++    "plugins": [
++      {
++        "name": "next"
++      }
++    ]
+   },
+-  "include": ["src"]
++  "include": [
++    "src",
++    ".next/types/**/*.ts"
++  ],
++  "exclude": [
++    "node_modules"
++  ]
+ }
+diff --git a/packages/game-logic/src/index.ts b/packages/game-logic/src/index.ts
+index 409eb6f..90170cd 100644
+--- a/packages/game-logic/src/index.ts
++++ b/packages/game-logic/src/index.ts
+@@ -1,3 +1,4 @@
+ export * from "./scoring";
+ export * from "./buzzResolution";
+ export * from "./answerMatching";
++export * from "./roomCode";
+diff --git a/packages/game-logic/src/roomCode.ts b/packages/game-logic/src/roomCode.ts
+new file mode 100644
+index 0000000..8608a7c
+--- /dev/null
++++ b/packages/game-logic/src/roomCode.ts
+@@ -0,0 +1,11 @@
++// Alphabet sans caractères ambigus à l'oral/à l'écrit (pas de 0/O, 1/I).
++const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
++
++/** Génère un code de partie court à partager à l'oral (ex: "BZR482"). */
++export function generateRoomCode(length = 6): string {
++  let code = "";
++  for (let i = 0; i < length; i++) {
++    code += ALPHABET[Math.floor(Math.random() * ALPHABET.length)];
++  }
++  return code;
++}
+diff --git a/supabase/migrations/0002_buzz_resolution.sql b/supabase/migrations/0002_buzz_resolution.sql
+new file mode 100644
+index 0000000..cbfa93d
+--- /dev/null
++++ b/supabase/migrations/0002_buzz_resolution.sql
+@@ -0,0 +1,28 @@
++-- ============================================================================
++-- Résolution atomique du premier buzz d'une manche.
++--
++-- Plutôt que de laisser un client (l'hôte) décider "qui a buzzé en premier"
++-- en comparant des événements reçus en temps réel (source de conditions de
++-- course si deux joueurs buzzent à quelques millisecondes d'écart), on
++-- s'appuie sur Postgres : chaque INSERT dans `buzzes` déclenche une UPDATE
++-- conditionnelle sur `rounds` qui ne peut réussir qu'une seule fois par
++-- manche, grâce au verrou de ligne pris par la clause WHERE status='playing'.
++-- Le premier INSERT à valider sa transaction gagne, les suivants deviennent
++-- des no-op. Aucune logique applicative ne peut se tromper là-dessus.
++-- ============================================================================
++
++create or replace function resolve_buzz_winner() returns trigger as $$
++begin
++  update rounds
++  set status = 'buzzed',
++      buzzed_by_player_id = new.player_id,
++      buzzed_at = new.server_received_at
++  where id = new.round_id
++    and status = 'playing';
++  return new;
++end;
++$$ language plpgsql;
++
++create trigger trg_resolve_buzz_winner
++  after insert on buzzes
++  for each row execute function resolve_buzz_winner();
+diff --git a/supabase/migrations/0003_dev_policies.sql b/supabase/migrations/0003_dev_policies.sql
+new file mode 100644
+index 0000000..7ccc423
+--- /dev/null
++++ b/supabase/migrations/0003_dev_policies.sql
+@@ -0,0 +1,37 @@
++-- ============================================================================
++-- Policies RLS permissives — phase de prototypage (V0/V1, entre amis).
++--
++-- Rappel : dans 0001_init.sql, la RLS est activée SANS policy sur toutes les
++-- tables, ce qui bloque tout accès par défaut, y compris avec la clé anon.
++-- On n'a pas encore d'authentification réelle (les joueurs sont identifiés
++-- par un device_id généré côté client, pas par un compte Supabase Auth), donc
++-- impossible pour l'instant d'écrire des policies basées sur auth.uid().
++--
++-- Choix assumé pour cette phase : ouvrir l'accès à tout le monde (clé anon)
++-- sur les tables d'état de partie. Le code de room fait office de barrière
++-- légère et la donnée n'a rien de sensible entre amis. À REVOIR avant toute
++-- ouverture publique (cf. blueprint, section 8, risques) : brancher Supabase
++-- Auth et restreindre ces policies à "appartenir à la room concernée".
++--
++-- `answers` et `playlists` restent verrouillées (aucune policy) : pas encore
++-- utilisées par le code de cette itération, à ouvrir seulement quand ces
++-- features seront câblées.
++-- ============================================================================
++
++create policy "dev: lecture libre rooms" on rooms for select using (true);
++create policy "dev: creation libre rooms" on rooms for insert with check (true);
++create policy "dev: maj libre rooms" on rooms for update using (true);
++
++create policy "dev: lecture libre players" on players for select using (true);
++create policy "dev: creation libre players" on players for insert with check (true);
++create policy "dev: maj libre players" on players for update using (true);
++
++create policy "dev: lecture libre teams" on teams for select using (true);
++create policy "dev: creation libre teams" on teams for insert with check (true);
++
++create policy "dev: lecture libre rounds" on rounds for select using (true);
++create policy "dev: creation libre rounds" on rounds for insert with check (true);
++create policy "dev: maj libre rounds" on rounds for update using (true);
++
++create policy "dev: lecture libre buzzes" on buzzes for select using (true);
++create policy "dev: creation libre buzzes" on buzzes for insert with check (true);
