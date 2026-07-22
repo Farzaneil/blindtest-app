@@ -11,7 +11,7 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 const config = getDefaultConfig(projectRoot);
 
 // 1. Surveiller tout le monorepo, pas seulement apps/mobile
-config.watchFolders = [workspaceRoot];
+config.watchFolders = [...(config.watchFolders ?? []), workspaceRoot];
 // 2. Chercher les modules d'abord en local, puis à la racine du monorepo
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
