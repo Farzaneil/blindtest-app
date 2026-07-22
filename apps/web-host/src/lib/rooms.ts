@@ -26,11 +26,6 @@ export type Round = {
   buzzed_by_player_id: string | null;
 };
 
-/**
- * Crée une nouvelle partie et retourne son code + id. Réessaie avec un
- * nouveau code si celui généré existe déjà (collision très rare vu
- * l'alphabet à 32 caractères ^ 6).
- */
 export async function createRoom(): Promise<Room> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateRoomCode();
@@ -41,7 +36,7 @@ export async function createRoom(): Promise<Room> {
       .single();
 
     if (!error && data) return data as Room;
-    if (error && error.code !== "23505") throw error; // 23505 = violation de contrainte unique
+    if (error && error.code !== "23505") throw error;
   }
   throw new Error("Impossible de générer un code de partie unique après plusieurs tentatives.");
 }
@@ -98,12 +93,6 @@ export function subscribeToRounds(roomId: string, onChange: (round: Round | null
   };
 }
 
-/**
- * Lance une manche "factice" (pas de vrai morceau) pour tester le mécanisme
- * de buzz sans dépendre de la lecture Spotify, qui n'est pas encore câblée.
- * À remplacer quand la vraie playlist sera branchée : la manche sera créée
- * avec le titre réel tiré de la playlist en cours.
- */
 export async function startTestRound(roomId: string): Promise<void> {
   const { data: existing } = await supabase
     .from("rounds")
@@ -126,4 +115,84 @@ export async function startTestRound(roomId: string): Promise<void> {
   });
 
   await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
+}
+
+// ============================================================================
+// Fonctions côté joueur — utilisées par la page /play (voir app/play/page.tsx).
+// Permettent de tester le mécanisme join + buzz depuis un simple onglet de
+// navigateur, sans passer par l'appli mobile native (utile pour valider la
+// logique pendant que la compilation native est mise de côté).
+// ============================================================================
+
+export type PlayerRound = {
+  id: string;
+  status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
+  buzzed_by_player_id: string | null;
+  title: string;
+  artist: string;
+};
+
+function generateWebDeviceId(): string {
+  return `web_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
+}
+
+export const webDeviceId = generateWebDeviceId();
+
+export async function joinRoomByCode(code: string, displayName: string) {
+  const { data: room, error: roomError } = await supabase
+    .from("rooms")
+    .select("id, code, status")
+    .eq("code", code.toUpperCase())
+    .single();
+
+  if (roomError || !room) {
+    throw new Error("Code de partie introuvable. Vérifie qu'il est bien affiché sur l'écran hôte.");
+  }
+
+  const { data: player, error: playerError } = await supabase
+    .from("players")
+    .insert({ room_id: room.id, display_name: displayName, device_id: webDeviceId })
+    .select()
+    .single();
+
+  if (playerError || !player) {
+    throw new Error("Impossible de rejoindre la partie, réessaie.");
+  }
+
+  return { room, player };
+}
+
+export function subscribeToCurrentRoundForPlayer(
+  roomId: string,
+  onChange: (round: PlayerRound | null) => void
+) {
+  const fetchAndEmit = async () => {
+    const { data } = await supabase
+      .from("rounds")
+      .select("id, status, buzzed_by_player_id, title, artist")
+      .eq("room_id", roomId)
+      .order("order_index", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    onChange((data as PlayerRound) ?? null);
+  };
+  fetchAndEmit();
+
+  const channel = supabase
+    .channel(`rounds-player:${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "rounds", filter: `room_id=eq.${roomId}` },
+      fetchAndEmit
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+export async function sendBuzz(roundId: string, playerId: string): Promise<void> {
+  const { error } = await supabase.from("buzzes").insert({ round_id: roundId, player_id: playerId });
+  if (error) throw error;
 }
