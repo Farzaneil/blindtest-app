@@ -156,6 +156,7 @@ alter table teams enable row level security;
 alter table rounds enable row level security;
 alter table buzzes enable row level security;
 alter table answers enable row level security;
+alter table playlists enable row level security;
 
 -- TODO (à faire une fois l'auth/device-id branché) :
 --   - policy "lecture état commun" sur rooms/players/teams/rounds/buzzes :
