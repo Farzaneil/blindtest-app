@@ -37,7 +37,7 @@ export function BuzzerScreen({ roomId, playerId }: Props) {
     <View style={{ flex: 1, padding: 16, justifyContent: "center", alignItems: "center" }}>
       {!round && (
         <Text style={{ color: "#888", fontSize: 18, textAlign: "center" }}>
-          En attente du lancement d'une manche par l'hôte…
+          En attente du lancement d’une manche par l’hôte…
         </Text>
       )}
 

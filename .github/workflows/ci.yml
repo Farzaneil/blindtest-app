@@ -7,7 +7,7 @@ on:
     branches: [develop, main]
 
 jobs:
-  typecheck:
+  lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,5 +16,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm install
-      - run: npm run lint --workspace=apps/mobile --if-present
-      - run: npm run lint --workspace=apps/web-host --if-present
+      - run: npm run lint --workspace=apps/web-host
+      - run: npm run lint --workspace=apps/mobile
+      - run: npm run typecheck --workspace=apps/web-host
+      - run: npm run typecheck --workspace=apps/mobile

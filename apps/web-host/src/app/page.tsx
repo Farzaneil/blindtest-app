@@ -102,7 +102,7 @@ export default function HostScreen() {
             Lancer une manche de test
           </button>
         ) : round?.status === "playing" ? (
-          <p className="text-2xl">🎵 Manche en cours — en attente d'un buzz…</p>
+          <p className="text-2xl">🎵 Manche en cours — en attente d’un buzz…</p>
         ) : (
           <p className="text-3xl font-bold text-accent2">
             🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !

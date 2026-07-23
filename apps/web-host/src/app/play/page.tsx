@@ -98,7 +98,7 @@ function BuzzerView({ roomId, playerId }: { roomId: string; playerId: string }) 
   };
 
   if (!round) {
-    return <p className="text-xl text-gray-400">En attente du lancement d'une manche par l'hôte…</p>;
+    return <p className="text-xl text-gray-400">En attente du lancement d’une manche par l’hôte…</p>;
   }
 
   return (
