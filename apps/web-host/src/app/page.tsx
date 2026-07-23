@@ -13,12 +13,14 @@ import {
   subscribeToPlayers,
   subscribeToRounds,
   subscribeToRoundHistory,
+  subscribeToRoundAttempts,
   startRoundWithTrack,
   revealRound,
-  resolveRound,
+  resolveRoundAttempt,
   timeoutRound,
   type Player,
   type Round,
+  type RoundAttempt,
 } from "../lib/rooms";
 import { withRanks } from "../lib/ranking";
 import { useForceLoopbackHost } from "../lib/useForceLoopbackHost";
@@ -143,6 +145,7 @@ export default function HostScreen() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [round, setRound] = useState<Round | null>(null);
   const [roundHistory, setRoundHistory] = useState<Round[]>([]);
+  const [roundAttempts, setRoundAttempts] = useState<RoundAttempt[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -179,6 +182,7 @@ export default function HostScreen() {
   const spotifyPlayer = useSpotifyPlayer();
   const pausedForRoundId = useRef<string | null>(null);
   const timedOutRoundId = useRef<string | null>(null);
+  const autoRevealedRoundKey = useRef<string | null>(null);
   // Index (dans upcomingQueue) du morceau en cours de glisser-déposer —
   // simple ref plutôt que du state, la valeur n'a besoin d'être lue qu'au
   // moment du drop, pas de re-render nécessaire pendant le glissé.
@@ -248,10 +252,12 @@ export default function HostScreen() {
     const unsubPlayers = subscribeToPlayers(room.id, setPlayers);
     const unsubRounds = subscribeToRounds(room.id, setRound);
     const unsubHistory = subscribeToRoundHistory(room.id, setRoundHistory);
+    const unsubAttempts = subscribeToRoundAttempts(room.id, setRoundAttempts);
     return () => {
       unsubPlayers();
       unsubRounds();
       unsubHistory();
+      unsubAttempts();
     };
   }, [room]);
 
@@ -268,23 +274,59 @@ export default function HostScreen() {
     }
   }, []);
 
-  // Coupe le son dès qu'un joueur buzze — une seule fois par manche (le ref
-  // évite de rappeler pausePlayback à chaque re-render tant que la manche
-  // reste au statut "buzzed").
+  // Coupe le son dès qu'un joueur buzze — une seule fois par "stint" de
+  // lecture (le ref évite de rappeler pausePlayback à chaque re-render tant
+  // que la manche reste au statut "buzzed"). Clé composite round.id +
+  // started_at plutôt que round.id seul : en mode "Maître du jeu", une
+  // manche reprise après une réponse partielle GARDE le même id (c'est la
+  // même manche) mais started_at est réinitialisé à la reprise (migration
+  // 0009) — sans ça, le 2e buzz (et les suivants) sur la même manche ne
+  // coupait plus le son, round.id étant déjà égal à la valeur mémorisée par
+  // le tout premier buzz.
   useEffect(() => {
+    const pauseKey = round?.id && round.started_at ? `${round.id}:${round.started_at}` : null;
     if (
       round?.status === "buzzed" &&
-      round.id !== pausedForRoundId.current &&
+      pauseKey &&
+      pauseKey !== pausedForRoundId.current &&
       spotifyPlayer.deviceId &&
       spotifyPlayer.accessTokenRef.current
     ) {
-      pausedForRoundId.current = round.id;
+      pausedForRoundId.current = pauseKey;
       spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {
         // Pas grave si la pause échoue (ex: token expiré entre-temps) : le
         // morceau continue mais le buzz est déjà résolu côté base.
       });
     }
   }, [round, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+
+  // En mode "Maître du jeu", le titre/artiste restent affichés en
+  // permanence (voir plus bas) : le clic manuel "Révéler la réponse"
+  // n'apporte donc rien, c'est un clic en trop pour l'hôte qui voit déjà
+  // le morceau. On révèle automatiquement dès qu'un buzz est enregistré.
+  // En mode "Tout le monde participe" en revanche, l'hôte peut être en
+  // train de jouer lui-même : il ne doit pas voir la réponse avant d'avoir
+  // volontairement cliqué (voir handleReveal / le bouton dans le JSX),
+  // donc pas d'auto-révélation dans ce mode.
+  //
+  // Même clé composite round.id + started_at que pour la coupure du son
+  // ci-dessus : une manche reprise après une réponse partielle garde le
+  // même id mais started_at change à chaque reprise, donc chaque "stint"
+  // (chaque nouveau buzz) redéclenche bien l'auto-révélation.
+  useEffect(() => {
+    const revealKey = round?.id && round.started_at ? `${round.id}:${round.started_at}` : null;
+    if (
+      round?.status === "buzzed" &&
+      hostMode !== "player" &&
+      revealKey &&
+      revealKey !== autoRevealedRoundKey.current
+    ) {
+      autoRevealedRoundKey.current = revealKey;
+      revealRound(round.id).catch((e: any) => {
+        setError(e?.message ?? "Impossible de révéler la réponse.");
+      });
+    }
+  }, [round, hostMode]);
 
   // Timer visuel de la manche en cours : calculé à partir de round.started_at
   // (horodatage serveur) plutôt qu'un simple compteur local, pour rester
@@ -299,10 +341,16 @@ export default function HostScreen() {
       return;
     }
     const startedAtMs = new Date(round.started_at).getTime();
+    // elapsed_seconds capture le temps déjà réellement joué AVANT ce stint
+    // (voir migration 0009) : sans ça, le temps passé à juger une réponse
+    // partielle (musique coupée, round "buzzed"/"revealed") se décomptait
+    // à tort du budget des 30s, donnant l'impression que le timer ne
+    // s'arrêtait jamais au buzz.
+    const elapsedBeforeStint = round.elapsed_seconds;
     const roundId = round.id;
 
     const tick = () => {
-      const elapsedSeconds = (Date.now() - startedAtMs) / 1000;
+      const elapsedSeconds = elapsedBeforeStint + (Date.now() - startedAtMs) / 1000;
       const remaining = Math.max(0, Math.ceil(ROUND_DURATION_SECONDS - elapsedSeconds));
       setTimeLeft(remaining);
 
@@ -323,7 +371,14 @@ export default function HostScreen() {
     tick();
     const interval = setInterval(tick, 250);
     return () => clearInterval(interval);
-  }, [round?.id, round?.status, round?.started_at, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+  }, [
+    round?.id,
+    round?.status,
+    round?.started_at,
+    round?.elapsed_seconds,
+    spotifyPlayer.deviceId,
+    spotifyPlayer.accessTokenRef,
+  ]);
 
   const handleSearch = async () => {
     if (!spotifyPlayer.accessTokenRef.current) return;
@@ -487,12 +542,37 @@ export default function HostScreen() {
     }
   };
 
-  const handleResolve = async (correct: boolean) => {
+  // Juge la tentative du joueur qui a buzzé (voir resolveRoundAttempt dans
+  // lib/rooms.ts pour le détail des 4 issues possibles et de la reprise de
+  // manche). forceEnd = true en mode "Tout le monde participe" (blindMode) :
+  // un seul buzz suffit à clôturer la manche dans ce mode, quel que soit le
+  // résultat — contrairement au mode "Maître du jeu" où seule la
+  // complétude (titre ET artiste trouvés, cumulativement) clôture.
+  const handleJudge = async (titleFound: boolean, artistFound: boolean) => {
     if (!round) return;
     try {
-      await resolveRound(round.id, correct);
+      await resolveRoundAttempt(round.id, titleFound, artistFound, blindMode);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de valider la manche.");
+      return;
+    }
+
+    // La manche reprend (mode "Maître du jeu", pas encore complète) : il
+    // faut explicitement relancer la lecture Spotify, qui reste en pause
+    // depuis le buzz sinon (voir spotify.resumePlayback — reprend
+    // exactement là où pausePlayback avait arrêté, pas depuis le début).
+    // Calcul purement local, en miroir de la logique côté RPC
+    // resolve_round_attempt : déterministe, donc fiable sans aller-retour
+    // serveur supplémentaire.
+    const newTitleFound = round.title_found || titleFound;
+    const newArtistFound = round.artist_found || artistFound;
+    const willResume = !blindMode && !(newTitleFound && newArtistFound);
+    if (willResume && spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+      try {
+        await spotify.resumePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current);
+      } catch (e: any) {
+        setError(e?.message ?? "Impossible de relancer le morceau côté Spotify.");
+      }
     }
   };
 
@@ -514,6 +594,7 @@ export default function HostScreen() {
     setPlayers([]);
     setRound(null);
     setRoundHistory([]);
+    setRoundAttempts([]);
     setTimeLeft(null);
     timedOutRoundId.current = null;
     setAcknowledgedTimeoutRoundId(null);
@@ -599,6 +680,9 @@ export default function HostScreen() {
 
       <div className="w-full max-w-xl bg-surface border border-surfaceBorder rounded-3xl p-6">
         <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
+        {/* Encart à hauteur fixe avec défilement interne : avec beaucoup de
+            joueurs, cette liste ne pousse plus le reste de la page vers le
+            bas. */}
         <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {players.length === 0 && <li className="text-muted">En attente de joueurs…</li>}
           {gameStarted
@@ -613,7 +697,11 @@ export default function HostScreen() {
                   <span className="font-bold">{p.score} pts</span>
                 </li>
               ))
-            : players.map((p) => (
+            : // Avant que la première manche ne soit lancée, un classement n'a
+              // aucun sens (tout le monde est à 0 point) : on affiche juste les
+              // pseudos dans l'ordre d'inscription (déjà l'ordre de `players`,
+              // trié par joined_at côté requête dans subscribeToPlayers).
+              players.map((p) => (
                 <li
                   key={p.id}
                   className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
@@ -624,6 +712,8 @@ export default function HostScreen() {
         </ul>
       </div>
 
+      {/* Historique des manches : replié par défaut pour ne pas allonger la
+          page inutilement, mais toujours accessible sans quitter l'écran. */}
       <div className="w-full max-w-xl">
         <button
           onClick={() => setShowHistory((s) => !s)}
@@ -640,30 +730,46 @@ export default function HostScreen() {
             ) : (
               <ul className="flex flex-col gap-2">
                 {roundHistory.map((r, i) => {
-                  const buzzer = r.buzzed_by_player_id
-                    ? players.find((p) => p.id === r.buzzed_by_player_id)
-                    : null;
+                  // Une manche simple (un seul buzz, comme en mode "Tout le
+                  // monde participe" ou une manche gagnée du premier coup en
+                  // mode "Maître du jeu") n'a qu'une tentative. Une manche à
+                  // rallonge (réponses partielles successives) en a
+                  // plusieurs : on affiche alors le fil complet plutôt
+                  // qu'une seule ligne résumée.
+                  const attemptsForRound = roundAttempts.filter((a) => a.round_id === r.id);
                   return (
-                    <li
-                      key={r.id}
-                      className="flex justify-between items-center gap-3 bg-white/5 rounded-xl px-4 py-2 text-sm"
-                    >
-                      <span className="truncate">
+                    <li key={r.id} className="bg-white/5 rounded-xl px-4 py-2 text-sm">
+                      <p className="truncate font-medium">
                         {i + 1}. {r.title} — {r.artist}
-                      </span>
-                      <span
-                        className={`whitespace-nowrap ${
-                          r.was_correct === true
-                            ? "text-accentSoft"
-                            : r.was_correct === false
-                              ? "text-danger"
-                              : "text-muted"
-                        }`}
-                      >
-                        {buzzer
-                          ? `${buzzer.display_name} ${r.was_correct ? "✅" : "❌"}`
-                          : "Personne n’a trouvé"}
-                      </span>
+                      </p>
+                      {attemptsForRound.length === 0 ? (
+                        <p className="text-muted">Personne n’a trouvé</p>
+                      ) : (
+                        <ul className="mt-1 flex flex-col gap-0.5">
+                          {attemptsForRound.map((a) => {
+                            const attemptPlayer = players.find((p) => p.id === a.player_id);
+                            const label = a.title_found && a.artist_found
+                              ? "titre + artiste"
+                              : a.title_found
+                                ? "titre seul"
+                                : a.artist_found
+                                  ? "artiste seul"
+                                  : "rien trouvé";
+                            const colorClass =
+                              a.points_awarded > 0 ? "text-accentSoft" : "text-danger";
+                            return (
+                              <li key={a.id} className={`flex justify-between gap-3 ${colorClass}`}>
+                                <span className="truncate">
+                                  {attemptPlayer?.display_name ?? "Joueur"} — {label}
+                                </span>
+                                <span className="whitespace-nowrap font-bold">
+                                  {a.points_awarded > 0 ? `+${a.points_awarded}` : a.points_awarded} pt
+                                </span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
                     </li>
                   );
                 })}
@@ -677,6 +783,18 @@ export default function HostScreen() {
         {!canStartRound && round?.status === "playing" && (
           <div className="bg-surface border border-surfaceBorder rounded-3xl px-8 py-10 animate-pulseGlow">
             <p className="text-2xl font-bold">🎵 Manche en cours — en attente d’un buzz…</p>
+            {!blindMode && (
+              <p className="text-lg text-muted mt-1">
+                {round.title} — {round.artist}
+              </p>
+            )}
+            {(round.title_found || round.artist_found) && (
+              <p className="text-lg text-muted mt-2">
+                {round.title_found ? `✅ Titre trouvé : ${round.title}` : "🎵 Titre encore à trouver"}
+                {" · "}
+                {round.artist_found ? `✅ Artiste trouvé : ${round.artist}` : "🎤 Artiste encore à trouver"}
+              </p>
+            )}
             {timeLeft !== null && (
               <p className="text-5xl font-black mt-4 text-accentSoft tabular-nums">⏱ {timeLeft}s</p>
             )}
@@ -687,15 +805,35 @@ export default function HostScreen() {
             <p className="text-3xl font-bold text-accent2Soft">
               🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
-            <p className="text-sm text-muted">
-              Laisse-le/la donner sa réponse à voix haute, puis révèle le titre.
-            </p>
-            <button
-              onClick={handleReveal}
-              className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
-            >
-              👁️ Révéler la réponse
-            </button>
+            {!blindMode && (
+              <p className="text-lg text-muted">
+                {round.title} — {round.artist}
+              </p>
+            )}
+            {(round.title_found || round.artist_found) && (
+              <p className="text-sm text-muted">
+                Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+                  .filter(Boolean)
+                  .join(" et ")}
+              </p>
+            )}
+            {blindMode ? (
+              <>
+                <p className="text-sm text-muted">
+                  Laisse-le/la donner sa réponse à voix haute, puis révèle le titre.
+                </p>
+                <button
+                  onClick={handleReveal}
+                  className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                >
+                  👁️ Révéler la réponse
+                </button>
+              </>
+            ) : (
+              <p className="text-sm text-muted">
+                Laisse-le/la donner sa réponse à voix haute…
+              </p>
+            )}
           </div>
         )}
         {!canStartRound && round?.status === "revealed" && (
@@ -706,20 +844,68 @@ export default function HostScreen() {
             <p className="text-lg text-muted">
               {round.title} — {round.artist}
             </p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => handleResolve(true)}
-                className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
-              >
-                ✅ Bonne réponse
-              </button>
-              <button
-                onClick={() => handleResolve(false)}
-                className="bg-danger shadow-glowDanger hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
-              >
-                ❌ Mauvaise réponse
-              </button>
-            </div>
+            {/* Le choix proposé à l'hôte s'adapte à ce qui est déjà acquis
+                sur cette manche (title_found/artist_found, cumulatifs) :
+                une fois un élément trouvé, redemander "l'a-t-il trouvé ?"
+                n'a plus de sens, on ne juge plus que l'élément restant. */}
+            {round.title_found && !round.artist_found ? (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => handleJudge(false, true)}
+                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                >
+                  ✅ Artiste trouvé
+                </button>
+                <button
+                  onClick={() => handleJudge(false, false)}
+                  className="bg-danger shadow-glowDanger hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                >
+                  ❌ Toujours pas
+                </button>
+              </div>
+            ) : !round.title_found && round.artist_found ? (
+              <div className="flex gap-4">
+                <button
+                  onClick={() => handleJudge(true, false)}
+                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                >
+                  ✅ Titre trouvé
+                </button>
+                <button
+                  onClick={() => handleJudge(false, false)}
+                  className="bg-danger shadow-glowDanger hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                >
+                  ❌ Toujours pas
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 w-full max-w-md">
+                <button
+                  onClick={() => handleJudge(true, false)}
+                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                >
+                  🎵 Titre seul (+1)
+                </button>
+                <button
+                  onClick={() => handleJudge(false, true)}
+                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                >
+                  🎤 Artiste seul (+1)
+                </button>
+                <button
+                  onClick={() => handleJudge(true, true)}
+                  className="bg-accent shadow-glowAccent hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                >
+                  ✅ Les deux (+2)
+                </button>
+                <button
+                  onClick={() => handleJudge(false, false)}
+                  className="bg-danger shadow-glowDanger hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                >
+                  ❌ Aucun (-1)
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -867,6 +1053,11 @@ export default function HostScreen() {
               </p>
             )}
 
+            {/* Les deux façons d'ajouter des morceaux sont volontairement à
+                égalité visuelle (même carte, même taille) : la recherche
+                manuelle n'est pas plus mise en avant que l'import de
+                playlist, alors qu'avant l'import était relégué à un simple
+                lien texte peu visible. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
                 <h3 className="font-bold text-accentSoft">🔍 Recherche manuelle</h3>
@@ -937,6 +1128,13 @@ export default function HostScreen() {
                 <h3 className="font-bold mb-2 text-accent2Soft">
                   Tes playlists ({myPlaylists.length}, par ordre alphabétique)
                 </h3>
+                {/* Grid partagée par toutes les lignes (via `contents` sur
+                    chaque <li>) : les colonnes nom/bouton restent alignées
+                    et de même largeur d'une playlist à l'autre, et le nom
+                    ne revient plus à la ligne (troncature avec "…" si trop
+                    long plutôt qu'un retour à la ligne). Encart à hauteur
+                    fixe pour ne pas allonger la page quand il y a beaucoup
+                    de playlists. */}
                 <div className="max-h-64 overflow-y-auto pr-1">
                   <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
                     {myPlaylists.map((playlist) => (
@@ -972,6 +1170,11 @@ export default function HostScreen() {
                     Tout retirer
                   </button>
                 </div>
+                {/* Encart à hauteur fixe avec défilement interne — c'est la
+                    liste qui pouvait le plus allonger la page avec une
+                    grosse playlist importée d'un coup. Glisser-déposer
+                    (draggable + onDragStart/onDragOver/onDrop) pour
+                    réordonner l'ordre de passage à la main. */}
                 <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
                   {upcomingQueue.map((track, i) => (
                     <li
