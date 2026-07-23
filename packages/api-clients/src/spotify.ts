@@ -73,9 +73,9 @@ export async function searchTracks(query: string, accessToken: string): Promise<
 /**
  * Lance la lecture d'un morceau sur l'appareil hôte du Web Playback SDK
  * (celui identifié par deviceId, obtenu via l'event "ready" du player — voir
- * la page /spotify-test). Coupe la lecture ailleurs et la transfère sur ce
- * device, comme le ferait l'app Spotify normale quand on choisit un
- * appareil de diffusion.
+ * la page /spotify-test). Coupe la lecture ailleurs (téléphone, enceinte
+ * connectée...) et la transfère sur ce device, comme le ferait l'app
+ * Spotify normale quand on choisit un appareil de diffusion.
  */
 export async function playTrackOnHostDevice(
   trackId: string,
@@ -96,6 +96,7 @@ export async function playTrackOnHostDevice(
     }),
   });
 
+  // 204 No Content = succès normal pour cet endpoint.
   if (!res.ok && res.status !== 204) {
     const text = await res.text();
     throw new Error(`Lecture Spotify échouée (${res.status}): ${text}`);
@@ -113,4 +114,152 @@ export async function pausePlayback(deviceId: string, accessToken: string): Prom
     const text = await res.text();
     throw new Error(`Pause Spotify échouée (${res.status}): ${text}`);
   }
+}
+
+// ============================================================================
+// Import de playlists Spotify existantes — alternative à la recherche morceau
+// par morceau : récupère tous les titres d'une playlist déjà créée sur
+// Spotify (perso ou publique suivie) pour les ajouter d'un coup à la file
+// d'attente côté hôte. Nécessite le scope OAuth "playlist-read-private" (et
+// "playlist-read-collaborative" pour les playlists collaboratives) en plus
+// des scopes de lecture — voir apps/web-host/src/lib/spotifyAuth.ts.
+// ============================================================================
+
+export type SpotifyPlaylistSummary = {
+  id: string;
+  name: string;
+  trackCount: number;
+  imageUrl: string | null;
+};
+
+type SpotifyPlaylistsResponse = {
+  items: Array<{
+    id: string;
+    name: string;
+    images?: Array<{ url: string }>;
+    tracks?: { total: number };
+    owner?: { id: string };
+  }>;
+  next: string | null;
+};
+
+/**
+ * Récupère l'ID Spotify de l'utilisateur connecté, pour pouvoir filtrer ses
+ * propres playlists (voir listUserPlaylists ci-dessous).
+ */
+async function getCurrentUserId(accessToken: string): Promise<string> {
+  const res = await fetch("https://api.spotify.com/v1/me", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Impossible de récupérer le profil Spotify (${res.status}): ${text}`);
+  }
+  const data = (await res.json()) as { id: string };
+  return data.id;
+}
+
+/**
+ * Liste les playlists dont l'utilisateur connecté est PROPRIÉTAIRE (les
+ * siennes, y compris privées grâce au scope playlist-read-private). Suit la
+ * pagination Spotify jusqu'au bout (limite 50 par page côté API).
+ *
+ * GET /me/playlists renvoie aussi les playlists juste suivies (créées par
+ * quelqu'un d'autre, ou générées par Spotify comme Découvertes de la
+ * semaine) — elles sont filtrées ici via le champ owner.id, car
+ * getPlaylistTracks renverra de toute façon un 403 dessus (Spotify ne
+ * permet l'accès au contenu qu'aux playlists dont on est propriétaire ou
+ * collaborateur).
+ */
+export async function listUserPlaylists(accessToken: string): Promise<SpotifyPlaylistSummary[]> {
+  const userId = await getCurrentUserId(accessToken);
+  const playlists: SpotifyPlaylistSummary[] = [];
+  let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
+
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Chargement des playlists Spotify échoué (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as SpotifyPlaylistsResponse;
+    for (const item of data.items) {
+      if (item.owner?.id !== userId) continue; // exclut les playlists suivies / générées par Spotify
+      playlists.push({
+        id: item.id,
+        name: item.name,
+        trackCount: item.tracks?.total ?? 0,
+        imageUrl: item.images?.[0]?.url ?? null,
+      });
+    }
+    url = data.next;
+  }
+
+  return playlists;
+}
+
+type SpotifyPlaylistItemsResponse = {
+  items: Array<{
+    item: {
+      id: string;
+      name: string;
+      type: string;
+      duration_ms: number;
+      artists: Array<{ name: string }>;
+      album?: { images?: Array<{ url: string }> };
+    } | null;
+  }>;
+  next: string | null;
+};
+
+/**
+ * Récupère tous les morceaux d'une playlist Spotify (suit la pagination,
+ * limite 50 par page côté API — Spotify a retiré l'ancien endpoint
+ * GET /playlists/{id}/tracks en février 2026 au profit de
+ * GET /playlists/{id}/items, utilisé ici). Ignore les épisodes de podcast
+ * et les pistes locales/supprimées (item null), qui n'ont pas de sens pour
+ * un blind test.
+ *
+ * Limite connue (imposée par Spotify, pas par ce code) : cet endpoint ne
+ * renvoie les morceaux QUE pour les playlists dont l'utilisateur connecté
+ * est propriétaire ou collaborateur. Une playlist juste suivie (créée par
+ * quelqu'un d'autre) ou générée automatiquement par Spotify (Découvertes de
+ * la semaine, Daily Mix, Radar des sorties...) renvoie un 403 Forbidden —
+ * ce n'est pas un bug côté app, Spotify bloque l'accès au contenu de ces
+ * playlists via l'API, même si elles apparaissent dans la liste renvoyée
+ * par listUserPlaylists.
+ */
+export async function getPlaylistTracks(playlistId: string, accessToken: string): Promise<SpotifyTrack[]> {
+  const tracks: SpotifyTrack[] = [];
+  let url: string | null =
+    `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=50&fields=` +
+    encodeURIComponent("items(item(id,name,type,duration_ms,artists(name),album(images))),next");
+
+  while (url) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) {
+      if (res.status === 403) {
+        throw new Error(
+          "Spotify refuse l’accès au contenu de cette playlist : ça ne marche que pour tes propres playlists (ou celles où tu es collaborateur). Les playlists juste suivies, ou générées automatiquement par Spotify (Découvertes de la semaine, Daily Mix, Radar des sorties…), ne sont pas accessibles via l’API — choisis une playlist que tu as créée toi-même."
+        );
+      }
+      const text = await res.text();
+      throw new Error(`Chargement de la playlist Spotify échoué (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as SpotifyPlaylistItemsResponse;
+    for (const entry of data.items) {
+      const item = entry.item;
+      if (!item || item.type !== "track") continue; // ignore podcasts / pistes supprimées
+      tracks.push({
+        sourceTrackId: item.id,
+        title: item.name,
+        artist: item.artists.map((a) => a.name).join(", "),
+        durationMs: item.duration_ms,
+        albumImageUrl: item.album?.images?.[0]?.url ?? null,
+      });
+    }
+    url = data.next;
+  }
+
+  return tracks;
 }

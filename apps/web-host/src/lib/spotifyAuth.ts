@@ -25,6 +25,8 @@ export const SCOPES = [
   "user-read-private",
   "user-read-playback-state",
   "user-modify-playback-state",
+  "playlist-read-private",
+  "playlist-read-collaborative",
 ].join(" ");
 
 export const COOKIE_VERIFIER = "spotify_pkce_verifier";
