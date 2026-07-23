@@ -180,6 +180,13 @@ export default function HostScreen() {
     setQueue((q) => q.filter((_, i) => i !== realIndex));
   };
 
+  // Ne retire que la portion "à venir" (à partir de queueIndex) : les
+  // morceaux déjà joués avant queueIndex restent en historique, seule la
+  // file d'attente encore à jouer est vidée.
+  const handleClearQueue = () => {
+    setQueue((q) => q.slice(0, queueIndex));
+  };
+
   const handleLoadMyPlaylists = async () => {
     if (!spotifyPlayer.accessTokenRef.current) return;
     setLoadingPlaylists(true);
@@ -653,9 +660,17 @@ export default function HostScreen() {
 
             {upcomingQueue.length > 0 && (
               <div className="mt-4">
-                <h3 className="font-bold mb-2 text-accentSoft">
-                  Playlist ({upcomingQueue.length} morceau(x) à venir)
-                </h3>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="font-bold text-accentSoft">
+                    Playlist ({upcomingQueue.length} morceau(x) à venir)
+                  </h3>
+                  <button
+                    onClick={handleClearQueue}
+                    className="text-danger text-sm hover:brightness-110 transition"
+                  >
+                    Tout retirer
+                  </button>
+                </div>
                 <ul className="flex flex-col gap-2">
                   {upcomingQueue.map((track, i) => (
                     <li
