@@ -33,6 +33,28 @@ function shuffle<T>(array: T[]): T[] {
   return result;
 }
 
+type RankedPlayer = Player & { rank: number };
+
+// Classement "façon compétition" : deux joueurs à égalité de score
+// partagent le même rang, et le rang suivant saute en conséquence
+// (1, 1, 3 plutôt que 1, 1, 2). Recalculé à chaque rendu à partir de
+// `players`, qui est lui-même tenu à jour en temps réel (voir
+// subscribeToPlayers dans lib/rooms.ts, qui écoute aussi bien les scores
+// mis à jour que les nouveaux joueurs) : le classement s'ajuste donc
+// automatiquement au fil de la partie, sans action supplémentaire.
+function withRanks(players: Player[]): RankedPlayer[] {
+  const sorted = [...players].sort((a, b) => b.score - a.score);
+  let rank = 0;
+  let previousScore: number | null = null;
+  return sorted.map((p, i) => {
+    if (previousScore === null || p.score !== previousScore) {
+      rank = i + 1;
+      previousScore = p.score;
+    }
+    return { ...p, rank };
+  });
+}
+
 /**
  * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
  * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
@@ -298,7 +320,8 @@ export default function HostScreen() {
   const canStartRound = !round || round.status === "revealed" || round.status === "scored";
   const upcomingQueue = queue.slice(queueIndex);
   const queueExhausted = canStartRound && queueIndex > 0 && upcomingQueue.length === 0;
-  const rankedPlayers = [...players].sort((a, b) => b.score - a.score);
+  const rankedPlayers = withRanks(players);
+  const gameStarted = queueIndex > 0;
   const modeChosen = hostMode !== null;
   const blindMode = hostMode === "player";
 
@@ -315,20 +338,30 @@ export default function HostScreen() {
         <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
         <ul className="space-y-2">
           {players.length === 0 && <li className="text-muted">En attente de joueurs…</li>}
-          {rankedPlayers.map((p, i) => (
-            <li
-              key={p.id}
-              className={`flex justify-between items-center rounded-xl px-4 py-3 text-xl ${
-                i === 0 ? "bg-gold/10 border border-gold/40" : "bg-white/5"
-              }`}
-            >
-              <span className="flex items-center gap-2">
-                {i === 0 && <span>🥇</span>}
-                {p.display_name}
-              </span>
-              <span className={`font-bold ${i === 0 ? "text-gold" : ""}`}>{p.score} pts</span>
-            </li>
-          ))}
+          {gameStarted
+            ? rankedPlayers.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
+                >
+                  <span>
+                    {p.rank}. {p.display_name}
+                  </span>
+                  <span className="font-bold">{p.score} pts</span>
+                </li>
+              ))
+            : // Avant que la première manche ne soit lancée, un classement n'a
+              // aucun sens (tout le monde est à 0 point) : on affiche juste les
+              // pseudos dans l'ordre d'inscription (déjà l'ordre de `players`,
+              // trié par joined_at côté requête dans subscribeToPlayers).
+              players.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
+                >
+                  <span>{p.display_name}</span>
+                </li>
+              ))}
         </ul>
       </div>
 
@@ -412,15 +445,12 @@ export default function HostScreen() {
           <div className="flex flex-col items-center gap-6 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
             <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
             <ul className="w-full space-y-2 text-left">
-              {rankedPlayers.map((p, i) => (
-                <li
-                  key={p.id}
-                  className={`flex justify-between rounded-xl px-4 py-3 ${
-                    i === 0 ? "bg-gold/10 border border-gold/40" : "bg-white/5"
-                  }`}
-                >
-                  <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`} {p.display_name}</span>
-                  <span className={`font-bold ${i === 0 ? "text-gold" : ""}`}>{p.score} pts</span>
+              {rankedPlayers.map((p) => (
+                <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-white/5">
+                  <span>
+                    {p.rank}. {p.display_name}
+                  </span>
+                  <span className="font-bold">{p.score} pts</span>
                 </li>
               ))}
             </ul>
@@ -648,4 +678,3 @@ export default function HostScreen() {
     </main>
   );
 }
-// vercel-build-check
