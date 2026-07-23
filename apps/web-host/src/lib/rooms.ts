@@ -117,13 +117,6 @@ export async function startTestRound(roomId: string): Promise<void> {
   await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
 }
 
-// ============================================================================
-// Fonctions côté joueur — utilisées par la page /play (voir app/play/page.tsx).
-// Permettent de tester le mécanisme join + buzz depuis un simple onglet de
-// navigateur, sans passer par l'appli mobile native (utile pour valider la
-// logique pendant que la compilation native est mise de côté).
-// ============================================================================
-
 export type PlayerRound = {
   id: string;
   status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
