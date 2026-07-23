@@ -10,3 +10,4 @@ build/
 supabase/.temp/
 .idea/
 *.patch
+.vercel

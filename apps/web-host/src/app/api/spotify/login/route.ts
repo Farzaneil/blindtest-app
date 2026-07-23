@@ -18,7 +18,7 @@ export async function GET() {
   const cookieOptions = {
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: false,
+    secure: process.env.NODE_ENV === "production",
     maxAge: 60 * 10,
     path: "/",
   };
