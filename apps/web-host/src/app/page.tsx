@@ -70,6 +70,14 @@ export default function HostScreen() {
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
   const [spotifyOAuthError, setSpotifyOAuthError] = useState<string | null>(null);
+  // true entre le clic sur "manche suivante" et la confirmation (via
+  // Supabase Realtime) que la nouvelle manche est bien passée en "playing".
+  // Évite un flash visuel : queueIndex avance dès que launchRound résout,
+  // mais round (mis à jour par un canal Realtime séparé, donc pas
+  // synchronisé) peut arriver un peu après, ce qui recalculait brièvement
+  // l'aperçu avec l'index déjà incrémenté (donc le morceau suivant du
+  // suivant) avant que l'écran ne bascule sur "manche en cours".
+  const [launchingRound, setLaunchingRound] = useState(false);
 
   // File d'attente : les morceaux d'indice < queueIndex ont déjà été joués,
   // ceux à partir de queueIndex restent à venir.
@@ -186,11 +194,18 @@ export default function HostScreen() {
         spotifyPlayer.deviceId,
         spotifyPlayer.accessTokenRef.current
       );
-      await startRoundWithTrack(room.id, {
+      const newRound = await startRoundWithTrack(room.id, {
         sourceTrackId: track.sourceTrackId,
         title: track.title,
         artist: track.artist,
       });
+      // Mise à jour immédiate depuis la ligne retournée par l'insert (déjà
+      // au statut "playing"), sans attendre l'écho de Supabase Realtime :
+      // ce canal est indépendant et peut arriver après que queueIndex ait
+      // déjà avancé, ce qui recréait la fenêtre de flash qu'on cherche à
+      // éliminer. Le realtime finira par renvoyer la même donnée un peu
+      // plus tard (idempotent, sans effet visible).
+      setRound(newRound);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de lancer la manche.");
     }
@@ -212,12 +227,14 @@ export default function HostScreen() {
   const handlePlayNextInQueue = async () => {
     if (queueIndex >= queue.length) return;
     if (players.length === 0) return; // pas de joueur = personne ne peut buzzer, le jeu resterait bloqué
+    if (launchingRound) return; // évite un double-clic pendant le lancement
 
     // Doit être appelé de façon synchrone, tout en haut du handler de clic
     // (avant le moindre await), pour rester dans la fenêtre de "user
     // gesture" qu'iOS Safari exige avant d'autoriser l'audio — voir le
     // commentaire dans useSpotifyPlayer.ts.
     spotifyPlayer.activateElement();
+    setLaunchingRound(true);
 
     let effectiveQueue = queue;
     if (buildingPlaylist) {
@@ -230,6 +247,7 @@ export default function HostScreen() {
     await launchRound(effectiveQueue[queueIndex]);
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
+    setLaunchingRound(false);
   };
 
   const handleResolve = async (correct: boolean) => {
@@ -392,17 +410,23 @@ export default function HostScreen() {
 
         {canStartRound && modeChosen && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-4">
-            <p className="text-gray-400">
-              Manche {queueIndex + 1} / {queue.length} à venir :
-            </p>
-            <p className="text-xl font-bold">
-              {blindMode
-                ? `Morceau ${queueIndex + 1}`
-                : `${upcomingQueue[0]?.title} — ${upcomingQueue[0]?.artist}`}
-            </p>
+            {launchingRound ? (
+              <p className="text-xl font-bold text-gray-400">Lancement de la manche…</p>
+            ) : (
+              <>
+                <p className="text-gray-400">
+                  Manche {queueIndex + 1} / {queue.length} à venir :
+                </p>
+                <p className="text-xl font-bold">
+                  {blindMode
+                    ? `Morceau ${queueIndex + 1}`
+                    : `${upcomingQueue[0]?.title} — ${upcomingQueue[0]?.artist}`}
+                </p>
+              </>
+            )}
             <button
               onClick={handlePlayNextInQueue}
-              disabled={players.length === 0}
+              disabled={players.length === 0 || launchingRound}
               className="bg-accent2 disabled:opacity-40 px-8 py-4 rounded-full text-xl font-bold"
             >
               ▶ Manche suivante
@@ -547,12 +571,14 @@ export default function HostScreen() {
             )}
             <button
               onClick={handlePlayNextInQueue}
-              disabled={upcomingQueue.length === 0 || players.length === 0}
+              disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
               className="bg-accent disabled:opacity-40 px-8 py-4 rounded-full text-xl font-bold mt-2"
             >
-              {queueIndex === 0
-                ? `▶ Démarrer la partie (${upcomingQueue.length} morceau(x))`
-                : `▶ Reprendre la partie (${upcomingQueue.length} restant(s))`}
+              {launchingRound
+                ? "Lancement…"
+                : queueIndex === 0
+                  ? `▶ Démarrer la partie (${upcomingQueue.length} morceau(x))`
+                  : `▶ Reprendre la partie (${upcomingQueue.length} restant(s))`}
             </button>
           </div>
         )}
