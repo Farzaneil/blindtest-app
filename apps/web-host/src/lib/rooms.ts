@@ -93,7 +93,10 @@ export function subscribeToRounds(roomId: string, onChange: (round: Round | null
   };
 }
 
-export async function startTestRound(roomId: string): Promise<void> {
+async function insertRound(
+  roomId: string,
+  track: { sourceTrackId: string; title: string; artist: string }
+): Promise<Round> {
   const { data: existing } = await supabase
     .from("rounds")
     .select("order_index")
@@ -104,18 +107,58 @@ export async function startTestRound(roomId: string): Promise<void> {
 
   const nextIndex = (existing?.order_index ?? -1) + 1;
 
-  await supabase.from("rounds").insert({
-    room_id: roomId,
-    order_index: nextIndex,
-    source_track_id: "test-track",
-    title: "Morceau de test",
-    artist: "Artiste de test",
-    status: "playing",
-    started_at: new Date().toISOString(),
-  });
+  const { data, error } = await supabase
+    .from("rounds")
+    .insert({
+      room_id: roomId,
+      order_index: nextIndex,
+      source_track_id: track.sourceTrackId,
+      title: track.title,
+      artist: track.artist,
+      status: "playing",
+      started_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible de créer la manche.");
+  }
 
   await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
+
+  return data as Round;
 }
+
+/**
+ * Lance une manche "factice" (pas de vrai morceau) — utile pour retester le
+ * mécanisme de buzz seul, indépendamment de Spotify.
+ */
+export async function startTestRound(roomId: string): Promise<void> {
+  await insertRound(roomId, {
+    sourceTrackId: "test-track",
+    title: "Morceau de test",
+    artist: "Artiste de test",
+  });
+}
+
+/**
+ * Lance une vraie manche à partir d'un morceau choisi via la recherche
+ * Spotify (voir /lib/useSpotifyPlayer.ts + @blindtest/api-clients). Ne
+ * démarre pas la lecture elle-même : ça reste à la charge de l'appelant
+ * (spotify.playTrackOnHostDevice), pour garder cette fonction indépendante
+ * de la source musicale.
+ */
+export async function startRoundWithTrack(
+  roomId: string,
+  track: { sourceTrackId: string; title: string; artist: string }
+): Promise<Round> {
+  return insertRound(roomId, track);
+}
+
+// ============================================================================
+// Fonctions côté joueur — utilisées par la page /play (voir app/play/page.tsx).
+// ============================================================================
 
 export type PlayerRound = {
   id: string;

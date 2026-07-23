@@ -5,27 +5,36 @@
 // au moment du build.
 export const dynamic = "force-dynamic";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { spotify } from "@blindtest/api-clients";
 import {
   createRoom,
   subscribeToPlayers,
   subscribeToRounds,
-  startTestRound,
+  startRoundWithTrack,
   type Player,
   type Round,
 } from "../lib/rooms";
+import { useForceLoopbackHost } from "../lib/useForceLoopbackHost";
+import { useSpotifyPlayer } from "../lib/useSpotifyPlayer";
 
 /**
- * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
- * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
- * n'affiche jamais de réponse privée, seulement l'état commun de la partie
- * (joueurs connectés, manche en cours, qui a buzzé).
+ * Écran hôte / "TV". Nécessite maintenant un compte Spotify Premium
+ * connecté sur cet onglet (voir lib/useSpotifyPlayer.ts) pour choisir et
+ * lancer un vrai morceau à chaque manche — d'où le garde-fou 127.0.0.1.
  */
 export default function HostScreen() {
+  useForceLoopbackHost();
+
   const [room, setRoom] = useState<{ id: string; code: string } | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [round, setRound] = useState<Round | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
+
+  const spotifyPlayer = useSpotifyPlayer();
+  const pausedForRoundId = useRef<string | null>(null);
 
   useEffect(() => {
     createRoom()
@@ -42,6 +51,52 @@ export default function HostScreen() {
       unsubRounds();
     };
   }, [room]);
+
+  // Coupe le son dès qu'un joueur buzze — une seule fois par manche.
+  useEffect(() => {
+    if (
+      round?.status === "buzzed" &&
+      round.id !== pausedForRoundId.current &&
+      spotifyPlayer.deviceId &&
+      spotifyPlayer.accessTokenRef.current
+    ) {
+      pausedForRoundId.current = round.id;
+      spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {
+        // Pas grave si la pause échoue (ex: token expiré) : le morceau
+        // continue mais le buzz est déjà résolu côté base.
+      });
+    }
+  }, [round, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+
+  const handleSearch = async () => {
+    if (!spotifyPlayer.accessTokenRef.current) return;
+    try {
+      const tracks = await spotify.searchTracks(query, spotifyPlayer.accessTokenRef.current);
+      setResults(tracks);
+    } catch (e: any) {
+      setError(e?.message ?? "Recherche Spotify échouée.");
+    }
+  };
+
+  const handleStartRound = async (track: spotify.SpotifyTrack) => {
+    if (!room || !spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current) return;
+    try {
+      await spotify.playTrackOnHostDevice(
+        track.sourceTrackId,
+        spotifyPlayer.deviceId,
+        spotifyPlayer.accessTokenRef.current
+      );
+      await startRoundWithTrack(room.id, {
+        sourceTrackId: track.sourceTrackId,
+        title: track.title,
+        artist: track.artist,
+      });
+      setResults([]);
+      setQuery("");
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de lancer la manche.");
+    }
+  };
 
   if (error) {
     return (
@@ -94,19 +149,70 @@ export default function HostScreen() {
       </div>
 
       <div className="w-full max-w-xl text-center">
-        {canStartRound ? (
-          <button
-            onClick={() => startTestRound(room.id)}
-            className="bg-accent px-8 py-4 rounded-full text-xl font-bold"
-          >
-            Lancer une manche de test
-          </button>
-        ) : round?.status === "playing" ? (
+        {!canStartRound && round?.status === "playing" && (
           <p className="text-2xl">🎵 Manche en cours — en attente d’un buzz…</p>
-        ) : (
+        )}
+        {!canStartRound && round?.status !== "playing" && (
           <p className="text-3xl font-bold text-accent2">
             🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
           </p>
+        )}
+
+        {canStartRound && spotifyPlayer.state === "checking" && (
+          <p className="text-gray-400">Vérification de la connexion Spotify…</p>
+        )}
+
+        {canStartRound && spotifyPlayer.state === "disconnected" && (
+          <button
+            onClick={spotifyPlayer.connect}
+            className="bg-accent px-8 py-4 rounded-full text-xl font-bold"
+          >
+            Se connecter à Spotify pour lancer une manche
+          </button>
+        )}
+
+        {canStartRound && spotifyPlayer.state === "connecting_player" && (
+          <p className="text-gray-400">Connexion au lecteur Spotify…</p>
+        )}
+
+        {canStartRound && spotifyPlayer.state === "ready" && (
+          <div className="flex flex-col gap-4 text-left">
+            <div className="flex gap-2">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="Chercher un morceau à faire deviner…"
+                className="flex-1 bg-white/5 border-2 border-accent rounded-xl px-4 py-3"
+              />
+              <button onClick={handleSearch} className="bg-accent px-6 py-3 rounded-xl font-bold">
+                Chercher
+              </button>
+            </div>
+
+            <ul className="flex flex-col gap-2">
+              {results.map((track) => (
+                <li
+                  key={track.sourceTrackId}
+                  className="flex justify-between items-center bg-white/5 rounded-lg px-4 py-3"
+                >
+                  <span>
+                    {track.title} — {track.artist}
+                  </span>
+                  <button
+                    onClick={() => handleStartRound(track)}
+                    className="bg-accent2 px-4 py-2 rounded-full text-sm font-bold"
+                  >
+                    ▶ Lancer cette manche
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {spotifyPlayer.errorMessage && (
+          <p className="text-red-400 mt-4 break-words">{spotifyPlayer.errorMessage}</p>
         )}
       </div>
     </main>
