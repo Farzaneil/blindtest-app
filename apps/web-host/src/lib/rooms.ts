@@ -46,6 +46,22 @@ export async function createRoom(): Promise<Room> {
   throw new Error("Impossible de générer un code de partie unique après plusieurs tentatives.");
 }
 
+/**
+ * Récupère une room existante par id — utilisé par l'écran hôte pour
+ * vérifier, au chargement, qu'une partie retrouvée dans sessionStorage
+ * (voir app/page.tsx) existe toujours côté base avant de la réutiliser au
+ * lieu d'en créer une nouvelle. Retourne null si la room n'existe plus
+ * (par exemple si la base a été réinitialisée entre-temps).
+ */
+export async function getRoomById(roomId: string): Promise<Room | null> {
+  const { data } = await supabase
+    .from("rooms")
+    .select("id, code, status")
+    .eq("id", roomId)
+    .maybeSingle();
+  return (data as Room) ?? null;
+}
+
 export function subscribeToPlayers(roomId: string, onChange: (players: Player[]) => void) {
   const fetchAndEmit = async () => {
     const { data } = await supabase
@@ -213,6 +229,27 @@ function generateWebDeviceId(): string {
 // Un id par onglet/session de navigateur (pas persisté entre rechargements,
 // suffisant pour tester avec plusieurs onglets = plusieurs joueurs).
 export const webDeviceId = generateWebDeviceId();
+
+/**
+ * Vérifie qu'un joueur (retrouvé via son id stocké dans sessionStorage,
+ * voir app/play/page.tsx) existe toujours, et renvoie son roomId associé.
+ * Permet de reconnecter un joueur après un refresh/retour en arrière sans
+ * réinsérer une nouvelle ligne dans `players` — ce qui aurait remis son
+ * score à zéro. Retourne null si le joueur n'existe plus (partie
+ * abandonnée par l'hôte, base réinitialisée, etc.) : dans ce cas l'appelant
+ * doit repasser par joinRoomByCode.
+ */
+export async function getPlayerSession(
+  playerId: string
+): Promise<{ roomId: string; playerId: string } | null> {
+  const { data } = await supabase
+    .from("players")
+    .select("id, room_id")
+    .eq("id", playerId)
+    .maybeSingle();
+  if (!data) return null;
+  return { roomId: data.room_id, playerId: data.id };
+}
 
 export async function joinRoomByCode(code: string, displayName: string) {
   const { data: room, error: roomError } = await supabase

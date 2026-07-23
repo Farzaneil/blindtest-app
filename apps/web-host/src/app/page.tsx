@@ -1,14 +1,15 @@
 "use client";
 
-// Page volontairement non pré-générée statiquement : elle crée une
-// nouvelle partie à chaque chargement, ça n'a pas de sens de la figer
-// au moment du build.
+// Page volontairement non pré-générée statiquement : elle dépend de
+// sessionStorage et de Supabase au premier rendu, ça n'a pas de sens de la
+// figer au moment du build.
 export const dynamic = "force-dynamic";
 
 import { useEffect, useRef, useState } from "react";
 import { spotify } from "@blindtest/api-clients";
 import {
   createRoom,
+  getRoomById,
   subscribeToPlayers,
   subscribeToRounds,
   startRoundWithTrack,
@@ -21,6 +22,63 @@ import { useForceLoopbackHost } from "../lib/useForceLoopbackHost";
 import { useSpotifyPlayer } from "../lib/useSpotifyPlayer";
 
 type HostMode = "gamemaster" | "player";
+
+// ============================================================================
+// Persistance de la partie en cours dans sessionStorage — pour qu'un
+// refresh ou un retour en arrière navigateur (fausse manip courante) ne
+// force pas à recommencer une partie avec un nouveau code : l'écran hôte
+// retrouve la même room (et la même file d'attente/mode de jeu) au lieu
+// d'en créer une nouvelle à chaque chargement.
+//
+// sessionStorage plutôt que localStorage volontairement : ça survit au
+// refresh et au bouton précédent/suivant du navigateur (ce qui est demandé
+// ici), mais pas à la fermeture de l'onglet, et surtout n'est PAS partagé
+// entre onglets — donc ouvrir un deuxième onglet hôte ne vient pas se
+// raccrocher silencieusement à la même partie (et au même device Spotify).
+// ============================================================================
+
+const ROOM_STORAGE_KEY = "blindtest_host_room";
+const MODE_STORAGE_KEY = "blindtest_host_mode";
+const QUEUE_STORAGE_KEY = "blindtest_host_queue";
+const QUEUE_INDEX_STORAGE_KEY = "blindtest_host_queue_index";
+const BUILDING_STORAGE_KEY = "blindtest_host_building_playlist";
+
+function readStoredJSON<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredJSON(key: string, value: unknown) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Stockage indisponible (navigation privée stricte, quota, etc.) : pas
+    // grave, la partie fonctionnera juste sans survivre à un refresh.
+  }
+}
+
+function clearStoredGameState() {
+  if (typeof window === "undefined") return;
+  for (const key of [
+    ROOM_STORAGE_KEY,
+    MODE_STORAGE_KEY,
+    QUEUE_STORAGE_KEY,
+    QUEUE_INDEX_STORAGE_KEY,
+    BUILDING_STORAGE_KEY,
+  ]) {
+    try {
+      window.sessionStorage.removeItem(key);
+    } catch {
+      // idem
+    }
+  }
+}
 
 // Mélange une copie du tableau (Fisher-Yates) — utilisé pour l'import de
 // playlist en mode "tout le monde participe", pour qu'un hôte qui connaît
@@ -66,13 +124,16 @@ function withRanks(players: Player[]): RankedPlayer[] {
  * (voir lib/useSpotifyPlayer.ts) pour choisir et lancer un vrai morceau à
  * chaque manche — d'où le garde-fou 127.0.0.1 (cf. useForceLoopbackHost).
  *
- * La file d'attente (queue) est volontairement gardée en mémoire côté
- * client (pas persistée dans la table `playlists`, qui existe dans le
- * schéma mais reste verrouillée par RLS pour l'instant) : ça reste
- * cohérent avec le fait que la page recrée une room à chaque chargement,
- * et évite d'ouvrir une nouvelle policy RLS pour ce premier incrément.
- * À revoir si on veut un jour pouvoir réutiliser une playlist entre
- * plusieurs parties.
+ * La file d'attente (queue) est gardée en mémoire côté client et mise en
+ * cache dans sessionStorage (pas persistée dans la table `playlists`, qui
+ * existe dans le schéma mais reste verrouillée par RLS pour l'instant) :
+ * ça évite d'ouvrir une nouvelle policy RLS pour ce premier incrément, tout
+ * en survivant à un refresh (voir le bloc sessionStorage plus haut). Un
+ * refresh/retour en arrière retrouve donc la même room, le même mode et la
+ * même file d'attente — un vrai redémarrage passe par le bouton "Nouvelle
+ * partie". À revoir si on veut un jour pouvoir réutiliser une playlist
+ * entre plusieurs parties distinctes (pas juste survivre à un refresh de
+ * la même partie).
  *
  * Deux modes de jeu (choisis une fois en tout début de partie, voir
  * hostMode) : "gamemaster" (comportement historique, l'hôte voit toute la
@@ -86,6 +147,13 @@ export default function HostScreen() {
   useForceLoopbackHost();
 
   const [room, setRoom] = useState<{ id: string; code: string } | null>(null);
+  // Passe à true une fois qu'on sait si on a repris une partie existante
+  // (sessionStorage + vérif Supabase) ou créé une nouvelle room à zéro.
+  // Tant que ce n'est pas fait, on n'écrit rien dans sessionStorage — sinon
+  // les valeurs par défaut (queue vide, etc.) du tout premier rendu
+  // écraseraient une partie sauvegardée avant même d'avoir eu la chance de
+  // la relire.
+  const [hydrated, setHydrated] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [round, setRound] = useState<Round | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -115,10 +183,63 @@ export default function HostScreen() {
   const pausedForRoundId = useRef<string | null>(null);
 
   useEffect(() => {
-    createRoom()
-      .then((r) => setRoom({ id: r.id, code: r.code }))
-      .catch((e) => setError(e?.message ?? "Erreur de connexion à Supabase"));
+    let cancelled = false;
+
+    const startFresh = async () => {
+      clearStoredGameState();
+      try {
+        const r = await createRoom();
+        if (cancelled) return;
+        writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
+        setRoom({ id: r.id, code: r.code });
+        setHostMode(null);
+        setQueue([]);
+        setQueueIndex(0);
+        setBuildingPlaylist(true);
+        setHydrated(true);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Erreur de connexion à Supabase");
+      }
+    };
+
+    (async () => {
+      const stored = readStoredJSON<{ id: string; code: string } | null>(ROOM_STORAGE_KEY, null);
+      if (!stored) {
+        await startFresh();
+        return;
+      }
+      // On vérifie que la room existe toujours côté Supabase avant de la
+      // réutiliser : sessionStorage peut très bien pointer vers une partie
+      // qui n'existe plus (base réinitialisée, etc.).
+      const existing = await getRoomById(stored.id);
+      if (cancelled) return;
+      if (!existing) {
+        await startFresh();
+        return;
+      }
+      setRoom({ id: existing.id, code: existing.code });
+      setHostMode(readStoredJSON(MODE_STORAGE_KEY, null));
+      setQueue(readStoredJSON(QUEUE_STORAGE_KEY, []));
+      setQueueIndex(readStoredJSON(QUEUE_INDEX_STORAGE_KEY, 0));
+      setBuildingPlaylist(readStoredJSON(BUILDING_STORAGE_KEY, true));
+      setHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
+
+  // Persiste la file d'attente / le mode de jeu à chaque changement, une
+  // fois qu'on sait qu'on ne va pas écraser une partie sauvegardée en cours
+  // de relecture (voir le commentaire sur `hydrated` plus haut).
+  useEffect(() => {
+    if (!hydrated) return;
+    writeStoredJSON(MODE_STORAGE_KEY, hostMode);
+    writeStoredJSON(QUEUE_STORAGE_KEY, queue);
+    writeStoredJSON(QUEUE_INDEX_STORAGE_KEY, queueIndex);
+    writeStoredJSON(BUILDING_STORAGE_KEY, buildingPlaylist);
+  }, [hydrated, hostMode, queue, queueIndex, buildingPlaylist]);
 
   useEffect(() => {
     if (!room) return;
@@ -304,6 +425,37 @@ export default function HostScreen() {
     }
   };
 
+  // Seul moyen explicite de repartir sur une partie neuve (nouveau code,
+  // scores remis à zéro) : un refresh ou un retour en arrière ne le fait
+  // plus tout seul depuis qu'on reprend la partie stockée en
+  // sessionStorage. Confirmation demandée car c'est irréversible pour tout
+  // le monde (joueurs déjà connectés compris).
+  const handleStartNewGame = async () => {
+    if (
+      !window.confirm(
+        "Lancer une nouvelle partie ? Le code actuel et les scores en cours seront perdus."
+      )
+    ) {
+      return;
+    }
+    clearStoredGameState();
+    setHydrated(false);
+    setPlayers([]);
+    setRound(null);
+    setHostMode(null);
+    setQueue([]);
+    setQueueIndex(0);
+    setBuildingPlaylist(true);
+    try {
+      const r = await createRoom();
+      writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
+      setRoom({ id: r.id, code: r.code });
+      setHydrated(true);
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de créer une nouvelle partie.");
+    }
+  };
+
   if (error) {
     return (
       <main className="flex items-center justify-center min-h-screen p-10 text-center">
@@ -352,6 +504,12 @@ export default function HostScreen() {
           Rejoignez la partie avec le code
         </p>
         <p className="text-6xl font-black tracking-widest text-accentSoft">{room.code}</p>
+        <button
+          onClick={handleStartNewGame}
+          className="mt-3 text-xs text-muted hover:text-danger underline transition"
+        >
+          ↻ Nouvelle partie
+        </button>
       </div>
 
       <div className="w-full max-w-xl bg-surface border border-surfaceBorder rounded-3xl p-6">
