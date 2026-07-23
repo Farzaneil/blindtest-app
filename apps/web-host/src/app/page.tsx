@@ -12,16 +12,24 @@ import {
   getRoomById,
   subscribeToPlayers,
   subscribeToRounds,
+  subscribeToRoundHistory,
   startRoundWithTrack,
   revealRound,
   resolveRound,
+  timeoutRound,
   type Player,
   type Round,
 } from "../lib/rooms";
+import { withRanks } from "../lib/ranking";
 import { useForceLoopbackHost } from "../lib/useForceLoopbackHost";
 import { useSpotifyPlayer } from "../lib/useSpotifyPlayer";
 
 type HostMode = "gamemaster" | "player";
+
+// Durée du timer visuel par manche : purement indicatif jusqu'à 0, à ce
+// moment-là la musique est coupée et la manche est clôturée sans gagnant
+// (voir l'effet de timer plus bas et timeoutRound dans lib/rooms.ts).
+const ROUND_DURATION_SECONDS = 30;
 
 // ============================================================================
 // Persistance de la partie en cours dans sessionStorage — pour qu'un
@@ -92,28 +100,6 @@ function shuffle<T>(array: T[]): T[] {
   return result;
 }
 
-type RankedPlayer = Player & { rank: number };
-
-// Classement "façon compétition" : deux joueurs à égalité de score
-// partagent le même rang, et le rang suivant saute en conséquence
-// (1, 1, 3 plutôt que 1, 1, 2). Recalculé à chaque rendu à partir de
-// `players`, qui est lui-même tenu à jour en temps réel (voir
-// subscribeToPlayers dans lib/rooms.ts, qui écoute aussi bien les scores
-// mis à jour que les nouveaux joueurs) : le classement s'ajuste donc
-// automatiquement au fil de la partie, sans action supplémentaire.
-function withRanks(players: Player[]): RankedPlayer[] {
-  const sorted = [...players].sort((a, b) => b.score - a.score);
-  let rank = 0;
-  let previousScore: number | null = null;
-  return sorted.map((p, i) => {
-    if (previousScore === null || p.score !== previousScore) {
-      rank = i + 1;
-      previousScore = p.score;
-    }
-    return { ...p, rank };
-  });
-}
-
 /**
  * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
  * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
@@ -156,6 +142,8 @@ export default function HostScreen() {
   const [hydrated, setHydrated] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [round, setRound] = useState<Round | null>(null);
+  const [roundHistory, setRoundHistory] = useState<Round[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
@@ -169,6 +157,15 @@ export default function HostScreen() {
   // l'aperçu avec l'index déjà incrémenté (donc le morceau suivant du
   // suivant) avant que l'écran ne bascule sur "manche en cours".
   const [launchingRound, setLaunchingRound] = useState(false);
+  // Compte à rebours affiché pendant une manche "playing", recalculé à
+  // partir de round.started_at (pas d'un simple compteur local) pour rester
+  // exact même si l'onglet hôte est rafraîchi en plein milieu d'une manche.
+  const [timeLeft, setTimeLeft] = useState<number | null>(null);
+  // Id de la dernière manche "timeout" (personne n'a buzzé) déjà acquittée
+  // par l'hôte via le bouton "Continuer" — tant que ce n'est pas fait, on
+  // reste sur l'encart affichant la réponse non trouvée au lieu de sauter
+  // directement à l'écran de la manche suivante.
+  const [acknowledgedTimeoutRoundId, setAcknowledgedTimeoutRoundId] = useState<string | null>(null);
 
   // File d'attente : les morceaux d'indice < queueIndex ont déjà été joués,
   // ceux à partir de queueIndex restent à venir.
@@ -181,6 +178,11 @@ export default function HostScreen() {
 
   const spotifyPlayer = useSpotifyPlayer();
   const pausedForRoundId = useRef<string | null>(null);
+  const timedOutRoundId = useRef<string | null>(null);
+  // Index (dans upcomingQueue) du morceau en cours de glisser-déposer —
+  // simple ref plutôt que du state, la valeur n'a besoin d'être lue qu'au
+  // moment du drop, pas de re-render nécessaire pendant le glissé.
+  const dragIndexRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,9 +247,11 @@ export default function HostScreen() {
     if (!room) return;
     const unsubPlayers = subscribeToPlayers(room.id, setPlayers);
     const unsubRounds = subscribeToRounds(room.id, setRound);
+    const unsubHistory = subscribeToRoundHistory(room.id, setRoundHistory);
     return () => {
       unsubPlayers();
       unsubRounds();
+      unsubHistory();
     };
   }, [room]);
 
@@ -282,6 +286,45 @@ export default function HostScreen() {
     }
   }, [round, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
 
+  // Timer visuel de la manche en cours : calculé à partir de round.started_at
+  // (horodatage serveur) plutôt qu'un simple compteur local, pour rester
+  // exact même après un refresh de la page en plein milieu d'une manche. À
+  // 0, coupe le son (même geste que sur un buzz) et clôture la manche sans
+  // gagnant via timeoutRound — no-op côté serveur si un joueur avait buzzé
+  // entre-temps (la RPC exige status = 'playing').
+  useEffect(() => {
+    if (round?.status !== "playing" || !round.started_at) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTimeLeft(null);
+      return;
+    }
+    const startedAtMs = new Date(round.started_at).getTime();
+    const roundId = round.id;
+
+    const tick = () => {
+      const elapsedSeconds = (Date.now() - startedAtMs) / 1000;
+      const remaining = Math.max(0, Math.ceil(ROUND_DURATION_SECONDS - elapsedSeconds));
+      setTimeLeft(remaining);
+
+      if (remaining <= 0 && timedOutRoundId.current !== roundId) {
+        timedOutRoundId.current = roundId;
+        if (spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+          spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {
+            // Pas grave si la pause échoue : la manche est clôturée quand
+            // même côté base, le morceau continuera juste un peu en fond.
+          });
+        }
+        timeoutRound(roundId).catch((e: any) => {
+          setError(e?.message ?? "Impossible de clôturer la manche.");
+        });
+      }
+    };
+
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [round?.id, round?.status, round?.started_at, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+
   const handleSearch = async () => {
     if (!spotifyPlayer.accessTokenRef.current) return;
     try {
@@ -306,6 +349,33 @@ export default function HostScreen() {
   // file d'attente encore à jouer est vidée.
   const handleClearQueue = () => {
     setQueue((q) => q.slice(0, queueIndex));
+  };
+
+  // Réordonnancement par glisser-déposer, restreint à la portion "à venir"
+  // de la file (queueIndex et au-delà) : les morceaux déjà joués ne doivent
+  // jamais bouger.
+  const handleDragStart = (upcomingIndex: number) => () => {
+    dragIndexRef.current = upcomingIndex;
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLLIElement>) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (targetUpcomingIndex: number) => (e: React.DragEvent<HTMLLIElement>) => {
+    e.preventDefault();
+    const fromIndex = dragIndexRef.current;
+    dragIndexRef.current = null;
+    if (fromIndex === null || fromIndex === targetUpcomingIndex) return;
+
+    setQueue((q) => {
+      const played = q.slice(0, queueIndex);
+      const upcoming = q.slice(queueIndex);
+      const reordered = [...upcoming];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(targetUpcomingIndex, 0, moved);
+      return [...played, ...reordered];
+    });
   };
 
   const handleLoadMyPlaylists = async () => {
@@ -380,7 +450,8 @@ export default function HostScreen() {
   // déjà affiché à l'écran en mode "Maître du jeu" : le morceau annoncé et
   // celui réellement joué pouvaient différer. Une fois la partie lancée
   // (buildingPlaylist déjà false), on se contente d'avancer dans l'ordre
-  // déjà déterminé et déjà prévisualisé.
+  // déjà déterminé et déjà prévisualisé (et éventuellement réordonné à la
+  // main via le glisser-déposer).
   const handlePlayNextInQueue = async () => {
     if (queueIndex >= queue.length) return;
     if (players.length === 0) return; // pas de joueur = personne ne peut buzzer, le jeu resterait bloqué
@@ -442,6 +513,10 @@ export default function HostScreen() {
     setHydrated(false);
     setPlayers([]);
     setRound(null);
+    setRoundHistory([]);
+    setTimeLeft(null);
+    timedOutRoundId.current = null;
+    setAcknowledgedTimeoutRoundId(null);
     setHostMode(null);
     setQueue([]);
     setQueueIndex(0);
@@ -496,9 +571,19 @@ export default function HostScreen() {
   const gameStarted = queueIndex > 0;
   const modeChosen = hostMode !== null;
   const blindMode = hostMode === "player";
+  // Manche clôturée par expiration du timer (personne n'a buzzé) et pas
+  // encore acquittée par l'hôte : buzzed_by_player_id reste null dans ce
+  // cas précis (une manche résolue via Bonne/Mauvaise réponse a toujours un
+  // buzzed_by_player_id renseigné), donc ce test suffit à la distinguer
+  // d'une manche normalement jugée.
+  const isUnresolvedTimeout =
+    canStartRound &&
+    round !== null &&
+    round.buzzed_by_player_id === null &&
+    acknowledgedTimeoutRoundId !== round.id;
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-10 p-10">
+    <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10">
       <div className="text-center bg-surface border border-surfaceBorder rounded-3xl px-10 py-6 shadow-glowAccent">
         <p className="text-sm uppercase tracking-[0.3em] text-muted mb-1">
           Rejoignez la partie avec le code
@@ -514,7 +599,7 @@ export default function HostScreen() {
 
       <div className="w-full max-w-xl bg-surface border border-surfaceBorder rounded-3xl p-6">
         <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
-        <ul className="space-y-2">
+        <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {players.length === 0 && <li className="text-muted">En attente de joueurs…</li>}
           {gameStarted
             ? rankedPlayers.map((p) => (
@@ -528,11 +613,7 @@ export default function HostScreen() {
                   <span className="font-bold">{p.score} pts</span>
                 </li>
               ))
-            : // Avant que la première manche ne soit lancée, un classement n'a
-              // aucun sens (tout le monde est à 0 point) : on affiche juste les
-              // pseudos dans l'ordre d'inscription (déjà l'ordre de `players`,
-              // trié par joined_at côté requête dans subscribeToPlayers).
-              players.map((p) => (
+            : players.map((p) => (
                 <li
                   key={p.id}
                   className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
@@ -543,10 +624,62 @@ export default function HostScreen() {
         </ul>
       </div>
 
+      <div className="w-full max-w-xl">
+        <button
+          onClick={() => setShowHistory((s) => !s)}
+          className="text-sm text-muted hover:text-accentSoft underline transition"
+        >
+          {showHistory
+            ? "▲ Masquer l’historique des manches"
+            : `▼ Voir l’historique des manches (${roundHistory.length})`}
+        </button>
+        {showHistory && (
+          <div className="mt-2 bg-surface border border-surfaceBorder rounded-3xl p-4 max-h-72 overflow-y-auto">
+            {roundHistory.length === 0 ? (
+              <p className="text-muted text-sm">Aucune manche jouée pour l’instant.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {roundHistory.map((r, i) => {
+                  const buzzer = r.buzzed_by_player_id
+                    ? players.find((p) => p.id === r.buzzed_by_player_id)
+                    : null;
+                  return (
+                    <li
+                      key={r.id}
+                      className="flex justify-between items-center gap-3 bg-white/5 rounded-xl px-4 py-2 text-sm"
+                    >
+                      <span className="truncate">
+                        {i + 1}. {r.title} — {r.artist}
+                      </span>
+                      <span
+                        className={`whitespace-nowrap ${
+                          r.was_correct === true
+                            ? "text-accentSoft"
+                            : r.was_correct === false
+                              ? "text-danger"
+                              : "text-muted"
+                        }`}
+                      >
+                        {buzzer
+                          ? `${buzzer.display_name} ${r.was_correct ? "✅" : "❌"}`
+                          : "Personne n’a trouvé"}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="w-full max-w-2xl text-center">
         {!canStartRound && round?.status === "playing" && (
           <div className="bg-surface border border-surfaceBorder rounded-3xl px-8 py-10 animate-pulseGlow">
             <p className="text-2xl font-bold">🎵 Manche en cours — en attente d’un buzz…</p>
+            {timeLeft !== null && (
+              <p className="text-5xl font-black mt-4 text-accentSoft tabular-nums">⏱ {timeLeft}s</p>
+            )}
           </div>
         )}
         {!canStartRound && round?.status === "buzzed" && (
@@ -590,7 +723,25 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && !modeChosen && (
+        {isUnresolvedTimeout && round && (
+          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
+            <p className="text-3xl font-bold text-danger">⏱ Personne n’a buzzé à temps</p>
+            <p className="text-lg text-muted">
+              La réponse était :{" "}
+              <span className="font-bold text-accentSoft">
+                {round.title} — {round.artist}
+              </span>
+            </p>
+            <button
+              onClick={() => setAcknowledgedTimeoutRoundId(round.id)}
+              className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+            >
+              Continuer
+            </button>
+          </div>
+        )}
+
+        {canStartRound && !modeChosen && !isUnresolvedTimeout && (
           <div className="flex flex-col items-center gap-6">
             <p className="text-2xl font-bold">Comment veux-tu jouer cette partie ?</p>
             <div className="flex flex-col md:flex-row gap-4 w-full">
@@ -618,11 +769,11 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && spotifyPlayer.state === "checking" && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "checking" && (
           <p className="text-muted">Vérification de la connexion Spotify…</p>
         )}
 
-        {canStartRound && modeChosen && spotifyPlayer.state === "disconnected" && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "disconnected" && (
           <button
             onClick={spotifyPlayer.connect}
             className="bg-accent shadow-glowAccent hover:brightness-110 transition px-8 py-4 rounded-full text-xl font-bold"
@@ -631,14 +782,14 @@ export default function HostScreen() {
           </button>
         )}
 
-        {canStartRound && modeChosen && spotifyPlayer.state === "connecting_player" && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (
           <p className="text-muted">Connexion au lecteur Spotify…</p>
         )}
 
-        {canStartRound && modeChosen && spotifyPlayer.state === "ready" && queueExhausted && !buildingPlaylist && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && queueExhausted && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-6 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
             <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
-            <ul className="w-full space-y-2 text-left">
+            <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
               {rankedPlayers.map((p) => (
                 <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-white/5">
                   <span>
@@ -657,7 +808,7 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
             {launchingRound ? (
               <p className="text-xl font-bold text-muted animate-pulse">Lancement de la manche…</p>
@@ -694,7 +845,7 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && spotifyPlayer.state === "ready" && buildingPlaylist && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
           <div className="flex flex-col gap-4 text-left bg-surface border border-surfaceBorder rounded-3xl p-6">
             <div className="flex justify-between items-center">
               <span className="text-sm text-muted">
@@ -716,11 +867,6 @@ export default function HostScreen() {
               </p>
             )}
 
-            {/* Les deux façons d'ajouter des morceaux sont volontairement à
-                égalité visuelle (même carte, même taille) : la recherche
-                manuelle n'est pas plus mise en avant que l'import de
-                playlist, alors qu'avant l'import était relégué à un simple
-                lien texte peu visible. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
                 <h3 className="font-bold text-accentSoft">🔍 Recherche manuelle</h3>
@@ -762,7 +908,7 @@ export default function HostScreen() {
             </div>
 
             {results.length > 0 && (
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
                 {results.map((track) => (
                   <li
                     key={track.sourceTrackId}
@@ -791,28 +937,25 @@ export default function HostScreen() {
                 <h3 className="font-bold mb-2 text-accent2Soft">
                   Tes playlists ({myPlaylists.length}, par ordre alphabétique)
                 </h3>
-                {/* Grid partagée par toutes les lignes (via `contents` sur
-                    chaque <li>) : les colonnes nom/bouton restent alignées
-                    et de même largeur d'une playlist à l'autre, et le nom
-                    ne revient plus à la ligne (troncature avec "…" si trop
-                    long plutôt qu'un retour à la ligne). */}
-                <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
-                  {myPlaylists.map((playlist) => (
-                    <li key={playlist.id} className="contents">
-                      <span className="bg-white/5 rounded-xl px-4 py-3 truncate">
-                        {playlist.name}{" "}
-                        <span className="text-muted">({playlist.trackCount} morceaux)</span>
-                      </span>
-                      <button
-                        onClick={() => handleImportPlaylist(playlist.id)}
-                        disabled={importingPlaylistId === playlist.id}
-                        className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
-                      >
-                        {importingPlaylistId === playlist.id ? "Import…" : "+ Importer toute la playlist"}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="max-h-64 overflow-y-auto pr-1">
+                  <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
+                    {myPlaylists.map((playlist) => (
+                      <li key={playlist.id} className="contents">
+                        <span className="bg-white/5 rounded-xl px-4 py-3 truncate">
+                          {playlist.name}{" "}
+                          <span className="text-muted">({playlist.trackCount} morceaux)</span>
+                        </span>
+                        <button
+                          onClick={() => handleImportPlaylist(playlist.id)}
+                          disabled={importingPlaylistId === playlist.id}
+                          className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
+                        >
+                          {importingPlaylistId === playlist.id ? "Import…" : "+ Importer toute la playlist"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             )}
 
@@ -829,20 +972,27 @@ export default function HostScreen() {
                     Tout retirer
                   </button>
                 </div>
-                <ul className="flex flex-col gap-2">
+                <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
                   {upcomingQueue.map((track, i) => (
                     <li
                       key={`${track.sourceTrackId}-${i}`}
-                      className="flex justify-between items-center bg-white/5 rounded-xl px-4 py-3"
+                      draggable
+                      onDragStart={handleDragStart(i)}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop(i)}
+                      className="flex justify-between items-center gap-3 bg-white/5 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
                     >
-                      <span>
-                        {blindMode
-                          ? `Morceau ${queueIndex + i + 1}`
-                          : `${track.title} — ${track.artist}`}
+                      <span className="flex items-center gap-2 min-w-0">
+                        <span className="text-muted select-none">⠿</span>
+                        <span className="truncate">
+                          {blindMode
+                            ? `Morceau ${queueIndex + i + 1}`
+                            : `${track.title} — ${track.artist}`}
+                        </span>
                       </span>
                       <button
                         onClick={() => handleRemoveFromQueue(i)}
-                        className="text-danger text-sm px-3 py-1 hover:brightness-110 transition"
+                        className="text-danger text-sm px-3 py-1 hover:brightness-110 transition whitespace-nowrap"
                       >
                         Retirer
                       </button>

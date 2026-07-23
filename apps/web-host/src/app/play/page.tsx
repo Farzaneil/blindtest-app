@@ -18,10 +18,13 @@ import { useEffect, useState } from "react";
 import {
   joinRoomByCode,
   getPlayerSession,
+  subscribeToPlayers,
   subscribeToCurrentRoundForPlayer,
   sendBuzz,
+  type Player,
   type PlayerRound,
 } from "../../lib/rooms";
+import { withRanks, formatOrdinal } from "../../lib/ranking";
 
 type Session = { roomId: string; playerId: string };
 
@@ -166,16 +169,31 @@ function BuzzerView({
   onLeave: () => void;
 }) {
   const [round, setRound] = useState<PlayerRound | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
     return subscribeToCurrentRoundForPlayer(roomId, setRound);
   }, [roomId]);
 
+  // Nécessaire pour afficher le pseudo/score/rang du joueur et le nom de
+  // qui a buzzé en premier (voir lib/ranking.ts pour le calcul du rang,
+  // partagé avec l'écran hôte pour rester cohérent).
+  useEffect(() => {
+    return subscribeToPlayers(roomId, setPlayers);
+  }, [roomId]);
+
   const alreadyBuzzed =
     round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
+  const answerRevealed = round?.status === "revealed" || round?.status === "scored";
   const canBuzz = round?.status === "playing" && !sending;
   const iWon = alreadyBuzzed && round?.buzzed_by_player_id === playerId;
+  const buzzer = round?.buzzed_by_player_id
+    ? players.find((p) => p.id === round.buzzed_by_player_id)
+    : null;
+
+  const ranked = withRanks(players);
+  const me = ranked.find((p) => p.id === playerId);
 
   const onBuzz = async () => {
     if (!round || !canBuzz) return;
@@ -188,7 +206,18 @@ function BuzzerView({
   };
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+      {/* Toujours visible : pseudo, score et position au classement, pas
+          seulement entre les manches — pour que le joueur garde un œil sur
+          sa progression même pendant qu'une manche est en cours. */}
+      <div className="w-full flex justify-between items-center bg-surface border border-surfaceBorder rounded-2xl px-5 py-3">
+        <span className="font-bold truncate">{me?.display_name ?? "…"}</span>
+        <span className="text-sm text-muted whitespace-nowrap">
+          {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
+          <span className="font-bold text-accentSoft">· {me?.score ?? 0} pts</span>
+        </span>
+      </div>
+
       {!round ? (
         <p className="text-xl text-muted text-center animate-pulse">
           En attente du lancement d’une manche par l’hôte…
@@ -211,9 +240,19 @@ function BuzzerView({
             {alreadyBuzzed ? "BUZZÉ !" : "BUZZ"}
           </button>
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold ${iWon ? "text-accent2Soft" : "text-danger"}`}>
-              {iWon ? "Tu as buzzé en premier !" : "Trop tard, un autre joueur a buzzé avant toi."}
+            <p className={`text-xl font-bold text-center ${iWon ? "text-accent2Soft" : "text-danger"}`}>
+              {iWon
+                ? "Tu as buzzé en premier !"
+                : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
             </p>
+          )}
+          {answerRevealed && (
+            <div className="w-full text-center bg-white/5 border border-surfaceBorder rounded-2xl px-6 py-4">
+              <p className="text-sm text-muted mb-1">La réponse était :</p>
+              <p className="text-xl font-bold text-accentSoft">
+                {round.title} — {round.artist}
+              </p>
+            </div>
           )}
         </>
       )}
