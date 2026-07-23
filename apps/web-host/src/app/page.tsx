@@ -19,6 +19,20 @@ import {
 import { useForceLoopbackHost } from "../lib/useForceLoopbackHost";
 import { useSpotifyPlayer } from "../lib/useSpotifyPlayer";
 
+type HostMode = "gamemaster" | "player";
+
+// Mélange une copie du tableau (Fisher-Yates) — utilisé pour l'import de
+// playlist en mode "tout le monde participe", pour qu'un hôte qui connaît
+// sa propre playlist ne puisse pas deviner l'ordre des manches à venir.
+function shuffle<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 /**
  * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
  * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
@@ -36,6 +50,14 @@ import { useSpotifyPlayer } from "../lib/useSpotifyPlayer";
  * et évite d'ouvrir une nouvelle policy RLS pour ce premier incrément.
  * À revoir si on veut un jour pouvoir réutiliser une playlist entre
  * plusieurs parties.
+ *
+ * Deux modes de jeu (choisis une fois en tout début de partie, voir
+ * hostMode) : "gamemaster" (comportement historique, l'hôte voit toute la
+ * playlist à l'avance car il/elle ne joue pas) et "player" (l'hôte joue
+ * aussi : titres/artistes sont masqués dans la file d'attente et l'aperçu
+ * de la prochaine manche, révélés uniquement une fois qu'un joueur a
+ * buzzé — moment où il faut de toute façon les afficher pour juger la
+ * réponse).
  */
 export default function HostScreen() {
   useForceLoopbackHost();
@@ -46,6 +68,7 @@ export default function HostScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
+  const [hostMode, setHostMode] = useState<HostMode | null>(null);
 
   // File d'attente : les morceaux d'indice < queueIndex ont déjà été joués,
   // ceux à partir de queueIndex restent à venir.
@@ -130,7 +153,10 @@ export default function HostScreen() {
     setImportingPlaylistId(playlistId);
     try {
       const tracks = await spotify.getPlaylistTracks(playlistId, spotifyPlayer.accessTokenRef.current);
-      setQueue((q) => [...q, ...tracks]);
+      // Mélangé pour qu'un hôte qui joue aussi (mode "player") ne puisse pas
+      // déduire l'ordre des prochaines manches à partir de sa propre
+      // playlist.
+      setQueue((q) => [...q, ...shuffle(tracks)]);
     } catch (e: any) {
       setError(e?.message ?? "Impossible d’importer cette playlist.");
     } finally {
@@ -159,9 +185,22 @@ export default function HostScreen() {
   // Un seul bouton pour "démarrer la partie" ET "manche suivante" : les deux
   // font exactement la même chose (jouer le prochain morceau de la file),
   // seul le libellé affiché change selon qu'on a déjà commencé ou non.
+  //
+  // Les morceaux déjà joués (indices < queueIndex) ne sont jamais touchés,
+  // mais la portion "à venir" est re-mélangée à chaque appel. Ça garantit
+  // un ordre vraiment aléatoire même quand la file combine plusieurs
+  // imports de playlists et/ou des ajouts manuels au fil de la partie
+  // (chaque lot n'était mélangé qu'en interne au moment de l'ajout, pas les
+  // uns par rapport aux autres).
   const handlePlayNextInQueue = async () => {
     if (queueIndex >= queue.length) return;
-    await launchRound(queue[queueIndex]);
+
+    const played = queue.slice(0, queueIndex);
+    const remaining = shuffle(queue.slice(queueIndex));
+    const effectiveQueue = [...played, ...remaining];
+    setQueue(effectiveQueue);
+
+    await launchRound(effectiveQueue[queueIndex]);
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
   };
@@ -204,6 +243,8 @@ export default function HostScreen() {
   const upcomingQueue = queue.slice(queueIndex);
   const queueExhausted = canStartRound && queueIndex > 0 && upcomingQueue.length === 0;
   const rankedPlayers = [...players].sort((a, b) => b.score - a.score);
+  const modeChosen = hostMode !== null;
+  const blindMode = hostMode === "player";
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-10 p-10">
@@ -257,11 +298,39 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && spotifyPlayer.state === "checking" && (
+        {canStartRound && !modeChosen && (
+          <div className="flex flex-col items-center gap-6">
+            <p className="text-2xl font-bold">Comment veux-tu jouer cette partie ?</p>
+            <div className="flex flex-col md:flex-row gap-4 w-full">
+              <button
+                onClick={() => setHostMode("gamemaster")}
+                className="flex-1 bg-white/5 border-2 border-accent rounded-xl px-6 py-5 text-left"
+              >
+                <p className="text-lg font-bold mb-1">🎙️ Maître du jeu</p>
+                <p className="text-sm text-gray-400">
+                  Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
+                  les titres à l’avance.
+                </p>
+              </button>
+              <button
+                onClick={() => setHostMode("player")}
+                className="flex-1 bg-white/5 border-2 border-accent2 rounded-xl px-6 py-5 text-left"
+              >
+                <p className="text-lg font-bold mb-1">🎧 Tout le monde participe</p>
+                <p className="text-sm text-gray-400">
+                  Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
+                  révélés seulement pour valider une réponse.
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {canStartRound && modeChosen && spotifyPlayer.state === "checking" && (
           <p className="text-gray-400">Vérification de la connexion Spotify…</p>
         )}
 
-        {canStartRound && spotifyPlayer.state === "disconnected" && (
+        {canStartRound && modeChosen && spotifyPlayer.state === "disconnected" && (
           <button
             onClick={spotifyPlayer.connect}
             className="bg-accent px-8 py-4 rounded-full text-xl font-bold"
@@ -270,11 +339,11 @@ export default function HostScreen() {
           </button>
         )}
 
-        {canStartRound && spotifyPlayer.state === "connecting_player" && (
+        {canStartRound && modeChosen && spotifyPlayer.state === "connecting_player" && (
           <p className="text-gray-400">Connexion au lecteur Spotify…</p>
         )}
 
-        {canStartRound && spotifyPlayer.state === "ready" && queueExhausted && !buildingPlaylist && (
+        {canStartRound && modeChosen && spotifyPlayer.state === "ready" && queueExhausted && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-6">
             <p className="text-3xl font-bold text-accent2">🏁 Playlist terminée !</p>
             <ul className="w-full space-y-2 text-left">
@@ -294,13 +363,15 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
+        {canStartRound && modeChosen && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-4">
             <p className="text-gray-400">
               Manche {queueIndex + 1} / {queue.length} à venir :
             </p>
             <p className="text-xl font-bold">
-              {upcomingQueue[0]?.title} — {upcomingQueue[0]?.artist}
+              {blindMode
+                ? `Morceau ${queueIndex + 1}`
+                : `${upcomingQueue[0]?.title} — ${upcomingQueue[0]?.artist}`}
             </p>
             <button
               onClick={handlePlayNextInQueue}
@@ -317,8 +388,28 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && spotifyPlayer.state === "ready" && buildingPlaylist && (
+        {canStartRound && modeChosen && spotifyPlayer.state === "ready" && buildingPlaylist && (
           <div className="flex flex-col gap-4 text-left">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-gray-400">
+                Mode : {hostMode === "gamemaster" ? "🎙️ Maître du jeu" : "🎧 Tout le monde participe"}
+              </span>
+              <button
+                onClick={() => setHostMode(null)}
+                className="text-sm text-gray-400 underline"
+              >
+                Changer de mode
+              </button>
+            </div>
+
+            {blindMode && (
+              <p className="text-sm text-gray-400 bg-white/5 rounded-lg px-4 py-3">
+                🙈 Les morceaux ajoutés à la file restent masqués. Pour être surpris toi aussi,
+                préfère importer une playlist entière plutôt que la recherche manuelle (chercher
+                un titre te le révèle forcément).
+              </p>
+            )}
+
             <div className="flex gap-2">
               <input
                 value={query}
@@ -400,7 +491,9 @@ export default function HostScreen() {
                       className="flex justify-between items-center bg-white/5 rounded-lg px-4 py-3"
                     >
                       <span>
-                        {track.title} — {track.artist}
+                        {blindMode
+                          ? `Morceau ${queueIndex + i + 1}`
+                          : `${track.title} — ${track.artist}`}
                       </span>
                       <button
                         onClick={() => handleRemoveFromQueue(i)}

@@ -137,6 +137,11 @@ type SpotifyPlaylistsResponse = {
     id: string;
     name: string;
     images?: Array<{ url: string }>;
+    // Spotify a renommé ce champ "tracks" -> "items" sur l'objet playlist
+    // (changelog API février 2026). On garde les deux en lecture pour rester
+    // robuste si l'ancien nom revenait un jour (cf. leurs "reverts" de mars
+    // 2026 sur d'autres champs).
+    items?: { total: number };
     tracks?: { total: number };
     owner?: { id: string };
   }>;
@@ -188,7 +193,7 @@ export async function listUserPlaylists(accessToken: string): Promise<SpotifyPla
       playlists.push({
         id: item.id,
         name: item.name,
-        trackCount: item.tracks?.total ?? 0,
+        trackCount: item.items?.total ?? item.tracks?.total ?? 0,
         imageUrl: item.images?.[0]?.url ?? null,
       });
     }
