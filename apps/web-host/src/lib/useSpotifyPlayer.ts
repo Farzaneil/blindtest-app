@@ -25,6 +25,9 @@ export function useSpotifyPlayer() {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const accessTokenRef = useRef<string | null>(null);
+  // Référence directe à l'instance Spotify.Player, nécessaire pour pouvoir
+  // appeler activateElement() (voir activateElement ci-dessous).
+  const playerRef = useRef<any>(null);
 
   const loadWebPlaybackSdk = () => {
     window.onSpotifyWebPlaybackSDKReady = () => {
@@ -40,6 +43,8 @@ export function useSpotifyPlayer() {
         },
         volume: 0.8,
       });
+
+      playerRef.current = player;
 
       player.addListener("ready", ({ device_id }: { device_id: string }) => {
         setDeviceId(device_id);
@@ -110,5 +115,18 @@ export function useSpotifyPlayer() {
     window.location.href = "/api/spotify/login";
   };
 
-  return { state, deviceId, errorMessage, accessTokenRef, connect };
+  // Sur Safari iOS (et d'autres navigateurs mobiles), transférer la lecture
+  // via l'API Spotify passe par les serveurs Spotify plutôt que par une
+  // action directe du navigateur : iOS bloque alors l'audio comme s'il
+  // s'agissait d'un autoplay non sollicité. Spotify fournit activateElement()
+  // pour "débloquer" l'élément audio du player en le liant explicitement au
+  // geste de clic en cours. À appeler en tout début du handler de clic qui
+  // déclenche une lecture, avant tout await, pour rester dans la fenêtre de
+  // "user gesture" que le navigateur autorise. Sans effet (et sans risque)
+  // sur desktop, où cette restriction n'existe pas.
+  const activateElement = () => {
+    playerRef.current?.activateElement?.();
+  };
+
+  return { state, deviceId, errorMessage, accessTokenRef, connect, activateElement };
 }
