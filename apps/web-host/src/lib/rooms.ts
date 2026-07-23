@@ -24,6 +24,8 @@ export type Round = {
   artist: string;
   status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
   buzzed_by_player_id: string | null;
+  started_at: string | null;
+  was_correct: boolean | null;
 };
 
 /**
@@ -102,6 +104,42 @@ export function subscribeToRounds(roomId: string, onChange: (round: Round | null
 
   const channel = supabase
     .channel(`rounds:${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "rounds", filter: `room_id=eq.${roomId}` },
+      fetchAndEmit
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Historique complet des manches déjà jugées ("scored") d'une room, pour le
+ * panneau repliable "Historique des manches" côté hôte (voir app/page.tsx).
+ * Volontairement une fonction distincte de subscribeToRounds ci-dessus, qui
+ * ne renvoie que la toute dernière manche (order_index desc, limit 1) : ici
+ * on veut au contraire toutes les manches passées, dans l'ordre où elles ont
+ * été jouées. Le nom du joueur ayant buzzé n'est pas rejoué ici : l'appelant
+ * le retrouve en croisant buzzed_by_player_id avec la liste `players` déjà
+ * chargée (subscribeToPlayers), pour éviter une jointure superflue.
+ */
+export function subscribeToRoundHistory(roomId: string, onChange: (rounds: Round[]) => void) {
+  const fetchAndEmit = async () => {
+    const { data } = await supabase
+      .from("rounds")
+      .select("*")
+      .eq("room_id", roomId)
+      .eq("status", "scored")
+      .order("order_index", { ascending: true });
+    onChange((data as Round[]) ?? []);
+  };
+  fetchAndEmit();
+
+  const channel = supabase
+    .channel(`rounds-history:${roomId}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "rounds", filter: `room_id=eq.${roomId}` },
@@ -204,6 +242,22 @@ export async function revealRound(roundId: string): Promise<void> {
  */
 export async function resolveRound(roundId: string, correct: boolean): Promise<void> {
   const { error } = await supabase.rpc("resolve_round", { p_round_id: roundId, p_correct: correct });
+  if (error) throw error;
+}
+
+/**
+ * Clôture une manche restée sans buzz une fois le timer visuel écoulé côté
+ * hôte (voir app/page.tsx) : passe directement "playing" -> "scored" sans
+ * gagnant, was_correct restant à NULL pour signaler dans l'historique que
+ * personne n'a répondu (à distinguer d'une bonne/mauvaise réponse jugée par
+ * resolveRound). Passe par la fonction Postgres timeout_round (voir
+ * supabase/migrations/0007_round_timeout_and_history.sql) pour la même
+ * raison que resolveRound/revealRound : pas de policy UPDATE ouverte côté
+ * client. Si un joueur a buzzé juste avant l'expiration du timer, cet appel
+ * ne fait rien (la RPC exige status = 'playing', déjà passé à 'buzzed').
+ */
+export async function timeoutRound(roundId: string): Promise<void> {
+  const { error } = await supabase.rpc("timeout_round", { p_round_id: roundId });
   if (error) throw error;
 }
 
