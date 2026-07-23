@@ -26,6 +26,11 @@ export type Round = {
   buzzed_by_player_id: string | null;
 };
 
+/**
+ * Crée une nouvelle partie et retourne son code + id. Réessaie avec un
+ * nouveau code si celui généré existe déjà (collision très rare vu
+ * l'alphabet à 32 caractères ^ 6).
+ */
 export async function createRoom(): Promise<Room> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateRoomCode();
@@ -36,7 +41,7 @@ export async function createRoom(): Promise<Room> {
       .single();
 
     if (!error && data) return data as Room;
-    if (error && error.code !== "23505") throw error;
+    if (error && error.code !== "23505") throw error; // 23505 = violation de contrainte unique
   }
   throw new Error("Impossible de générer un code de partie unique après plusieurs tentatives.");
 }
@@ -157,9 +162,27 @@ export async function startRoundWithTrack(
 }
 
 /**
+ * Passe une manche buzzée à "revealed" : c'est le moment où l'hôte clique
+ * sur "Révéler la réponse", après que le joueur qui a buzzé a donné sa
+ * réponse à voix haute. Tant que ce n'est pas fait, le titre/artiste ne
+ * doit pas être affiché côté hôte — utile en particulier quand l'hôte joue
+ * aussi (mode "tout le monde participe") et buzze lui-même : il ne doit pas
+ * voir la réponse s'afficher automatiquement sur son propre écran. Passe
+ * par la fonction Postgres reveal_round (voir
+ * supabase/migrations/0006_reveal_round.sql), pour la même raison que
+ * resolveRound ci-dessous (pas de policy UPDATE ouverte côté client).
+ */
+export async function revealRound(roundId: string): Promise<void> {
+  const { error } = await supabase.rpc("reveal_round", { p_round_id: roundId });
+  if (error) throw error;
+}
+
+/**
  * Valide (ou invalide) la réponse du joueur qui a buzzé, passe la manche à
- * "scored" et attribue un point si correct. Passe par la fonction Postgres
- * resolve_round (voir supabase/migrations/0005_resolve_round.sql) : ni
+ * "scored" et attribue un point si correct. Ne fonctionne que sur une
+ * manche déjà "revealed" (voir revealRound ci-dessus). Passe par la
+ * fonction Postgres resolve_round (voir
+ * supabase/migrations/0005_resolve_round.sql et 0006_reveal_round.sql) : ni
  * rounds ni players n'ont de policy UPDATE ouverte côté client, cette RPC
  * est le seul chemin possible pour cette transition.
  */
@@ -170,6 +193,9 @@ export async function resolveRound(roundId: string, correct: boolean): Promise<v
 
 // ============================================================================
 // Fonctions côté joueur — utilisées par la page /play (voir app/play/page.tsx).
+// Permettent de tester le mécanisme join + buzz depuis un simple onglet de
+// navigateur, sans passer par l'appli mobile native (utile pour valider la
+// logique pendant que la compilation native est mise de côté).
 // ============================================================================
 
 export type PlayerRound = {
@@ -184,6 +210,8 @@ function generateWebDeviceId(): string {
   return `web_${Math.random().toString(36).slice(2)}_${Date.now().toString(36)}`;
 }
 
+// Un id par onglet/session de navigateur (pas persisté entre rechargements,
+// suffisant pour tester avec plusieurs onglets = plusieurs joueurs).
 export const webDeviceId = generateWebDeviceId();
 
 export async function joinRoomByCode(code: string, displayName: string) {

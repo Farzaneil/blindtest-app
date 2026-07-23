@@ -12,6 +12,7 @@ import {
   subscribeToPlayers,
   subscribeToRounds,
   startRoundWithTrack,
+  revealRound,
   resolveRound,
   type Player,
   type Round,
@@ -278,6 +279,15 @@ export default function HostScreen() {
     setLaunchingRound(false);
   };
 
+  const handleReveal = async () => {
+    if (!round) return;
+    try {
+      await revealRound(round.id);
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de révéler la réponse.");
+    }
+  };
+
   const handleResolve = async (correct: boolean) => {
     if (!round) return;
     try {
@@ -317,7 +327,10 @@ export default function HostScreen() {
     ? players.find((p) => p.id === round.buzzed_by_player_id)
     : null;
 
-  const canStartRound = !round || round.status === "revealed" || round.status === "scored";
+  // "revealed" n'autorise plus le démarrage d'une nouvelle manche : la
+  // réponse a été montrée mais pas encore validée (bonne/mauvaise), il faut
+  // d'abord passer par handleResolve pour arriver à "scored".
+  const canStartRound = !round || round.status === "scored";
   const upcomingQueue = queue.slice(queueIndex);
   const queueExhausted = canStartRound && queueIndex > 0 && upcomingQueue.length === 0;
   const rankedPlayers = withRanks(players);
@@ -372,6 +385,22 @@ export default function HostScreen() {
           </div>
         )}
         {!canStartRound && round?.status === "buzzed" && (
+          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
+            <p className="text-3xl font-bold text-accent2Soft">
+              🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+            </p>
+            <p className="text-sm text-muted">
+              Laisse-le/la donner sa réponse à voix haute, puis révèle le titre.
+            </p>
+            <button
+              onClick={handleReveal}
+              className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+            >
+              👁️ Révéler la réponse
+            </button>
+          </div>
+        )}
+        {!canStartRound && round?.status === "revealed" && (
           <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
             <p className="text-3xl font-bold text-accent2Soft">
               🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
