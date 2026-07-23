@@ -156,6 +156,18 @@ export async function startRoundWithTrack(
   return insertRound(roomId, track);
 }
 
+/**
+ * Valide (ou invalide) la réponse du joueur qui a buzzé, passe la manche à
+ * "scored" et attribue un point si correct. Passe par la fonction Postgres
+ * resolve_round (voir supabase/migrations/0005_resolve_round.sql) : ni
+ * rounds ni players n'ont de policy UPDATE ouverte côté client, cette RPC
+ * est le seul chemin possible pour cette transition.
+ */
+export async function resolveRound(roundId: string, correct: boolean): Promise<void> {
+  const { error } = await supabase.rpc("resolve_round", { p_round_id: roundId, p_correct: correct });
+  if (error) throw error;
+}
+
 // ============================================================================
 // Fonctions côté joueur — utilisées par la page /play (voir app/play/page.tsx).
 // ============================================================================

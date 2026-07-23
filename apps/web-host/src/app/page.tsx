@@ -12,6 +12,7 @@ import {
   subscribeToPlayers,
   subscribeToRounds,
   startRoundWithTrack,
+  resolveRound,
   type Player,
   type Round,
 } from "../lib/rooms";
@@ -19,9 +20,14 @@ import { useForceLoopbackHost } from "../lib/useForceLoopbackHost";
 import { useSpotifyPlayer } from "../lib/useSpotifyPlayer";
 
 /**
- * Écran hôte / "TV". Nécessite maintenant un compte Spotify Premium
- * connecté sur cet onglet (voir lib/useSpotifyPlayer.ts) pour choisir et
- * lancer un vrai morceau à chaque manche — d'où le garde-fou 127.0.0.1.
+ * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
+ * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
+ * n'affiche jamais de réponse privée, seulement l'état commun de la partie
+ * (joueurs connectés, manche en cours, qui a buzzé).
+ *
+ * Nécessite maintenant un compte Spotify Premium connecté sur cet onglet
+ * (voir lib/useSpotifyPlayer.ts) pour choisir et lancer un vrai morceau à
+ * chaque manche — d'où le garde-fou 127.0.0.1 (cf. useForceLoopbackHost).
  */
 export default function HostScreen() {
   useForceLoopbackHost();
@@ -52,7 +58,9 @@ export default function HostScreen() {
     };
   }, [room]);
 
-  // Coupe le son dès qu'un joueur buzze — une seule fois par manche.
+  // Coupe le son dès qu'un joueur buzze — une seule fois par manche (le ref
+  // évite de rappeler pausePlayback à chaque re-render tant que la manche
+  // reste au statut "buzzed").
   useEffect(() => {
     if (
       round?.status === "buzzed" &&
@@ -62,8 +70,8 @@ export default function HostScreen() {
     ) {
       pausedForRoundId.current = round.id;
       spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {
-        // Pas grave si la pause échoue (ex: token expiré) : le morceau
-        // continue mais le buzz est déjà résolu côté base.
+        // Pas grave si la pause échoue (ex: token expiré entre-temps) : le
+        // morceau continue mais le buzz est déjà résolu côté base.
       });
     }
   }, [round, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
@@ -95,6 +103,15 @@ export default function HostScreen() {
       setQuery("");
     } catch (e: any) {
       setError(e?.message ?? "Impossible de lancer la manche.");
+    }
+  };
+
+  const handleResolve = async (correct: boolean) => {
+    if (!round) return;
+    try {
+      await resolveRound(round.id, correct);
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de valider la manche.");
     }
   };
 
@@ -152,10 +169,29 @@ export default function HostScreen() {
         {!canStartRound && round?.status === "playing" && (
           <p className="text-2xl">🎵 Manche en cours — en attente d’un buzz…</p>
         )}
-        {!canStartRound && round?.status !== "playing" && (
-          <p className="text-3xl font-bold text-accent2">
-            🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
-          </p>
+        {!canStartRound && round?.status === "buzzed" && (
+          <div className="flex flex-col items-center gap-4">
+            <p className="text-3xl font-bold text-accent2">
+              🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+            </p>
+            <p className="text-lg text-gray-400">
+              {round.title} — {round.artist}
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => handleResolve(true)}
+                className="bg-green-600 px-6 py-3 rounded-full text-lg font-bold"
+              >
+                ✅ Bonne réponse
+              </button>
+              <button
+                onClick={() => handleResolve(false)}
+                className="bg-red-600 px-6 py-3 rounded-full text-lg font-bold"
+              >
+                ❌ Mauvaise réponse
+              </button>
+            </div>
+          </div>
         )}
 
         {canStartRound && spotifyPlayer.state === "checking" && (
