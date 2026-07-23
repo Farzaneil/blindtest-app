@@ -15,7 +15,8 @@
     "react-dom": "19.1.0",
     "@supabase/supabase-js": "^2.45.0",
     "@blindtest/game-logic": "*",
-    "@blindtest/ui": "*"
+    "@blindtest/ui": "*",
+    "@blindtest/api-clients": "*"
   },
   "devDependencies": {
     "typescript": "^5.4.0",

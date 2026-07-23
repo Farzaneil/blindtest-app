@@ -17,6 +17,9 @@
       ],
       "@blindtest/ui": [
         "../../packages/ui/src"
+      ],
+      "@blindtest/api-clients": [
+        "../../packages/api-clients/src"
       ]
     },
     "allowJs": true,
