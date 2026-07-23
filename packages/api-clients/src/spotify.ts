@@ -98,6 +98,11 @@ export async function playTrackOnHostDevice(
 
   // 204 No Content = succès normal pour cet endpoint.
   if (!res.ok && res.status !== 204) {
+    if (res.status === 404) {
+      throw new Error(
+        "Le lecteur Spotify de cet onglet a disparu (device introuvable). Ça arrive si l’app Spotify a été ouverte manuellement sur le même appareil, ou si l’onglet a été mis en arrière-plan trop longtemps (fréquent sur iOS). Recharge la page pour reconnecter le lecteur, sans rouvrir l’app Spotify pendant la partie."
+      );
+    }
     const text = await res.text();
     throw new Error(`Lecture Spotify échouée (${res.status}): ${text}`);
   }

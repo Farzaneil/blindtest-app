@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get("error");
 
   const redirectWithError = (message: string) =>
-    NextResponse.redirect(`${origin}/spotify-test?error=${encodeURIComponent(message)}`);
+    NextResponse.redirect(`${origin}/?error=${encodeURIComponent(message)}`);
 
   if (error) return redirectWithError(error);
   if (!code || !state) return redirectWithError("missing_code_or_state");
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokens = await exchangeCodeForTokens(code, verifier);
-    const response = NextResponse.redirect(`${origin}/spotify-test?connected=1`);
+    const response = NextResponse.redirect(`${origin}/?connected=1`);
 
     const baseCookieOptions = {
       httpOnly: true,

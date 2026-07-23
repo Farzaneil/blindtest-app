@@ -69,6 +69,7 @@ export default function HostScreen() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
+  const [spotifyOAuthError, setSpotifyOAuthError] = useState<string | null>(null);
 
   // File d'attente : les morceaux d'indice < queueIndex ont déjà été joués,
   // ceux à partir de queueIndex restent à venir.
@@ -97,6 +98,19 @@ export default function HostScreen() {
       unsubRounds();
     };
   }, [room]);
+
+  // Récupère les erreurs/succès renvoyés par /api/spotify/callback dans
+  // l'URL (lecture ponctuelle au montage), puis nettoie l'URL pour ne pas
+  // rejouer ça sur un rechargement de page.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (err) setSpotifyOAuthError(`Erreur Spotify : ${err}`);
+    if (err || params.get("connected")) {
+      window.history.replaceState({}, "", "/");
+    }
+  }, []);
 
   // Coupe le son dès qu'un joueur buzze — une seule fois par manche (le ref
   // évite de rappeler pausePlayback à chaque re-render tant que la manche
@@ -519,8 +533,10 @@ export default function HostScreen() {
           </div>
         )}
 
-        {spotifyPlayer.errorMessage && (
-          <p className="text-red-400 mt-4 break-words">{spotifyPlayer.errorMessage}</p>
+        {(spotifyOAuthError || spotifyPlayer.errorMessage) && (
+          <p className="text-red-400 mt-4 break-words">
+            {spotifyOAuthError ?? spotifyPlayer.errorMessage}
+          </p>
         )}
       </div>
     </main>
