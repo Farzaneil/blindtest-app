@@ -121,6 +121,29 @@ export async function pausePlayback(deviceId: string, accessToken: string): Prom
   }
 }
 
+/**
+ * Reprend la lecture là où elle avait été mise en pause (pausePlayback
+ * ci-dessus) — PAS un nouveau lancement de morceau : volontairement AUCUN
+ * body dans la requête, ce qui indique à Spotify "reprends la lecture en
+ * cours sur cet appareil" plutôt que "lance ce morceau depuis le début".
+ * Utilisé côté hôte (mode "Maître du jeu") quand une réponse partielle ou
+ * fausse relance la manche pour laisser retrouver l'élément manquant : la
+ * chanson doit reprendre exactement où elle s'était arrêtée, pas repartir
+ * de zéro.
+ */
+export async function resumePlayback(deviceId: string, accessToken: string): Promise<void> {
+  const params = new URLSearchParams({ device_id: deviceId });
+  const res = await fetch(`https://api.spotify.com/v1/me/player/play?${params.toString()}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok && res.status !== 204) {
+    const text = await res.text();
+    throw new Error(`Reprise de la lecture Spotify échouée (${res.status}): ${text}`);
+  }
+}
+
 // ============================================================================
 // Import de playlists Spotify existantes — alternative à la recherche morceau
 // par morceau : récupère tous les titres d'une playlist déjà créée sur

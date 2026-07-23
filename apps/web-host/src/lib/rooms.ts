@@ -25,7 +25,33 @@ export type Round = {
   status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
   buzzed_by_player_id: string | null;
   started_at: string | null;
+  // Cumul du temps réellement joué avant le buzz en cours (voir migration
+  // 0009) : le timer côté hôte se base sur elapsed_seconds + le temps écoulé
+  // depuis started_at, jamais sur started_at seul, pour ne pas décompter le
+  // temps passé à juger une réponse (pendant lequel la musique est coupée).
+  elapsed_seconds: number;
   was_correct: boolean | null;
+  // Cumulatifs sur la durée de la manche (mode "Maître du jeu") : une fois
+  // crédité, un élément reste acquis même si un buzz suivant ne le retrouve
+  // pas. Toujours false/false en mode "Tout le monde participe" tant que la
+  // manche n'est pas jugée (un seul buzz suffit à la clôturer dans ce mode).
+  title_found: boolean;
+  artist_found: boolean;
+  // Joueur temporairement exclu du buzz après avoir été jugé sur cette
+  // manche (voir resolveRoundAttempt) — débloqué dès qu'un autre joueur
+  // buzze à sa suite.
+  locked_player_id: string | null;
+};
+
+export type RoundAttempt = {
+  id: string;
+  round_id: string;
+  room_id: string;
+  player_id: string;
+  title_found: boolean;
+  artist_found: boolean;
+  points_awarded: number;
+  created_at: string;
 };
 
 /**
@@ -152,6 +178,42 @@ export function subscribeToRoundHistory(roomId: string, onChange: (rounds: Round
   };
 }
 
+/**
+ * Détail de toutes les tentatives jugées (round_attempts) d'une room, pour
+ * afficher le fil des buzz d'une manche à rallonge (mode "Maître du jeu")
+ * dans le panneau "Historique des manches" — une manche simple n'aura
+ * qu'une seule tentative, une manche avec réponses partielles en aura
+ * plusieurs. room_id est dénormalisé sur round_attempts précisément pour
+ * pouvoir filtrer ainsi sans jointure (voir la migration 0008).
+ */
+export function subscribeToRoundAttempts(
+  roomId: string,
+  onChange: (attempts: RoundAttempt[]) => void
+) {
+  const fetchAndEmit = async () => {
+    const { data } = await supabase
+      .from("round_attempts")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true });
+    onChange((data as RoundAttempt[]) ?? []);
+  };
+  fetchAndEmit();
+
+  const channel = supabase
+    .channel(`round-attempts:${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "round_attempts", filter: `room_id=eq.${roomId}` },
+      fetchAndEmit
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 async function insertRound(
   roomId: string,
   track: { sourceTrackId: string; title: string; artist: string }
@@ -232,16 +294,37 @@ export async function revealRound(roundId: string): Promise<void> {
 }
 
 /**
- * Valide (ou invalide) la réponse du joueur qui a buzzé, passe la manche à
- * "scored" et attribue un point si correct. Ne fonctionne que sur une
- * manche déjà "revealed" (voir revealRound ci-dessus). Passe par la
- * fonction Postgres resolve_round (voir
- * supabase/migrations/0005_resolve_round.sql et 0006_reveal_round.sql) : ni
- * rounds ni players n'ont de policy UPDATE ouverte côté client, cette RPC
- * est le seul chemin possible pour cette transition.
+ * Juge la tentative du joueur qui a buzzé, sur une manche déjà "revealed"
+ * (voir revealRound ci-dessus). Remplace l'ancien resolveRound(correct) :
+ * gère maintenant 4 issues (titre seul, artiste seul, les deux, aucun des
+ * deux) au lieu de bonne/mauvaise réponse.
+ *
+ * - titleFound && artistFound -> +2 points, manche clôturée.
+ * - un seul des deux -> +1 point ; si forceEnd est false (mode "Maître du
+ *   jeu"), la manche repart en "playing" pour laisser retrouver l'élément
+ *   manquant (le joueur qui vient de répondre est verrouillé jusqu'au
+ *   prochain buzz d'un autre joueur) ; si forceEnd est true (mode "Tout le
+ *   monde participe"), la manche est clôturée quand même.
+ * - aucun des deux -> -1 point, même logique de reprise/clôture selon
+ *   forceEnd.
+ *
+ * Passe par la fonction Postgres resolve_round_attempt (voir
+ * supabase/migrations/0008_partial_answers.sql) : ni rounds ni players
+ * n'ont de policy UPDATE ouverte côté client, cette RPC est le seul chemin
+ * possible pour cette transition.
  */
-export async function resolveRound(roundId: string, correct: boolean): Promise<void> {
-  const { error } = await supabase.rpc("resolve_round", { p_round_id: roundId, p_correct: correct });
+export async function resolveRoundAttempt(
+  roundId: string,
+  titleFound: boolean,
+  artistFound: boolean,
+  forceEnd: boolean
+): Promise<void> {
+  const { error } = await supabase.rpc("resolve_round_attempt", {
+    p_round_id: roundId,
+    p_title_found: titleFound,
+    p_artist_found: artistFound,
+    p_force_end: forceEnd,
+  });
   if (error) throw error;
 }
 
@@ -272,6 +355,9 @@ export type PlayerRound = {
   id: string;
   status: "pending" | "playing" | "buzzed" | "revealed" | "scored";
   buzzed_by_player_id: string | null;
+  locked_player_id: string | null;
+  title_found: boolean;
+  artist_found: boolean;
   title: string;
   artist: string;
 };
@@ -336,7 +422,7 @@ export function subscribeToCurrentRoundForPlayer(
   const fetchAndEmit = async () => {
     const { data } = await supabase
       .from("rounds")
-      .select("id, status, buzzed_by_player_id, title, artist")
+      .select("id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist")
       .eq("room_id", roomId)
       .order("order_index", { ascending: false })
       .limit(1)

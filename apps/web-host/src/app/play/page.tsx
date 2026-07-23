@@ -186,11 +186,17 @@ function BuzzerView({
   const alreadyBuzzed =
     round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
   const answerRevealed = round?.status === "revealed" || round?.status === "scored";
-  const canBuzz = round?.status === "playing" && !sending;
+  // Mode "Maître du jeu" uniquement : ce joueur vient de répondre (bon ou
+  // mauvais) sur cette manche et doit laisser un autre joueur tenter sa
+  // chance avant de pouvoir rebuzzer — débloqué dès qu'un autre joueur
+  // buzze à son tour (voir resolveRoundAttempt côté hôte).
+  const isLocked = round?.status === "playing" && round.locked_player_id === playerId;
+  const canBuzz = round?.status === "playing" && !sending && !isLocked;
   const iWon = alreadyBuzzed && round?.buzzed_by_player_id === playerId;
   const buzzer = round?.buzzed_by_player_id
     ? players.find((p) => p.id === round.buzzed_by_player_id)
     : null;
+  const somethingAlreadyFound = round && (round.title_found || round.artist_found);
 
   const ranked = withRanks(players);
   const me = ranked.find((p) => p.id === playerId);
@@ -224,6 +230,14 @@ function BuzzerView({
         </p>
       ) : (
         <>
+          {somethingAlreadyFound && (
+            <p className="text-sm text-muted text-center">
+              Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+                .filter(Boolean)
+                .join(" et ")}
+              {" — à vous de jouer pour le reste !"}
+            </p>
+          )}
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
@@ -244,6 +258,11 @@ function BuzzerView({
               {iWon
                 ? "Tu as buzzé en premier !"
                 : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+            </p>
+          )}
+          {isLocked && (
+            <p className="text-sm text-muted text-center">
+              Tu viens de répondre — attends qu’un autre joueur tente sa chance avant de rebuzzer.
             </p>
           )}
           {answerRevealed && (
