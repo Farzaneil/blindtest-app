@@ -149,6 +149,7 @@ type SpotifyPlaylistsResponse = {
     items?: { total: number };
     tracks?: { total: number };
     owner?: { id: string };
+    collaborative?: boolean;
   }>;
   next: string | null;
 };
@@ -170,16 +171,17 @@ async function getCurrentUserId(accessToken: string): Promise<string> {
 }
 
 /**
- * Liste les playlists dont l'utilisateur connecté est PROPRIÉTAIRE (les
- * siennes, y compris privées grâce au scope playlist-read-private). Suit la
- * pagination Spotify jusqu'au bout (limite 50 par page côté API).
+ * Liste les playlists dont l'utilisateur connecté est PROPRIÉTAIRE ou
+ * COLLABORATEUR (y compris privées grâce au scope playlist-read-private).
+ * Suit la pagination Spotify jusqu'au bout (limite 50 par page côté API).
  *
- * GET /me/playlists renvoie aussi les playlists juste suivies (créées par
- * quelqu'un d'autre, ou générées par Spotify comme Découvertes de la
- * semaine) — elles sont filtrées ici via le champ owner.id, car
- * getPlaylistTracks renverra de toute façon un 403 dessus (Spotify ne
- * permet l'accès au contenu qu'aux playlists dont on est propriétaire ou
- * collaborateur).
+ * GET /me/playlists renvoie aussi les playlists juste suivies sans droit
+ * d'édition (créées par quelqu'un d'autre, ou générées par Spotify comme
+ * Découvertes de la semaine) — elles sont filtrées ici via owner.id et
+ * collaborative, car getPlaylistTracks renverra de toute façon un 403
+ * dessus : Spotify ne permet l'accès au contenu qu'aux playlists dont on
+ * est propriétaire ou collaborateur, sans contournement possible (vérifié,
+ * ce n'est pas une limite de ce code).
  */
 export async function listUserPlaylists(accessToken: string): Promise<SpotifyPlaylistSummary[]> {
   const userId = await getCurrentUserId(accessToken);
@@ -194,7 +196,14 @@ export async function listUserPlaylists(accessToken: string): Promise<SpotifyPla
     }
     const data = (await res.json()) as SpotifyPlaylistsResponse;
     for (const item of data.items) {
-      if (item.owner?.id !== userId) continue; // exclut les playlists suivies / générées par Spotify
+      // Autorisé si on est propriétaire OU collaborateur (les playlists
+      // collaboratives partagées entre potes sont accessibles en lecture
+      // même sans en être l'auteur — voir la note sur getPlaylistTracks).
+      // Les playlists juste suivies (publiques, éditoriales Spotify comme
+      // Découvertes de la semaine, ou d'un autre utilisateur sans être
+      // collaborateur) restent exclues : Spotify bloque leur contenu sans
+      // contournement possible depuis février 2026.
+      if (item.owner?.id !== userId && !item.collaborative) continue;
       playlists.push({
         id: item.id,
         name: item.name,

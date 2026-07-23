@@ -200,19 +200,32 @@ export default function HostScreen() {
   // font exactement la même chose (jouer le prochain morceau de la file),
   // seul le libellé affiché change selon qu'on a déjà commencé ou non.
   //
-  // Les morceaux déjà joués (indices < queueIndex) ne sont jamais touchés,
-  // mais la portion "à venir" est re-mélangée à chaque appel. Ça garantit
-  // un ordre vraiment aléatoire même quand la file combine plusieurs
-  // imports de playlists et/ou des ajouts manuels au fil de la partie
-  // (chaque lot n'était mélangé qu'en interne au moment de l'ajout, pas les
-  // uns par rapport aux autres).
+  // Le mélange de la portion "à venir" ne doit se faire qu'UNE SEULE FOIS,
+  // au moment précis où on quitte la phase de construction (buildingPlaylist
+  // true -> false) : c'est ce qui garantit un ordre vraiment aléatoire même
+  // en combinant plusieurs imports/ajouts manuels. Le remélanger à chaque
+  // clic (comme avant) cassait la cohérence avec l'aperçu "manche à venir"
+  // déjà affiché à l'écran en mode "Maître du jeu" : le morceau annoncé et
+  // celui réellement joué pouvaient différer. Une fois la partie lancée
+  // (buildingPlaylist déjà false), on se contente d'avancer dans l'ordre
+  // déjà déterminé et déjà prévisualisé.
   const handlePlayNextInQueue = async () => {
     if (queueIndex >= queue.length) return;
+    if (players.length === 0) return; // pas de joueur = personne ne peut buzzer, le jeu resterait bloqué
 
-    const played = queue.slice(0, queueIndex);
-    const remaining = shuffle(queue.slice(queueIndex));
-    const effectiveQueue = [...played, ...remaining];
-    setQueue(effectiveQueue);
+    // Doit être appelé de façon synchrone, tout en haut du handler de clic
+    // (avant le moindre await), pour rester dans la fenêtre de "user
+    // gesture" qu'iOS Safari exige avant d'autoriser l'audio — voir le
+    // commentaire dans useSpotifyPlayer.ts.
+    spotifyPlayer.activateElement();
+
+    let effectiveQueue = queue;
+    if (buildingPlaylist) {
+      const played = queue.slice(0, queueIndex);
+      const remaining = shuffle(queue.slice(queueIndex));
+      effectiveQueue = [...played, ...remaining];
+      setQueue(effectiveQueue);
+    }
 
     await launchRound(effectiveQueue[queueIndex]);
     setQueueIndex((i) => i + 1);
@@ -389,10 +402,16 @@ export default function HostScreen() {
             </p>
             <button
               onClick={handlePlayNextInQueue}
-              className="bg-accent2 px-8 py-4 rounded-full text-xl font-bold"
+              disabled={players.length === 0}
+              className="bg-accent2 disabled:opacity-40 px-8 py-4 rounded-full text-xl font-bold"
             >
               ▶ Manche suivante
             </button>
+            {players.length === 0 && (
+              <p className="text-sm text-gray-500">
+                En attente d’au moins un joueur avant de pouvoir lancer la manche.
+              </p>
+            )}
             <button
               onClick={() => setBuildingPlaylist(true)}
               className="text-sm text-gray-400 underline"
@@ -521,9 +540,14 @@ export default function HostScreen() {
               </div>
             )}
 
+            {players.length === 0 && (
+              <p className="text-sm text-gray-500">
+                En attente d’au moins un joueur avant de pouvoir lancer la manche.
+              </p>
+            )}
             <button
               onClick={handlePlayNextInQueue}
-              disabled={upcomingQueue.length === 0}
+              disabled={upcomingQueue.length === 0 || players.length === 0}
               className="bg-accent disabled:opacity-40 px-8 py-4 rounded-full text-xl font-bold mt-2"
             >
               {queueIndex === 0
