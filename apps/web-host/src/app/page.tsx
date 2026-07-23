@@ -162,7 +162,13 @@ export default function HostScreen() {
     setLoadingPlaylists(true);
     try {
       const playlists = await spotify.listUserPlaylists(spotifyPlayer.accessTokenRef.current);
-      setMyPlaylists(playlists);
+      // Tri alphabétique (insensible à la casse/accents) pour retrouver une
+      // playlist facilement, plutôt que de dépendre de l'ordre renvoyé par
+      // l'API Spotify (généralement : la plus récemment modifiée en premier).
+      const sorted = [...playlists].sort((a, b) =>
+        a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
+      );
+      setMyPlaylists(sorted);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de charger tes playlists Spotify.");
     } finally {
@@ -262,12 +268,17 @@ export default function HostScreen() {
   if (error) {
     return (
       <main className="flex items-center justify-center min-h-screen p-10 text-center">
-        <p className="text-xl text-red-400">
-          {error}
-          <br />
-          Vérifie que apps/web-host/.env.local contient bien NEXT_PUBLIC_SUPABASE_URL et
-          NEXT_PUBLIC_SUPABASE_ANON_KEY, puis relance `npm run web-host`.
-        </p>
+        <div className="max-w-md bg-surface border border-danger/40 shadow-glowDanger rounded-3xl p-8">
+          <p className="text-xl text-danger font-bold mb-2">Oups</p>
+          <p className="text-white/90">
+            {error}
+            <br />
+            <span className="text-muted text-sm">
+              Vérifie que apps/web-host/.env.local contient bien NEXT_PUBLIC_SUPABASE_URL et
+              NEXT_PUBLIC_SUPABASE_ANON_KEY, puis relance `npm run web-host`.
+            </span>
+          </p>
+        </div>
       </main>
     );
   }
@@ -275,7 +286,7 @@ export default function HostScreen() {
   if (!room) {
     return (
       <main className="flex items-center justify-center min-h-screen">
-        <p className="text-xl text-gray-400">Création de la partie…</p>
+        <p className="text-xl text-muted animate-pulse">Création de la partie…</p>
       </main>
     );
   }
@@ -293,49 +304,58 @@ export default function HostScreen() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-10 p-10">
-      <div className="text-center">
-        <p className="text-lg text-gray-400">Rejoignez la partie avec le code</p>
-        <p className="text-6xl font-black tracking-widest text-accent">{room.code}</p>
+      <div className="text-center bg-surface border border-surfaceBorder rounded-3xl px-10 py-6 shadow-glowAccent">
+        <p className="text-sm uppercase tracking-[0.3em] text-muted mb-1">
+          Rejoignez la partie avec le code
+        </p>
+        <p className="text-6xl font-black tracking-widest text-accentSoft">{room.code}</p>
       </div>
 
-      <div className="w-full max-w-xl">
+      <div className="w-full max-w-xl bg-surface border border-surfaceBorder rounded-3xl p-6">
         <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
         <ul className="space-y-2">
-          {players.length === 0 && <li className="text-gray-500">En attente de joueurs…</li>}
-          {rankedPlayers.map((p) => (
+          {players.length === 0 && <li className="text-muted">En attente de joueurs…</li>}
+          {rankedPlayers.map((p, i) => (
             <li
               key={p.id}
-              className="flex justify-between bg-white/5 rounded-lg px-4 py-3 text-xl"
+              className={`flex justify-between items-center rounded-xl px-4 py-3 text-xl ${
+                i === 0 ? "bg-gold/10 border border-gold/40" : "bg-white/5"
+              }`}
             >
-              <span>{p.display_name}</span>
-              <span className="font-bold">{p.score} pts</span>
+              <span className="flex items-center gap-2">
+                {i === 0 && <span>🥇</span>}
+                {p.display_name}
+              </span>
+              <span className={`font-bold ${i === 0 ? "text-gold" : ""}`}>{p.score} pts</span>
             </li>
           ))}
         </ul>
       </div>
 
-      <div className="w-full max-w-xl text-center">
+      <div className="w-full max-w-2xl text-center">
         {!canStartRound && round?.status === "playing" && (
-          <p className="text-2xl">🎵 Manche en cours — en attente d’un buzz…</p>
+          <div className="bg-surface border border-surfaceBorder rounded-3xl px-8 py-10 animate-pulseGlow">
+            <p className="text-2xl font-bold">🎵 Manche en cours — en attente d’un buzz…</p>
+          </div>
         )}
         {!canStartRound && round?.status === "buzzed" && (
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-3xl font-bold text-accent2">
+          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
+            <p className="text-3xl font-bold text-accent2Soft">
               🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
-            <p className="text-lg text-gray-400">
+            <p className="text-lg text-muted">
               {round.title} — {round.artist}
             </p>
             <div className="flex gap-4">
               <button
                 onClick={() => handleResolve(true)}
-                className="bg-green-600 px-6 py-3 rounded-full text-lg font-bold"
+                className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
               >
                 ✅ Bonne réponse
               </button>
               <button
                 onClick={() => handleResolve(false)}
-                className="bg-red-600 px-6 py-3 rounded-full text-lg font-bold"
+                className="bg-danger shadow-glowDanger hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
               >
                 ❌ Mauvaise réponse
               </button>
@@ -349,20 +369,20 @@ export default function HostScreen() {
             <div className="flex flex-col md:flex-row gap-4 w-full">
               <button
                 onClick={() => setHostMode("gamemaster")}
-                className="flex-1 bg-white/5 border-2 border-accent rounded-xl px-6 py-5 text-left"
+                className="flex-1 bg-surface hover:bg-surface/70 transition border-2 border-accent hover:shadow-glowAccent rounded-3xl px-6 py-5 text-left"
               >
-                <p className="text-lg font-bold mb-1">🎙️ Maître du jeu</p>
-                <p className="text-sm text-gray-400">
+                <p className="text-lg font-bold mb-1 text-accentSoft">🎙️ Maître du jeu</p>
+                <p className="text-sm text-muted">
                   Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
                   les titres à l’avance.
                 </p>
               </button>
               <button
                 onClick={() => setHostMode("player")}
-                className="flex-1 bg-white/5 border-2 border-accent2 rounded-xl px-6 py-5 text-left"
+                className="flex-1 bg-surface hover:bg-surface/70 transition border-2 border-accent2 hover:shadow-glowAccent2 rounded-3xl px-6 py-5 text-left"
               >
-                <p className="text-lg font-bold mb-1">🎧 Tout le monde participe</p>
-                <p className="text-sm text-gray-400">
+                <p className="text-lg font-bold mb-1 text-accent2Soft">🎧 Tout le monde participe</p>
+                <p className="text-sm text-muted">
                   Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
                   révélés seulement pour valider une réponse.
                 </p>
@@ -372,36 +392,41 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && spotifyPlayer.state === "checking" && (
-          <p className="text-gray-400">Vérification de la connexion Spotify…</p>
+          <p className="text-muted">Vérification de la connexion Spotify…</p>
         )}
 
         {canStartRound && modeChosen && spotifyPlayer.state === "disconnected" && (
           <button
             onClick={spotifyPlayer.connect}
-            className="bg-accent px-8 py-4 rounded-full text-xl font-bold"
+            className="bg-accent shadow-glowAccent hover:brightness-110 transition px-8 py-4 rounded-full text-xl font-bold"
           >
             Se connecter à Spotify pour préparer une playlist
           </button>
         )}
 
         {canStartRound && modeChosen && spotifyPlayer.state === "connecting_player" && (
-          <p className="text-gray-400">Connexion au lecteur Spotify…</p>
+          <p className="text-muted">Connexion au lecteur Spotify…</p>
         )}
 
         {canStartRound && modeChosen && spotifyPlayer.state === "ready" && queueExhausted && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-6">
-            <p className="text-3xl font-bold text-accent2">🏁 Playlist terminée !</p>
+          <div className="flex flex-col items-center gap-6 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
+            <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
             <ul className="w-full space-y-2 text-left">
               {rankedPlayers.map((p, i) => (
-                <li key={p.id} className="flex justify-between bg-white/5 rounded-lg px-4 py-3">
+                <li
+                  key={p.id}
+                  className={`flex justify-between rounded-xl px-4 py-3 ${
+                    i === 0 ? "bg-gold/10 border border-gold/40" : "bg-white/5"
+                  }`}
+                >
                   <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`} {p.display_name}</span>
-                  <span className="font-bold">{p.score} pts</span>
+                  <span className={`font-bold ${i === 0 ? "text-gold" : ""}`}>{p.score} pts</span>
                 </li>
               ))}
             </ul>
             <button
               onClick={() => setBuildingPlaylist(true)}
-              className="bg-accent px-6 py-3 rounded-full font-bold"
+              className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full font-bold"
             >
               + Ajouter d’autres morceaux
             </button>
@@ -409,12 +434,12 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
             {launchingRound ? (
-              <p className="text-xl font-bold text-gray-400">Lancement de la manche…</p>
+              <p className="text-xl font-bold text-muted animate-pulse">Lancement de la manche…</p>
             ) : (
               <>
-                <p className="text-gray-400">
+                <p className="text-muted">
                   Manche {queueIndex + 1} / {queue.length} à venir :
                 </p>
                 <p className="text-xl font-bold">
@@ -427,18 +452,18 @@ export default function HostScreen() {
             <button
               onClick={handlePlayNextInQueue}
               disabled={players.length === 0 || launchingRound}
-              className="bg-accent2 disabled:opacity-40 px-8 py-4 rounded-full text-xl font-bold"
+              className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-8 py-4 rounded-full text-xl font-bold"
             >
               ▶ Manche suivante
             </button>
             {players.length === 0 && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted">
                 En attente d’au moins un joueur avant de pouvoir lancer la manche.
               </p>
             )}
             <button
               onClick={() => setBuildingPlaylist(true)}
-              className="text-sm text-gray-400 underline"
+              className="text-sm text-muted hover:text-accentSoft underline transition"
             >
               + Ajouter d’autres morceaux à la file
             </button>
@@ -446,106 +471,137 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && spotifyPlayer.state === "ready" && buildingPlaylist && (
-          <div className="flex flex-col gap-4 text-left">
+          <div className="flex flex-col gap-4 text-left bg-surface border border-surfaceBorder rounded-3xl p-6">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-400">
+              <span className="text-sm text-muted">
                 Mode : {hostMode === "gamemaster" ? "🎙️ Maître du jeu" : "🎧 Tout le monde participe"}
               </span>
               <button
                 onClick={() => setHostMode(null)}
-                className="text-sm text-gray-400 underline"
+                className="text-sm text-muted hover:text-accentSoft underline transition"
               >
                 Changer de mode
               </button>
             </div>
 
             {blindMode && (
-              <p className="text-sm text-gray-400 bg-white/5 rounded-lg px-4 py-3">
+              <p className="text-sm text-muted bg-white/5 border border-surfaceBorder rounded-xl px-4 py-3">
                 🙈 Les morceaux ajoutés à la file restent masqués. Pour être surpris toi aussi,
                 préfère importer une playlist entière plutôt que la recherche manuelle (chercher
                 un titre te le révèle forcément).
               </p>
             )}
 
-            <div className="flex gap-2">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Chercher un morceau à ajouter à la playlist…"
-                className="flex-1 bg-white/5 border-2 border-accent rounded-xl px-4 py-3"
-              />
-              <button onClick={handleSearch} className="bg-accent px-6 py-3 rounded-xl font-bold">
-                Chercher
-              </button>
-            </div>
+            {/* Les deux façons d'ajouter des morceaux sont volontairement à
+                égalité visuelle (même carte, même taille) : la recherche
+                manuelle n'est pas plus mise en avant que l'import de
+                playlist, alors qu'avant l'import était relégué à un simple
+                lien texte peu visible. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
+                <h3 className="font-bold text-accentSoft">🔍 Recherche manuelle</h3>
+                <p className="text-sm text-muted">Ajoute un morceau précis à la file, un par un.</p>
+                <div className="flex gap-2 mt-auto">
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                    placeholder="Titre, artiste…"
+                    className="flex-1 min-w-0 bg-white/5 border-2 border-accent focus:shadow-glowAccent outline-none transition rounded-xl px-4 py-3"
+                  />
+                  <button
+                    onClick={handleSearch}
+                    className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-xl font-bold whitespace-nowrap"
+                  >
+                    Chercher
+                  </button>
+                </div>
+              </div>
 
-            <div className="border-t border-white/10 pt-4">
-              {myPlaylists === null && (
+              <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
+                <h3 className="font-bold text-accent2Soft">📻 Importer une playlist</h3>
+                <p className="text-sm text-muted">
+                  Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
+                </p>
                 <button
                   onClick={handleLoadMyPlaylists}
-                  disabled={loadingPlaylists}
-                  className="text-sm underline text-gray-300 disabled:opacity-40"
+                  disabled={loadingPlaylists || myPlaylists !== null}
+                  className="mt-auto bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold"
                 >
-                  {loadingPlaylists ? "Chargement…" : "Ou importer une de tes playlists Spotify"}
+                  {myPlaylists !== null
+                    ? "Playlists chargées ✓"
+                    : loadingPlaylists
+                      ? "Chargement…"
+                      : "Charger mes playlists Spotify"}
                 </button>
-              )}
+              </div>
+            </div>
 
-              {myPlaylists !== null && myPlaylists.length === 0 && (
-                <p className="text-sm text-gray-500">Aucune playlist trouvée sur ton compte Spotify.</p>
-              )}
-
-              {myPlaylists !== null && myPlaylists.length > 0 && (
-                <ul className="flex flex-col gap-2">
-                  {myPlaylists.map((playlist) => (
-                    <li
-                      key={playlist.id}
-                      className="flex justify-between items-center bg-white/5 rounded-lg px-4 py-3"
+            {results.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {results.map((track) => (
+                  <li
+                    key={track.sourceTrackId}
+                    className="flex justify-between items-center bg-white/5 rounded-xl px-4 py-3"
+                  >
+                    <span>
+                      {track.title} — {track.artist}
+                    </span>
+                    <button
+                      onClick={() => handleAddToQueue(track)}
+                      className="bg-accent shadow-glowAccent hover:brightness-110 transition px-4 py-2 rounded-full text-sm font-bold"
                     >
-                      <span>
+                      + Ajouter à la playlist
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {myPlaylists !== null && myPlaylists.length === 0 && (
+              <p className="text-sm text-muted">Aucune playlist trouvée sur ton compte Spotify.</p>
+            )}
+
+            {myPlaylists !== null && myPlaylists.length > 0 && (
+              <div>
+                <h3 className="font-bold mb-2 text-accent2Soft">
+                  Tes playlists ({myPlaylists.length}, par ordre alphabétique)
+                </h3>
+                {/* Grid partagée par toutes les lignes (via `contents` sur
+                    chaque <li>) : les colonnes nom/bouton restent alignées
+                    et de même largeur d'une playlist à l'autre, et le nom
+                    ne revient plus à la ligne (troncature avec "…" si trop
+                    long plutôt qu'un retour à la ligne). */}
+                <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
+                  {myPlaylists.map((playlist) => (
+                    <li key={playlist.id} className="contents">
+                      <span className="bg-white/5 rounded-xl px-4 py-3 truncate">
                         {playlist.name}{" "}
-                        <span className="text-gray-500">({playlist.trackCount} morceaux)</span>
+                        <span className="text-muted">({playlist.trackCount} morceaux)</span>
                       </span>
                       <button
                         onClick={() => handleImportPlaylist(playlist.id)}
                         disabled={importingPlaylistId === playlist.id}
-                        className="bg-accent2 disabled:opacity-40 px-4 py-2 rounded-full text-sm font-bold"
+                        className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
                       >
                         {importingPlaylistId === playlist.id ? "Import…" : "+ Importer toute la playlist"}
                       </button>
                     </li>
                   ))}
                 </ul>
-              )}
-            </div>
-
-            <ul className="flex flex-col gap-2">
-              {results.map((track) => (
-                <li
-                  key={track.sourceTrackId}
-                  className="flex justify-between items-center bg-white/5 rounded-lg px-4 py-3"
-                >
-                  <span>
-                    {track.title} — {track.artist}
-                  </span>
-                  <button
-                    onClick={() => handleAddToQueue(track)}
-                    className="bg-accent2 px-4 py-2 rounded-full text-sm font-bold"
-                  >
-                    + Ajouter à la playlist
-                  </button>
-                </li>
-              ))}
-            </ul>
+              </div>
+            )}
 
             {upcomingQueue.length > 0 && (
               <div className="mt-4">
-                <h3 className="font-bold mb-2">Playlist ({upcomingQueue.length} morceau(x) à venir)</h3>
+                <h3 className="font-bold mb-2 text-accentSoft">
+                  Playlist ({upcomingQueue.length} morceau(x) à venir)
+                </h3>
                 <ul className="flex flex-col gap-2">
                   {upcomingQueue.map((track, i) => (
                     <li
                       key={`${track.sourceTrackId}-${i}`}
-                      className="flex justify-between items-center bg-white/5 rounded-lg px-4 py-3"
+                      className="flex justify-between items-center bg-white/5 rounded-xl px-4 py-3"
                     >
                       <span>
                         {blindMode
@@ -554,7 +610,7 @@ export default function HostScreen() {
                       </span>
                       <button
                         onClick={() => handleRemoveFromQueue(i)}
-                        className="text-red-400 text-sm px-3 py-1"
+                        className="text-danger text-sm px-3 py-1 hover:brightness-110 transition"
                       >
                         Retirer
                       </button>
@@ -565,14 +621,14 @@ export default function HostScreen() {
             )}
 
             {players.length === 0 && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted">
                 En attente d’au moins un joueur avant de pouvoir lancer la manche.
               </p>
             )}
             <button
               onClick={handlePlayNextInQueue}
               disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
-              className="bg-accent disabled:opacity-40 px-8 py-4 rounded-full text-xl font-bold mt-2"
+              className="bg-accent shadow-glowAccent hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-8 py-4 rounded-full text-xl font-bold mt-2"
             >
               {launchingRound
                 ? "Lancement…"
@@ -584,7 +640,7 @@ export default function HostScreen() {
         )}
 
         {(spotifyOAuthError || spotifyPlayer.errorMessage) && (
-          <p className="text-red-400 mt-4 break-words">
+          <p className="text-danger mt-4 break-words">
             {spotifyOAuthError ?? spotifyPlayer.errorMessage}
           </p>
         )}
