@@ -2,7 +2,7 @@
 
 Une appli pour faire des blind tests entre potes sans avoir besoin de quelqu'un dédié
 au lancement des sons : les téléphones (ou ordis) des joueurs servent de buzzer, un
-écran "hôte" (laptop projeté sur une TV, ou juste un ordi) diffuse le son via Spotify,
+écran "hôte" (laptop projeté sur une TV, ordi, ou même un téléphone) diffuse le son via Spotify,
 affiche le code de partie, les joueurs connectés, qui a buzzé en premier et
 l'historique des manches.
 
@@ -54,10 +54,19 @@ des réseaux différents.** Concrètement, ce qui marche aujourd'hui :
   - Le score peut descendre en négatif (pas de plancher à 0).
 - Classement en temps réel avec gestion des égalités (deux joueurs à égalité
   partagent le même rang), affiché aux joueurs (pseudo, score, position) et à l'hôte.
-- Historique replié des manches déjà jouées, avec le détail de chaque tentative
-  (qui a buzzé, quoi trouvé, combien de points) pour les manches à rallonge.
+- Historique replié des manches déjà jouées, affiché en ordre décroissant (la
+  dernière manche jouée en haut), avec le détail de chaque tentative (qui a buzzé,
+  quoi trouvé, combien de points) pour les manches à rallonge.
+- **Écran de fin de partie enrichi**, affiché aussi bien côté hôte que côté joueurs
+  dès que la file d'attente est épuisée : podium visuel des 3 premiers, buzzeur le
+  plus rapide (uniquement parmi les réponses complètes titre + artiste), manche
+  ayant généré le plus de tentatives, en plus du classement complet.
+- **Site navigable** : page d'accueil neutre (`/`) qui permet de choisir "Créer une
+  partie" (`/host`) ou "Rejoindre une partie" (`/play`), plus deux pages statiques
+  `/rules` (règles du jeu) et `/about` (contexte du projet, roadmap).
 - Testé en conditions réelles : hôte + plusieurs joueurs sur des réseaux différents
-  (pas besoin d'être sur le même wifi), via l'app déployée sur Vercel.
+  (pas besoin d'être sur le même wifi), **y compris entièrement depuis des
+  téléphones** (hôte et joueurs), via l'app déployée sur Vercel.
 
 Ce qui **ne marche pas encore** / n'est pas fait :
 
@@ -79,18 +88,23 @@ Ce qui **ne marche pas encore** / n'est pas fait :
 
 ## Comment jouer (procédure exacte)
 
+`/` est une page d'accueil neutre : elle propose "Créer une partie" (→ `/host`) ou
+"Rejoindre une partie" (→ `/play`), plus des liens vers `/rules` (règles) et `/about`
+(contexte du projet). Confirmé fonctionnel aussi bien sur ordinateur que sur
+téléphone, côté hôte comme côté joueurs (voir "Mobile" plus bas).
+
 **En ligne (recommandé, pas besoin d'être sur le même réseau) :**
 
-- Hôte : ouvre `https://blindtest-app-web-host.vercel.app/` sur ton ordi, connecte-toi
-  à Spotify (compte Premium requis, voir plus bas), choisis un mode de jeu, construis
-  ta playlist, note le code affiché.
-- Joueurs : chacun ouvre `https://blindtest-app-web-host.vercel.app/play` sur son
-  téléphone, entre le code + un pseudo.
+- Hôte : ouvre `https://blindtest-app-web-host.vercel.app/host`, connecte-toi à
+  Spotify (compte Premium requis, voir plus bas), choisis un mode de jeu, construis ta
+  playlist, note le code affiché.
+- Joueurs : chacun ouvre `https://blindtest-app-web-host.vercel.app/play`, entre le
+  code + un pseudo.
 
 **En local (pour développer) :**
 
-- Hôte : `http://localhost:3000/` (redirige automatiquement vers `127.0.0.1`, requis
-  pour que la connexion Spotify fonctionne — voir "Pourquoi 127.0.0.1 et pas
+- Hôte : `http://localhost:3000/host` (redirige automatiquement vers `127.0.0.1`,
+  requis pour que la connexion Spotify fonctionne — voir "Pourquoi 127.0.0.1 et pas
   localhost" plus bas).
 - Joueurs : `http://localhost:3000/play` dans d'autres onglets, ou depuis un autre
   appareil sur le même réseau via `http://<IP locale de l'hôte>:3000/play`.
@@ -204,29 +218,40 @@ Points importants, vérifiés en 2026 :
   sur "manche suivante" écrasait silencieusement tout réordonnancement manuel fait
   par l'hôte via glisser-déposer).
 
-### Limites connues sur mobile (Safari iOS)
+### Mobile
 
-Le **Web Playback SDK ne doit pas être utilisé comme lecteur audio sur Safari iOS** :
-plusieurs bugs distincts, documentés indépendamment par d'autres développeurs (pas
-spécifiques à cette app), rendent l'expérience non fiable sur ce navigateur :
+Confirmé par des tests réels : **hôte et joueurs fonctionnent bien depuis un
+téléphone**, lecture Spotify comprise (Web Playback SDK). Les craintes documentées
+plus tôt dans ce README sur Safari iOS (autoplay bloqué, device qui disparaît, son
+qui sort par le mauvais haut-parleur) sont des bugs connus et documentés côté
+Spotify/WebKit en général, mais ne se sont pas révélés bloquants en usage réel sur ce
+projet — à garder en tête comme points de vigilance si un problème apparaît sur un
+téléphone/OS particulier, pas comme une limite structurelle de l'app.
 
-- Autoplay bloqué après un transfert de lecture initié côté serveur (contourné en
-  partie via `player.activateElement()`, voir `useSpotifyPlayer.ts`, mais pas de façon
-  garantie selon les rapports de la communauté Spotify).
-- Le "device" du Web Playback SDK peut disparaître (erreur `404 Device not found`) si
-  l'app Spotify native est ouverte manuellement sur le même téléphone, ou si l'onglet
-  Safari est mis en arrière-plan trop longtemps.
-- Bug WebKit connu et non résolu : le son peut sortir par le haut-parleur du téléphone
-  au lieu d'un casque/enceinte Bluetooth connecté, sans rapport avec Spotify.
+Renforcements apportés côté `/play` (le buzzer, écran le plus utilisé sur téléphone) :
 
-**Recommandation : héberge la page `/` (écran + son) depuis un ordinateur (Mac/PC),
-qui reste la config officiellement fiable pour le Web Playback SDK.** Les téléphones
-restent parfaitement adaptés pour `/play` (buzzer), qui ne dépend pas du tout de
-Spotify. Si l'hôte veut aussi jouer, il peut utiliser le mode "Tout le monde participe"
-sur son ordinateur et ouvrir `/play` sur son propre téléphone comme n'importe quel
-autre joueur. Un hôte 100% mobile fiable nécessiterait de reprendre l'app native
-(`apps/mobile`) avec le SDK Spotify "App Remote" (différent du Web Playback SDK) —
-non fait, voir roadmap.
+- **Zones sûres / encoche** : `viewport-fit: "cover"` (voir `layout.tsx`) +
+  paddings `env(safe-area-inset-*)`, pour que le bouton buzz et les liens du bas ne
+  passent jamais sous l'encoche/île dynamique ou la barre de gestes en bas d'écran.
+  Zoom par pincement désactivé (`maximumScale: 1`), inutile ici et gênant sur un
+  écran plein écran.
+- **Écran qui reste allumé** (Wake Lock API, feature-detect + échec silencieux si
+  absente) : évite de rater un buzz parce que le téléphone s'est mis en veille
+  pendant l'attente d'une manche. Redemandé automatiquement au retour au premier
+  plan, le système le libérant quand l'onglet passe en arrière-plan.
+- **Vibration au buzz** (Android ; ignorée silencieusement sur iOS Safari, qui
+  n'implémente pas l'API Vibration) : retour haptique immédiat au tap, avant même la
+  réponse du serveur.
+- **Re-synchronisation au réveil du téléphone** : un onglet en arrière-plan trop
+  longtemps (écran verrouillé, changement d'appli) peut voir son websocket Realtime
+  tué sans que le SDK Supabase ne le signale. Un listener `visibilitychange` force un
+  désabonnement/réabonnement complet de tous les canaux au retour au premier plan,
+  plutôt que de faire confiance à la reconnexion automatique.
+
+Si l'hôte veut jouer sur son propre téléphone en plus d'animer, le mode "Tout le
+monde participe" reste la bonne option : il ouvre `/play` sur son téléphone comme
+n'importe quel autre joueur, en parallèle de `/host` (sur le même appareil ou un
+autre).
 
 ### Pourquoi 127.0.0.1 et pas localhost
 
@@ -235,7 +260,7 @@ développeur, et Spotify exige `127.0.0.1` plutôt que `localhost` depuis fin 20
 les cookies posés sur `localhost` sont invisibles depuis `127.0.0.1` (le navigateur les
 traite comme deux origines différentes) — ce qui cassait la connexion Spotify de façon
 assez peu intuitive (`state mismatch`) si on testait sur `localhost`. Un garde-fou
-(`useForceLoopbackHost`, utilisé dans `page.tsx` et `spotify-test/page.tsx`) redirige
+(`useForceLoopbackHost`, utilisé dans `host/page.tsx` et `spotify-test/page.tsx`) redirige
 automatiquement vers `127.0.0.1` si jamais la page est ouverte via `localhost`, pour ne
 plus jamais retomber dans ce piège. Cette redirection ne s'applique qu'en local ; en
 prod (un vrai domaine HTTPS) elle ne fait rien.
@@ -269,17 +294,30 @@ prod (un vrai domaine HTTPS) elle ne fait rien.
     jugement d'une réponse
   - `0010_round_attempts_realtime` : ajout de `round_attempts` à la publication
     Realtime (voir "Temps réel" plus haut)
+  - `0011_reaction_seconds` : temps de réaction par tentative
+    (`round_attempts.reaction_seconds`), pour le "buzzeur le plus rapide" de l'écran
+    de fin de partie enrichi — uniquement calculé sur les tentatives à 2 points
+    (titre + artiste trouvés), pour qu'une réponse fausse ou partielle rapide ne
+    puisse pas remporter ce titre
 - `docs/architecture/` — document de conception initial (`blueprint.docx`).
 - `.github/workflows/ci.yml` — lint + typecheck des deux apps sur push/PR.
 
 ### apps/web-host en détail
 
-- `src/app/page.tsx` — écran hôte : code de partie, joueurs, choix du mode de jeu,
-  construction de playlist (recherche + import + glisser-déposer), lancement de
-  manche, timer, jugement de la réponse, historique.
+- `src/app/page.tsx` — page d'accueil (composant serveur, pas de logique) : deux
+  liens "Créer une partie" / "Rejoindre une partie" + liens vers `/rules` et
+  `/about`.
+- `src/app/host/page.tsx` — écran hôte (anciennement à la racine `/`) : code de
+  partie, joueurs, choix du mode de jeu, construction de playlist (recherche + import
+  + glisser-déposer), lancement de manche, timer, jugement de la réponse, historique
+  (ordre décroissant), écran de fin de partie enrichi (podium, stats).
 - `src/app/play/page.tsx` — écran joueur : rejoindre par code + pseudo, bouton buzz,
   pseudo/score/classement permanents, nom du premier buzzeur, réponse révélée
-  uniquement une fois la manche réellement terminée.
+  uniquement une fois la manche réellement terminée, même écran de fin de partie
+  enrichi que côté hôte. Voir aussi la section "Mobile" plus bas (wake lock,
+  vibration, zones sûres, re-synchronisation au réveil du téléphone).
+- `src/app/rules/page.tsx` / `src/app/about/page.tsx` — pages statiques (règles du
+  jeu, contexte du projet + roadmap condensée), composants serveur sans logique.
 - `src/app/spotify-test/page.tsx` — page de validation isolée de la connexion Spotify
   (utile pour déboguer l'auth sans dépendre d'une partie en cours).
 - `src/app/api/spotify/login/route.ts` — démarre le flow OAuth PKCE, pose les cookies
@@ -290,8 +328,10 @@ prod (un vrai domaine HTTPS) elle ne fait rien.
   (refresh automatique si besoin).
 - `src/app/api/spotify/logout/route.ts` — supprime les cookies de session Spotify.
 - `src/lib/rooms.ts` — toutes les fonctions Supabase : créer/rejoindre une room,
-  s'abonner aux joueurs/manches/historique/tentatives en temps réel, lancer une
-  manche, buzzer, révéler, juger une tentative, clôturer par timeout.
+  s'abonner aux joueurs/manches/historique/tentatives/statut de la room en temps
+  réel, lancer une manche, buzzer, révéler, juger une tentative, clôturer par
+  timeout, marquer une partie terminée/reprise (`finishRoom`/`resumeRoom`, pour
+  déclencher l'écran de fin de partie côté joueurs).
 - `src/lib/ranking.ts` — classement partagé (rangs avec égalités) entre écran hôte et
   écran joueur, pour qu'ils affichent toujours exactement le même classement.
 - `src/lib/spotifyAuth.ts` — fonctions pures PKCE (génération verifier/challenge/state,
@@ -334,7 +374,7 @@ Prérequis : Node.js 18+, un compte [Supabase](https://supabase.com) (gratuit), 
 compte [Spotify Developer](https://developer.spotify.com/dashboard) (gratuit, **et un
 compte Spotify Premium** pour tester la lecture), un navigateur Chrome de préférence
 (testé et fiable ; Safari a des comportements différents avec les cookies sur IP
-littérale, voir "Limites connues sur mobile" plus haut).
+littérale en local, voir "Pourquoi 127.0.0.1 et pas localhost" plus haut).
 
 Étapes :
 
@@ -358,7 +398,7 @@ Pas de `SPOTIFY_CLIENT_SECRET` nécessaire (flow PKCE).
 
 1. Crée un projet sur [supabase.com](https://supabase.com).
 2. Dans SQL Editor, exécute dans l'ordre les fichiers de `supabase/migrations/`
-   (0001 → 0010). Chaque fichier est commenté pour expliquer ce qu'il fait.
+   (0001 → 0011). Chaque fichier est commenté pour expliquer ce qu'il fait.
 3. Dans Database → Publications → `supabase_realtime`, vérifie que les tables
    `players`, `rounds`, `buzzes`, `rooms` et `round_attempts` sont bien activées
    (la migration `0010` le fait déjà pour `round_attempts` par SQL, mais un nouveau
@@ -445,13 +485,23 @@ Complété par rapport au plan initial (`docs/architecture/blueprint.docx`) :
 - ✅ Déploiement public (Vercel), jouable à distance entre plusieurs réseaux.
 - ✅ CI (lint + typecheck), policies RLS durcies dans la limite du raisonnable sans
   auth.
+- ✅ Site navigable (accueil, `/host`, `/play`, `/rules`, `/about`) plutôt que deux
+  écrans isolés.
+- ✅ Écran de fin de partie enrichi (podium, buzzeur le plus rapide, manche la plus
+  disputée), identique côté hôte et côté joueurs.
+- ✅ Robustesse mobile web sur `/play` (zones sûres/encoche, écran qui reste allumé,
+  vibration au buzz sur Android, re-synchronisation au réveil du téléphone) —
+  confirmée fiable par des tests réels, hôte et joueurs, lecture Spotify comprise.
 
 Pas encore fait, par ordre de valeur perçue :
 
+- Historique des parties passées (scores finaux, date) — pour l'instant tout est
+  perdu à la fermeture de l'onglet une fois une partie terminée.
 - Mode équipe, thèmes/playlists pré-construites, playlists générées par IA.
 - Persister la file d'attente côté serveur pour la réutiliser d'une partie à l'autre.
-- Reprendre l'app mobile native (si le confort d'une vraie app est souhaité un jour —
-  pas indispensable, le buzzer web fonctionne bien).
+- Reprendre l'app mobile native (si le confort d'une vraie app installable est
+  souhaité un jour — pas indispensable, le buzzer web fonctionne bien, y compris sur
+  téléphone).
 - DA / polish visuel à continuer d'affiner (la base "arcade néon" est posée, mais
   certains écrans mériteraient encore du travail).
 - Authentification réelle + policies RLS restreintes par utilisateur, si l'app devait
