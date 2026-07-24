@@ -10,19 +10,25 @@
 // ou un retour en arrière navigateur (fausse manip courante) retrouve le
 // même joueur au lieu d'en réinsérer un nouveau — ce qui aurait remis son
 // score à zéro à chaque fois. sessionStorage plutôt que localStorage pour
-// les mêmes raisons que côté hôte (voir app/page.tsx) : survit au
+// les mêmes raisons que côté hôte (voir app/host/page.tsx) : survit au
 // refresh/back, pas à la fermeture de l'onglet, pas partagé entre onglets.
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   joinRoomByCode,
   getPlayerSession,
+  subscribeToRoom,
   subscribeToPlayers,
   subscribeToCurrentRoundForPlayer,
+  subscribeToRoundHistory,
+  subscribeToRoundAttempts,
   sendBuzz,
   type Player,
   type PlayerRound,
+  type Round,
+  type RoundAttempt,
 } from "../../lib/rooms";
 import { withRanks, formatOrdinal } from "../../lib/ranking";
 
@@ -99,7 +105,7 @@ export default function PlayPage() {
   };
 
   return (
-    <main className="flex items-center justify-center min-h-screen p-6">
+    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
       {checkingSession ? (
         <p className="text-muted animate-pulse">Reconnexion…</p>
       ) : session ? (
@@ -155,6 +161,9 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
       >
         {loading ? "..." : "Rejoindre"}
       </button>
+      <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
+        ← Accueil
+      </Link>
     </div>
   );
 }
@@ -171,6 +180,18 @@ function BuzzerView({
   const [round, setRound] = useState<PlayerRound | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [sending, setSending] = useState(false);
+  // Statut de la room ("lobby" / "in_progress" / "finished") : permet
+  // d'afficher l'écran de fin de partie enrichi dès que l'hôte marque la
+  // file d'attente comme épuisée (voir finishRoom côté host/page.tsx), sans
+  // quoi rien ne prévient un joueur que la partie est terminée puisque
+  // `rounds` ne change plus une fois la dernière manche jugée.
+  const [roomStatus, setRoomStatus] = useState<"lobby" | "in_progress" | "finished" | null>(null);
+  // Historique + tentatives : uniquement nécessaires pour calculer les
+  // statistiques de l'écran de fin de partie (buzzeur le plus rapide,
+  // manche la plus disputée) — mêmes données et même calcul que côté hôte,
+  // pour rester cohérent entre les deux écrans.
+  const [roundHistory, setRoundHistory] = useState<Round[]>([]);
+  const [roundAttempts, setRoundAttempts] = useState<RoundAttempt[]>([]);
 
   useEffect(() => {
     return subscribeToCurrentRoundForPlayer(roomId, setRound);
@@ -181,6 +202,18 @@ function BuzzerView({
   // partagé avec l'écran hôte pour rester cohérent).
   useEffect(() => {
     return subscribeToPlayers(roomId, setPlayers);
+  }, [roomId]);
+
+  useEffect(() => {
+    return subscribeToRoom(roomId, (room) => setRoomStatus(room?.status ?? null));
+  }, [roomId]);
+
+  useEffect(() => {
+    return subscribeToRoundHistory(roomId, setRoundHistory);
+  }, [roomId]);
+
+  useEffect(() => {
+    return subscribeToRoundAttempts(roomId, setRoundAttempts);
   }, [roomId]);
 
   const alreadyBuzzed =
@@ -201,6 +234,34 @@ function BuzzerView({
   const ranked = withRanks(players);
   const me = ranked.find((p) => p.id === playerId);
 
+  // Mêmes calculs que sur l'écran hôte (voir app/host/page.tsx) : temps de
+  // réaction minimal parmi les tentatives qui ont valu 2 points (titre ET
+  // artiste trouvés — une réponse fausse ou partielle rapide ne doit pas
+  // gagner ce titre), et manche ayant reçu le plus de tentatives jugées.
+  const fastestAttempt = roundAttempts
+    .filter((a) => a.points_awarded === 2 && a.reaction_seconds !== null)
+    .reduce<RoundAttempt | null>((best, a) => {
+      if (!best || (a.reaction_seconds as number) < (best.reaction_seconds as number)) return a;
+      return best;
+    }, null);
+  const fastestPlayer = fastestAttempt
+    ? players.find((p) => p.id === fastestAttempt.player_id)
+    : null;
+
+  const attemptCountByRound = new Map<string, number>();
+  for (const a of roundAttempts) {
+    attemptCountByRound.set(a.round_id, (attemptCountByRound.get(a.round_id) ?? 0) + 1);
+  }
+  let mostContestedRound: Round | null = null;
+  let mostContestedCount = 0;
+  for (const r of roundHistory) {
+    const count = attemptCountByRound.get(r.id) ?? 0;
+    if (count > mostContestedCount) {
+      mostContestedCount = count;
+      mostContestedRound = r;
+    }
+  }
+
   const onBuzz = async () => {
     if (!round || !canBuzz) return;
     setSending(true);
@@ -210,6 +271,83 @@ function BuzzerView({
       setSending(false);
     }
   };
+
+  if (roomStatus === "finished") {
+    return (
+      <div className="flex flex-col items-center gap-6 w-full max-w-sm bg-surface border border-surfaceBorder rounded-3xl px-6 py-8">
+        <p className="text-3xl font-bold text-gold text-center">🏁 Partie terminée !</p>
+
+        {ranked.length > 0 && (
+          <div className="flex items-end justify-center gap-3">
+            {ranked
+              .filter((p) => p.rank <= 3)
+              .sort((a, b) => a.rank - b.rank)
+              .map((p) => {
+                const height = p.rank === 1 ? "h-24" : p.rank === 2 ? "h-16" : "h-12";
+                const podiumColor =
+                  p.rank === 1
+                    ? "border-accent bg-accent/10 text-accentSoft"
+                    : p.rank === 2
+                      ? "border-accent2 bg-accent2/10 text-accent2Soft"
+                      : "border-danger bg-danger/10 text-danger";
+                return (
+                  <div key={p.id} className="flex flex-col items-center gap-1 w-20">
+                    <span className="text-sm truncate w-full text-center">{p.display_name}</span>
+                    <div
+                      className={`w-full ${height} rounded-t-xl border-2 flex items-start justify-center pt-2 font-black text-lg ${podiumColor}`}
+                    >
+                      {p.rank}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+
+        {(fastestAttempt || mostContestedCount > 1) && (
+          <div className="grid grid-cols-1 gap-3 w-full">
+            {fastestAttempt && (
+              <div className="bg-white/5 rounded-xl px-4 py-3 text-left">
+                <p className="text-xs text-muted">⚡ Buzzeur le plus rapide</p>
+                <p className="text-sm font-bold text-accentSoft">
+                  {fastestPlayer?.display_name ?? "Joueur"} —{" "}
+                  {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
+                </p>
+              </div>
+            )}
+            {mostContestedRound && mostContestedCount > 1 && (
+              <div className="bg-white/5 rounded-xl px-4 py-3 text-left">
+                <p className="text-xs text-muted">🔥 Manche la plus disputée</p>
+                <p className="text-sm font-bold text-accentSoft">
+                  {mostContestedRound.title} ({mostContestedCount} tentatives)
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
+          {ranked.map((p) => (
+            <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-white/5">
+              <span>
+                {p.rank}. {p.display_name}
+              </span>
+              <span className="font-bold">{p.score} pts</span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="flex gap-4">
+          <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
+            ← Accueil
+          </Link>
+          <button onClick={onLeave} className="text-xs text-muted hover:text-danger underline transition">
+            Quitter la partie
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
@@ -275,9 +413,14 @@ function BuzzerView({
           )}
         </>
       )}
-      <button onClick={onLeave} className="text-xs text-muted hover:text-danger underline transition">
-        Quitter la partie
-      </button>
+      <div className="flex gap-4">
+        <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
+          ← Accueil
+        </Link>
+        <button onClick={onLeave} className="text-xs text-muted hover:text-danger underline transition">
+          Quitter la partie
+        </button>
+      </div>
     </div>
   );
 }

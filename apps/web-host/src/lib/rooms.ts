@@ -51,6 +51,13 @@ export type RoundAttempt = {
   title_found: boolean;
   artist_found: boolean;
   points_awarded: number;
+  // Temps écoulé (en secondes) entre le début du "stint" de cette tentative
+  // et le buzz qui l'a déclenchée (voir migration 0011). Sert à calculer le
+  // "buzzeur le plus rapide" sur l'écran de fin de partie — uniquement
+  // parmi les tentatives où points_awarded === 2 (titre ET artiste
+  // trouvés), pour qu'une réponse fausse ou partielle rapide ne puisse pas
+  // remporter ce titre.
+  reaction_seconds: number | null;
   created_at: string;
 };
 
@@ -88,6 +95,62 @@ export async function getRoomById(roomId: string): Promise<Room | null> {
     .eq("id", roomId)
     .maybeSingle();
   return (data as Room) ?? null;
+}
+
+/**
+ * S'abonne au statut de la room ("lobby" / "in_progress" / "finished").
+ * Utilisé côté joueur (app/play/page.tsx) pour afficher l'écran de fin de
+ * partie enrichi dès que l'hôte marque la partie comme terminée (voir
+ * finishRoom ci-dessous) : sans ça, un joueur n'a aucun moyen de savoir que
+ * la file d'attente est épuisée, puisque `rounds` ne change plus une fois
+ * la dernière manche jouée.
+ */
+export function subscribeToRoom(roomId: string, onChange: (room: Room | null) => void) {
+  const fetchAndEmit = async () => {
+    const { data } = await supabase
+      .from("rooms")
+      .select("id, code, status")
+      .eq("id", roomId)
+      .maybeSingle();
+    onChange((data as Room) ?? null);
+  };
+  fetchAndEmit();
+
+  const channel = supabase
+    .channel(`room:${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "rooms", filter: `id=eq.${roomId}` },
+      fetchAndEmit
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Marque la partie comme terminée (file d'attente épuisée, voir
+ * `queueExhausted` dans app/host/page.tsx) — c'est ce qui déclenche l'écran
+ * de fin de partie enrichi côté joueurs via subscribeToRoom ci-dessus.
+ * Update direct (pas de RPC) : seule la colonne `status` est accordée en
+ * écriture aux clients anon/authenticated (voir
+ * supabase/migrations/0004_rls_hardening.sql), donc pas besoin d'une
+ * fonction SECURITY DEFINER pour cette transition précise.
+ */
+export async function finishRoom(roomId: string): Promise<void> {
+  await supabase.from("rooms").update({ status: "finished" }).eq("id", roomId);
+}
+
+/**
+ * Repasse la room en "in_progress" — utilisé quand l'hôte clique sur
+ * "+ Ajouter d'autres morceaux" après un écran de fin de partie, pour que
+ * l'écran de fin de partie disparaisse côté joueurs dès qu'une nouvelle
+ * manche est sur le point d'être relancée.
+ */
+export async function resumeRoom(roomId: string): Promise<void> {
+  await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
 }
 
 export function subscribeToPlayers(roomId: string, onChange: (players: Player[]) => void) {
