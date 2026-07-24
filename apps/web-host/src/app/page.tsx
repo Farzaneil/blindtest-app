@@ -1023,7 +1023,7 @@ export default function HostScreen() {
 
             {blindMode && (
               <p className="text-sm text-muted bg-white/5 border border-surfaceBorder rounded-xl px-4 py-3">
-                🙈 Les morceaux ajoutés à la file restent masqués. Pour être surpris toi aussi,
+                Les morceaux ajoutés à la file restent masqués. Pour être surpris toi aussi,
                 préfère importer une playlist entière plutôt que la recherche manuelle (chercher
                 un titre te le révèle forcément).
               </p>
