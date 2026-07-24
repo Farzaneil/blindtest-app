@@ -780,7 +780,13 @@ export default function HostScreen() {
               <p className="text-muted text-sm">Aucune manche jouée pour l’instant.</p>
             ) : (
               <ul className="flex flex-col gap-2">
-                {roundHistory.map((r, i) => {
+                {[...roundHistory].reverse().map((r) => {
+                  // Affichage decroissant (derniere manche jouee en haut),
+                  // mais on garde le numero base sur l'ordre chronologique
+                  // reel (order_index) plutot que de renumeroter depuis le
+                  // haut -- plus parlant : le numero le plus eleve est
+                  // toujours la manche la plus recente.
+                  const i = roundHistory.findIndex((h) => h.id === r.id);
                   const attemptsForRound = roundAttempts.filter((a) => a.round_id === r.id);
                   return (
                     <li key={r.id} className="bg-white/5 rounded-xl px-4 py-2 text-sm">
