@@ -1120,7 +1120,7 @@ export default function HostScreen() {
                             disabled={importingPlaylistId === playlist.id}
                             className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
                           >
-                            {importingPlaylistId === playlist.id ? "Import…" : "+ Importer toute la playlist"}
+                            {importingPlaylistId === playlist.id ? "Import…" : "+ Importer"}
                           </button>
                         </li>
                       ))}
