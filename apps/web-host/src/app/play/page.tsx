@@ -185,7 +185,7 @@ function BuzzerView({
 
   const alreadyBuzzed =
     round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
-  const answerRevealed = round?.status === "revealed" || round?.status === "scored";
+  const answerRevealed = round?.status === "scored";
   // Mode "Maître du jeu" uniquement : ce joueur vient de répondre (bon ou
   // mauvais) sur cette manche et doit laisser un autre joueur tenter sa
   // chance avant de pouvoir rebuzzer — débloqué dès qu'un autre joueur
