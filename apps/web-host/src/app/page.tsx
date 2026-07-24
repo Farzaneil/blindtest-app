@@ -497,16 +497,19 @@ export default function HostScreen() {
   // font exactement la même chose (jouer le prochain morceau de la file),
   // seul le libellé affiché change selon qu'on a déjà commencé ou non.
   //
-  // Le mélange de la portion "à venir" ne doit se faire qu'UNE SEULE FOIS,
-  // au moment précis où on quitte la phase de construction (buildingPlaylist
-  // true -> false) : c'est ce qui garantit un ordre vraiment aléatoire même
-  // en combinant plusieurs imports/ajouts manuels. Le remélanger à chaque
-  // clic (comme avant) cassait la cohérence avec l'aperçu "manche à venir"
-  // déjà affiché à l'écran en mode "Maître du jeu" : le morceau annoncé et
-  // celui réellement joué pouvaient différer. Une fois la partie lancée
-  // (buildingPlaylist déjà false), on se contente d'avancer dans l'ordre
-  // déjà déterminé et déjà prévisualisé (et éventuellement réordonné à la
-  // main via le glisser-déposer).
+  // Le mélange aléatoire est fait UNE SEULE FOIS, au moment de l'import
+  // d'une playlist Spotify (voir handleImportPlaylist ci-dessous) — pas ici.
+  // Avant, la portion "à venir" de la file était re-mélangée à chaque fois
+  // qu'on quittait l'écran de construction de playlist (buildingPlaylist
+  // true -> false) : ça semblait pratique pour garantir un ordre aléatoire
+  // même en combinant plusieurs imports/ajouts manuels, mais ça cassait
+  // silencieusement tout réordonnancement manuel (glisser-déposer) fait par
+  // l'hôte en cours de partie — rouvrir l'écran "+ Ajouter d'autres
+  // morceaux" puis relancer une manche remélangeait TOUTE la suite de la
+  // file, y compris les morceaux déjà remis dans un ordre précis à la main.
+  // On avance donc simplement dans l'ordre actuel de `queue`, qui reflète
+  // déjà fidèlement : l'ordre mélangé de chaque import de playlist, l'ordre
+  // d'ajout pour la recherche manuelle, et tout réordonnancement manuel.
   const handlePlayNextInQueue = async () => {
     if (queueIndex >= queue.length) return;
     if (players.length === 0) return; // pas de joueur = personne ne peut buzzer, le jeu resterait bloqué
@@ -519,15 +522,7 @@ export default function HostScreen() {
     spotifyPlayer.activateElement();
     setLaunchingRound(true);
 
-    let effectiveQueue = queue;
-    if (buildingPlaylist) {
-      const played = queue.slice(0, queueIndex);
-      const remaining = shuffle(queue.slice(queueIndex));
-      effectiveQueue = [...played, ...remaining];
-      setQueue(effectiveQueue);
-    }
-
-    await launchRound(effectiveQueue[queueIndex]);
+    await launchRound(queue[queueIndex]);
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
     setLaunchingRound(false);
@@ -680,9 +675,6 @@ export default function HostScreen() {
 
       <div className="w-full max-w-xl bg-surface border border-surfaceBorder rounded-3xl p-6">
         <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
-        {/* Encart à hauteur fixe avec défilement interne : avec beaucoup de
-            joueurs, cette liste ne pousse plus le reste de la page vers le
-            bas. */}
         <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
           {players.length === 0 && <li className="text-muted">En attente de joueurs…</li>}
           {gameStarted
@@ -697,11 +689,7 @@ export default function HostScreen() {
                   <span className="font-bold">{p.score} pts</span>
                 </li>
               ))
-            : // Avant que la première manche ne soit lancée, un classement n'a
-              // aucun sens (tout le monde est à 0 point) : on affiche juste les
-              // pseudos dans l'ordre d'inscription (déjà l'ordre de `players`,
-              // trié par joined_at côté requête dans subscribeToPlayers).
-              players.map((p) => (
+            : players.map((p) => (
                 <li
                   key={p.id}
                   className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
@@ -712,8 +700,6 @@ export default function HostScreen() {
         </ul>
       </div>
 
-      {/* Historique des manches : replié par défaut pour ne pas allonger la
-          page inutilement, mais toujours accessible sans quitter l'écran. */}
       <div className="w-full max-w-xl">
         <button
           onClick={() => setShowHistory((s) => !s)}
@@ -730,12 +716,6 @@ export default function HostScreen() {
             ) : (
               <ul className="flex flex-col gap-2">
                 {roundHistory.map((r, i) => {
-                  // Une manche simple (un seul buzz, comme en mode "Tout le
-                  // monde participe" ou une manche gagnée du premier coup en
-                  // mode "Maître du jeu") n'a qu'une tentative. Une manche à
-                  // rallonge (réponses partielles successives) en a
-                  // plusieurs : on affiche alors le fil complet plutôt
-                  // qu'une seule ligne résumée.
                   const attemptsForRound = roundAttempts.filter((a) => a.round_id === r.id);
                   return (
                     <li key={r.id} className="bg-white/5 rounded-xl px-4 py-2 text-sm">
@@ -779,7 +759,7 @@ export default function HostScreen() {
         )}
       </div>
 
-      <div className="w-full max-w-2xl text-center">
+      <div className="w-full max-w-6xl text-center">
         {!canStartRound && round?.status === "playing" && (
           <div className="bg-surface border border-surfaceBorder rounded-3xl px-8 py-10 animate-pulseGlow">
             <p className="text-2xl font-bold">🎵 Manche en cours — en attente d’un buzz…</p>
@@ -844,10 +824,6 @@ export default function HostScreen() {
             <p className="text-lg text-muted">
               {round.title} — {round.artist}
             </p>
-            {/* Le choix proposé à l'hôte s'adapte à ce qui est déjà acquis
-                sur cette manche (title_found/artist_found, cumulatifs) :
-                une fois un élément trouvé, redemander "l'a-t-il trouvé ?"
-                n'a plus de sens, on ne juge plus que l'élément restant. */}
             {round.title_found && !round.artist_found ? (
               <div className="flex gap-4">
                 <button
@@ -1053,11 +1029,6 @@ export default function HostScreen() {
               </p>
             )}
 
-            {/* Les deux façons d'ajouter des morceaux sont volontairement à
-                égalité visuelle (même carte, même taille) : la recherche
-                manuelle n'est pas plus mise en avant que l'import de
-                playlist, alors qu'avant l'import était relégué à un simple
-                lien texte peu visible. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
                 <h3 className="font-bold text-accentSoft">🔍 Recherche manuelle</h3>
@@ -1123,87 +1094,84 @@ export default function HostScreen() {
               <p className="text-sm text-muted">Aucune playlist trouvée sur ton compte Spotify.</p>
             )}
 
-            {myPlaylists !== null && myPlaylists.length > 0 && (
-              <div>
-                <h3 className="font-bold mb-2 text-accent2Soft">
-                  Tes playlists ({myPlaylists.length}, par ordre alphabétique)
-                </h3>
-                {/* Grid partagée par toutes les lignes (via `contents` sur
-                    chaque <li>) : les colonnes nom/bouton restent alignées
-                    et de même largeur d'une playlist à l'autre, et le nom
-                    ne revient plus à la ligne (troncature avec "…" si trop
-                    long plutôt qu'un retour à la ligne). Encart à hauteur
-                    fixe pour ne pas allonger la page quand il y a beaucoup
-                    de playlists. */}
-                <div className="max-h-64 overflow-y-auto pr-1">
-                  <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
-                    {myPlaylists.map((playlist) => (
-                      <li key={playlist.id} className="contents">
-                        <span className="bg-white/5 rounded-xl px-4 py-3 truncate">
-                          {playlist.name}{" "}
-                          <span className="text-muted">({playlist.trackCount} morceaux)</span>
+            {/* Playlists Spotify à importer et file d'attente du jeu côte à
+                côte (plutôt qu'empilées verticalement) : les deux restent
+                visibles en même temps sans avoir à faire défiler l'une pour
+                voir l'autre, ce qui aide surtout quand on veut piocher dans
+                une playlist tout en gardant un œil sur ce qui est déjà dans
+                la file. Grille à une seule colonne sur mobile (pas assez de
+                largeur pour deux colonnes lisibles). */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {myPlaylists !== null && myPlaylists.length > 0 && (
+                <div>
+                  <h3 className="font-bold mb-2 text-accent2Soft">
+                    Tes playlists Spotify
+                  </h3>
+                  <div className="max-h-64 overflow-y-auto pr-1">
+                    <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
+                      {myPlaylists.map((playlist) => (
+                        <li key={playlist.id} className="contents">
+                          <span className="bg-white/5 rounded-xl px-4 py-3 truncate">
+                            {playlist.name}{" "}
+                            <span className="text-muted">({playlist.trackCount} morceaux)</span>
+                          </span>
+                          <button
+                            onClick={() => handleImportPlaylist(playlist.id)}
+                            disabled={importingPlaylistId === playlist.id}
+                            className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
+                          >
+                            {importingPlaylistId === playlist.id ? "Import…" : "+ Importer toute la playlist"}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {upcomingQueue.length > 0 && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-accentSoft">
+                      Playlist ({upcomingQueue.length} morceau(x) à venir)
+                    </h3>
+                    <button
+                      onClick={handleClearQueue}
+                      className="text-danger text-sm hover:brightness-110 transition"
+                    >
+                      Tout retirer
+                    </button>
+                  </div>
+                  <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                    {upcomingQueue.map((track, i) => (
+                      <li
+                        key={`${track.sourceTrackId}-${i}`}
+                        draggable
+                        onDragStart={handleDragStart(i)}
+                        onDragOver={handleDragOver}
+                        onDrop={handleDrop(i)}
+                        className="flex justify-between items-center gap-3 bg-white/5 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="text-muted select-none">⠿</span>
+                          <span className="truncate">
+                            {blindMode
+                              ? `Morceau ${queueIndex + i + 1}`
+                              : `${track.title} — ${track.artist}`}
+                          </span>
                         </span>
                         <button
-                          onClick={() => handleImportPlaylist(playlist.id)}
-                          disabled={importingPlaylistId === playlist.id}
-                          className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
+                          onClick={() => handleRemoveFromQueue(i)}
+                          className="text-danger text-sm px-3 py-1 hover:brightness-110 transition whitespace-nowrap"
                         >
-                          {importingPlaylistId === playlist.id ? "Import…" : "+ Importer toute la playlist"}
+                          Retirer
                         </button>
                       </li>
                     ))}
                   </ul>
                 </div>
-              </div>
-            )}
-
-            {upcomingQueue.length > 0 && (
-              <div className="mt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h3 className="font-bold text-accentSoft">
-                    Playlist ({upcomingQueue.length} morceau(x) à venir)
-                  </h3>
-                  <button
-                    onClick={handleClearQueue}
-                    className="text-danger text-sm hover:brightness-110 transition"
-                  >
-                    Tout retirer
-                  </button>
-                </div>
-                {/* Encart à hauteur fixe avec défilement interne — c'est la
-                    liste qui pouvait le plus allonger la page avec une
-                    grosse playlist importée d'un coup. Glisser-déposer
-                    (draggable + onDragStart/onDragOver/onDrop) pour
-                    réordonner l'ordre de passage à la main. */}
-                <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
-                  {upcomingQueue.map((track, i) => (
-                    <li
-                      key={`${track.sourceTrackId}-${i}`}
-                      draggable
-                      onDragStart={handleDragStart(i)}
-                      onDragOver={handleDragOver}
-                      onDrop={handleDrop(i)}
-                      className="flex justify-between items-center gap-3 bg-white/5 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span className="text-muted select-none">⠿</span>
-                        <span className="truncate">
-                          {blindMode
-                            ? `Morceau ${queueIndex + i + 1}`
-                            : `${track.title} — ${track.artist}`}
-                        </span>
-                      </span>
-                      <button
-                        onClick={() => handleRemoveFromQueue(i)}
-                        className="text-danger text-sm px-3 py-1 hover:brightness-110 transition whitespace-nowrap"
-                      >
-                        Retirer
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+              )}
+            </div>
 
             {players.length === 0 && (
               <p className="text-sm text-muted">
