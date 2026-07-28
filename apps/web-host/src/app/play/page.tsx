@@ -395,7 +395,9 @@ function BuzzerView({
             <p className={`text-xl font-bold text-center ${iWon ? "text-accent2Soft" : "text-danger"}`}>
               {iWon
                 ? "Tu as buzzé en premier !"
-                : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+                : round.buzzed_by_player_id === null
+                  ? "Personne n’a buzzé à temps"
+                  : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
             </p>
           )}
           {isLocked && (

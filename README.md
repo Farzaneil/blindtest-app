@@ -23,9 +23,10 @@ des réseaux différents.** Concrètement, ce qui marche aujourd'hui :
 - Des joueurs rejoignent depuis leur téléphone (navigateur, pas d'appli à installer)
   avec ce code + un pseudo.
 - L'hôte se connecte à son compte Spotify Premium, construit une playlist (recherche
-  manuelle morceau par morceau, et/ou import en masse d'une de ses playlists Spotify
-  existantes — mélangée aléatoirement une seule fois, à l'import), réordonnable à la
-  main par glisser-déposer avant de lancer la partie.
+  manuelle morceau par morceau, import en masse d'une de ses playlists Spotify
+  existantes, et/ou génération automatique par genre + époque + nombre de morceaux —
+  voir « Génération de playlist par genre » plus bas), réordonnable à la main par
+  glisser-déposer avant de lancer la partie.
 - **Deux modes de jeu**, choisis une fois en tout début de partie :
   - **Maître du jeu** : l'hôte gère la partie mais ne joue pas, il voit tous les
     titres à l'avance (utile en soirée avec quelqu'un qui anime).
@@ -217,6 +218,32 @@ Points importants, vérifiés en 2026 :
   remélangés à chaque reprise de partie (piège rencontré : remélanger à chaque clic
   sur "manche suivante" écrasait silencieusement tout réordonnancement manuel fait
   par l'hôte via glisser-déposer).
+
+- **Génération de playlist par genre + époque + nombre de morceaux.** L'hôte choisit
+  un genre (ou "Tous les genres"), une époque (par décennie, ou "Toutes années") et
+  un nombre de morceaux souhaité ; l'app pioche aléatoirement des artistes dans une
+  liste curée pour ce genre, cherche leurs morceaux via `GET /v1/search`
+  (`artist:"Nom" year:2000-2009`), et complète la file avec un mélange aléatoire des
+  résultats trouvés. Pensé pour un hôte qui joue lui-même : personne, pas même celui
+  qui génère la playlist, ne sait à l'avance quels morceaux vont sortir.
+  - **Pourquoi des listes d'artistes curées à la main plutôt qu'une recherche
+    Spotify directe par genre** : depuis les changements API de février 2026, le
+    champ `popularity` a été retiré des objets Track/Artist/Album (donc plus aucun
+    moyen de trier "par morceau connu"), et les endpoints qui auraient pu servir de
+    raccourci (`/recommendations`, `/artists/{id}/top-tracks`,
+    `/browse/categories/*`) ont été supprimés. Reste le filtre `genre:` de
+    `GET /v1/search`, mais il tague les artistes avec des micro-genres très
+    précis (« disco house », « chanson française »...) qui ne collent pas à des
+    catégories larges comme « variétés » ou « disco » telles qu'on les pense pour
+    une soirée. Partir d'artistes qu'on sait soi-même représentatifs d'un genre
+    garantit des morceaux reconnaissables.
+  - Socle de genres fourni par défaut (facile à étendre dans
+    `packages/game-logic/src/genrePresets.ts`, une clé = une liste d'artistes, aucun
+    autre changement de code nécessaire) : Variétés françaises, Rap français,
+    Disco / Funk, Pop/Rock 2000-2010s, Dance / Électro.
+  - Si la file obtenue est plus courte que demandé (artiste sans résultat pour
+    l'époque choisie, etc.), l'app le signale et propose d'élargir l'époque ou de
+    repasser sur "Tous les genres".
 
 ### Mobile
 
@@ -492,12 +519,15 @@ Complété par rapport au plan initial (`docs/architecture/blueprint.docx`) :
 - ✅ Robustesse mobile web sur `/play` (zones sûres/encoche, écran qui reste allumé,
   vibration au buzz sur Android, re-synchronisation au réveil du téléphone) —
   confirmée fiable par des tests réels, hôte et joueurs, lecture Spotify comprise.
+- ✅ Génération de playlist par genre + époque + nombre de morceaux, à partir de
+  listes d'artistes curées (contournement du retrait de `popularity` et des
+  endpoints de recommandation par Spotify, février 2026).
 
 Pas encore fait, par ordre de valeur perçue :
 
 - Historique des parties passées (scores finaux, date) — pour l'instant tout est
   perdu à la fermeture de l'onglet une fois une partie terminée.
-- Mode équipe, thèmes/playlists pré-construites, playlists générées par IA.
+- Mode équipe, thèmes/playlists pré-construites.
 - Persister la file d'attente côté serveur pour la réutiliser d'une partie à l'autre.
 - Reprendre l'app mobile native (si le confort d'une vraie app installable est
   souhaité un jour — pas indispensable, le buzzer web fonctionne bien, y compris sur

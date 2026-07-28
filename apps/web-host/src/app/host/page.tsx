@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { spotify } from "@blindtest/api-clients";
+import { GENRE_PRESETS, ALL_GENRES_KEY, getArtistPool } from "@blindtest/game-logic";
 import {
   createRoom,
   getRoomById,
@@ -105,6 +106,20 @@ function shuffle<T>(array: T[]): T[] {
   return result;
 }
 
+// Options d'époque pour la génération de playlist par genre (voir
+// handleGenerateGenrePlaylist) : décennies larges plutôt qu'un input libre —
+// plus rapide à choisir pour l'hôte, et évite une plage d'années mal
+// formée. "Toutes années" ne filtre pas du tout par year: côté Spotify.
+const ERA_OPTIONS: { label: string; range: { from: number; to: number } | null }[] = [
+  { label: "Toutes années", range: null },
+  { label: "Années 70", range: { from: 1970, to: 1979 } },
+  { label: "Années 80", range: { from: 1980, to: 1989 } },
+  { label: "Années 90", range: { from: 1990, to: 1999 } },
+  { label: "Années 2000", range: { from: 2000, to: 2009 } },
+  { label: "Années 2010", range: { from: 2010, to: 2019 } },
+  { label: "Années 2020", range: { from: 2020, to: 2029 } },
+];
+
 /**
  * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
  * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
@@ -181,6 +196,26 @@ export default function HostScreen() {
   const [myPlaylists, setMyPlaylists] = useState<spotify.SpotifyPlaylistSummary[] | null>(null);
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [importingPlaylistId, setImportingPlaylistId] = useState<string | null>(null);
+
+  // Génération de playlist par genre + époque + nombre : à partir de
+  // listes d'artistes curées à la main (voir @blindtest/game-logic,
+  // genrePresets.ts) plutôt que du filtre genre: de Spotify — trop
+  // imprécis pour des catégories larges (variétés, disco...) et sans tri
+  // par popularité possible depuis février 2026 (voir commentaire sur
+  // searchArtistTracks dans packages/api-clients/src/spotify.ts). L'hôte
+  // ne voit jamais la liste de morceaux se construire au fur et à mesure
+  // (contrairement à une recherche manuelle ou un import direct) : il
+  // choisit juste 3 paramètres et la playlist apparaît déjà faite, ce qui
+  // garde la surprise même pour lui s'il joue aussi.
+  const [genreChoice, setGenreChoice] = useState<string>(ALL_GENRES_KEY);
+  const [eraChoice, setEraChoice] = useState(0); // index dans ERA_OPTIONS
+  const [genreCount, setGenreCount] = useState(15);
+  const [generatingGenrePlaylist, setGeneratingGenrePlaylist] = useState(false);
+  const [genrePlaylistTried, setGenrePlaylistTried] = useState(0);
+  const [genrePlaylistResult, setGenrePlaylistResult] = useState<{
+    foundCount: number;
+    requestedCount: number;
+  } | null>(null);
 
   const spotifyPlayer = useSpotifyPlayer();
   const pausedForRoundId = useRef<string | null>(null);
@@ -493,6 +528,59 @@ export default function HostScreen() {
     } finally {
       setImportingPlaylistId(null);
     }
+  };
+
+  /**
+   * Génère une playlist "à l'aveugle" à partir d'un genre + une époque +
+   * un nombre de morceaux souhaité — voir le commentaire sur genreChoice
+   * plus haut pour le pourquoi de cette approche (artistes curés plutôt
+   * que le filtre genre: de Spotify). Pioche des artistes au hasard dans
+   * le pool du genre choisi, récupère jusqu'à 3 de leurs morceaux par
+   * artiste (filtrés par année si une époque est choisie), puis retient
+   * `genreCount` morceaux au hasard parmi tout ce qui a été trouvé —
+   * s'arrête dès qu'il y a assez de candidats plutôt que d'interroger tout
+   * le pool, pour ne pas multiplier les appels Spotify inutilement sur un
+   * genre qui en compte beaucoup.
+   */
+  const handleGenerateGenrePlaylist = async () => {
+    if (!spotifyPlayer.accessTokenRef.current) return;
+    const yearRange = ERA_OPTIONS[eraChoice].range;
+    const pool = shuffle(getArtistPool(genreChoice));
+    const wanted = Math.max(1, genreCount);
+
+    setGeneratingGenrePlaylist(true);
+    setGenrePlaylistResult(null);
+    setGenrePlaylistTried(0);
+
+    const candidates: spotify.SpotifyTrack[] = [];
+    const seenIds = new Set<string>();
+
+    for (const artistName of pool) {
+      if (candidates.length >= wanted * 3) break;
+      try {
+        const tracks = await spotify.searchArtistTracks(
+          artistName,
+          yearRange,
+          spotifyPlayer.accessTokenRef.current
+        );
+        for (const track of shuffle(tracks).slice(0, 3)) {
+          if (!seenIds.has(track.sourceTrackId)) {
+            seenIds.add(track.sourceTrackId);
+            candidates.push(track);
+          }
+        }
+      } catch {
+        // ignore, on continue avec l'artiste suivant
+      }
+      setGenrePlaylistTried((n) => n + 1);
+    }
+
+    const picked = shuffle(candidates).slice(0, wanted);
+    if (picked.length > 0) {
+      setQueue((q) => [...q, ...picked]);
+    }
+    setGenrePlaylistResult({ foundCount: picked.length, requestedCount: wanted });
+    setGeneratingGenrePlaylist(false);
   };
 
   const launchRound = async (track: spotify.SpotifyTrack) => {
@@ -1195,6 +1283,69 @@ export default function HostScreen() {
                       : "Charger mes playlists Spotify"}
                 </button>
               </div>
+            </div>
+
+            {/* Génération de playlist "à l'aveugle" : contrairement aux 2
+                options ci-dessus (recherche, import direct), l'hôte ne voit
+                jamais les morceaux se choisir un par un — il pose 3
+                paramètres et la playlist apparaît déjà faite, ce qui garde
+                la surprise même pour lui s'il joue aussi (voir
+                handleGenerateGenrePlaylist). */}
+            <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
+              <h3 className="font-bold text-gold">🎲 Générer une playlist par genre</h3>
+              <p className="text-sm text-muted">
+                Choisis un genre, une époque et un nombre de morceaux : la playlist se construit
+                toute seule, tu ne sais pas d’avance ce qui va tomber.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <select
+                  value={genreChoice}
+                  onChange={(e) => setGenreChoice(e.target.value)}
+                  className="bg-white/5 border-2 border-gold/60 focus:shadow-glowGold outline-none transition rounded-xl px-3 py-3"
+                >
+                  <option value={ALL_GENRES_KEY}>{ALL_GENRES_KEY}</option>
+                  {Object.keys(GENRE_PRESETS).map((genre) => (
+                    <option key={genre} value={genre}>
+                      {genre}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={eraChoice}
+                  onChange={(e) => setEraChoice(Number(e.target.value))}
+                  className="bg-white/5 border-2 border-gold/60 focus:shadow-glowGold outline-none transition rounded-xl px-3 py-3"
+                >
+                  {ERA_OPTIONS.map((era, i) => (
+                    <option key={era.label} value={i}>
+                      {era.label}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  max={40}
+                  value={genreCount}
+                  onChange={(e) => setGenreCount(Number(e.target.value))}
+                  className="bg-white/5 border-2 border-gold/60 focus:shadow-glowGold outline-none transition rounded-xl px-3 py-3"
+                />
+              </div>
+              <button
+                onClick={handleGenerateGenrePlaylist}
+                disabled={generatingGenrePlaylist}
+                className="mt-auto bg-gold text-background shadow-glowGold hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold"
+              >
+                {generatingGenrePlaylist
+                  ? `Recherche… (${genrePlaylistTried} artiste(s) exploré(s))`
+                  : "🎲 Générer la playlist"}
+              </button>
+              {genrePlaylistResult !== null && (
+                <p className="text-sm text-muted">
+                  {genrePlaylistResult.foundCount >= genrePlaylistResult.requestedCount
+                    ? `✅ ${genrePlaylistResult.foundCount} morceau(x) ajouté(s).`
+                    : `${genrePlaylistResult.foundCount} morceau(x) trouvé(s) sur ${genrePlaylistResult.requestedCount} demandé(s) — essaie une époque plus large ou "${ALL_GENRES_KEY}" si tu en veux plus.`}
+                </p>
+              )}
             </div>
 
             {results.length > 0 && (

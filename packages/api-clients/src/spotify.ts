@@ -71,6 +71,32 @@ export async function searchTracks(query: string, accessToken: string): Promise<
 }
 
 /**
+ * Recherche les morceaux d'un artiste précis, éventuellement restreints à
+ * une plage d'années — utilisé par la génération de playlist par genre
+ * (voir host/page.tsx, handleGenerateGenrePlaylist et
+ * packages/game-logic/genrePresets.ts pour les listes d'artistes curées).
+ *
+ * Champs de filtre `artist:`/`year:` de l'API Search, toujours disponibles
+ * après les changements Spotify de février 2026 (contrairement à
+ * `/recommendations` ou `/artists/{id}/top-tracks`, tous deux retirés) —
+ * seule la LIMITE de résultats a changé (max 10 au lieu de 50, déjà pris en
+ * compte par searchTracks ci-dessus). Pas de tri par popularité possible
+ * (champ retiré de l'API) : les résultats sont dans l'ordre de pertinence
+ * renvoyé par Spotify, à mélanger côté appelant si on veut de la variété.
+ */
+export async function searchArtistTracks(
+  artistName: string,
+  yearRange: { from: number; to: number } | null,
+  accessToken: string
+): Promise<SpotifyTrack[]> {
+  let query = `artist:"${artistName}"`;
+  if (yearRange) {
+    query += ` year:${yearRange.from}-${yearRange.to}`;
+  }
+  return searchTracks(query, accessToken);
+}
+
+/**
  * Lance la lecture d'un morceau sur l'appareil hôte du Web Playback SDK
  * (celui identifié par deviceId, obtenu via l'event "ready" du player — voir
  * la page /spotify-test). Coupe la lecture ailleurs (téléphone, enceinte
