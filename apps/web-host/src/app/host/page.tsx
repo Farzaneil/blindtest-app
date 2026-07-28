@@ -28,6 +28,12 @@ import {
 } from "../../lib/rooms";
 import { withRanks } from "../../lib/ranking";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
+import {
+  getSpotifyQuotaLocks,
+  setSpotifyQuotaLock,
+  subscribeToSpotifyQuotaLocks,
+  type SpotifyQuotaLocks,
+} from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 
 type HostMode = "gamemaster" | "player";
@@ -129,6 +135,47 @@ const ERA_OPTIONS: { label: string; range: { from: number; to: number } | null }
 // quota pour les mêmes artistes.
 const ARTIST_SEARCH_CACHE_STORAGE_KEY = "blindtest_artist_search_cache_v1";
 
+// Formatage lisible du temps restant avant la fin du coupe-circuit quota
+// Spotify (voir searchQuotaCooldownSeconds / playlistsQuotaCooldownSeconds)
+// — en heures + minutes plutôt qu'en secondes brutes, ce délai se comptant
+// potentiellement en heures.
+function formatCooldownDuration(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.max(1, Math.ceil((totalSeconds % 3600) / 60));
+  return hours > 0 ? `${hours}h${minutes > 0 ? ` ${minutes}min` : ""}` : `${minutes}min`;
+}
+
+// Secondes restantes avant blockedUntilIso (0 si passé/absent) — dérivé de
+// `now` plutôt que recalculé via Date.now() à chaque appel, pour que le
+// rendu réagisse au ticker (voir quotaNowTick dans HostScreen) sans dépendre
+// de l'horloge système au moment précis du rendu.
+function secondsUntil(blockedUntilIso: string | undefined, now: number): number {
+  if (!blockedUntilIso) return 0;
+  const remaining = new Date(blockedUntilIso).getTime() - now;
+  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+}
+
+const SHARED_QUOTA_LOCK_DURATION_MS = 60 * 60 * 1000; // 1h, même valeur prudente que le coupe-circuit local
+
+/**
+ * Pose le verrou PARTAGÉ (voir spotifyQuotaLock.ts) uniquement si l'erreur
+ * capturée est un 429 QUOTA_EXCEEDED confirmé (pas n'importe quelle erreur
+ * réseau) — appelé depuis les catch de handleSearch / handleLoadMyPlaylists
+ * / handleImportPlaylist / handleGenerateGenrePlaylist. Le "await" est
+ * volontairement absent côté appelant (fire-and-forget) : un échec de
+ * l'écriture Supabase ne doit pas empêcher d'afficher l'erreur Spotify
+ * elle-même à l'hôte.
+ */
+function recordSharedQuotaLockIfNeeded(category: "search" | "playlists", error: unknown): void {
+  if (!(error instanceof spotify.SpotifySearchError) || error.reason !== "QUOTA_EXCEEDED") return;
+  setSpotifyQuotaLock(category, new Date(Date.now() + SHARED_QUOTA_LOCK_DURATION_MS).toISOString()).catch(
+    () => {
+      // Pas grave : le coupe-circuit local (packages/api-clients/src/spotify.ts)
+      // continue de protéger cette session même si l'écriture partagée échoue.
+    }
+  );
+}
+
 /**
  * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
  * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
@@ -226,6 +273,18 @@ export default function HostScreen() {
     requestedCount: number;
     error?: string;
   } | null>(null);
+  // Verrou PARTAGÉ (Supabase, voir spotifyQuotaLock.ts) plutôt qu'un simple
+  // état local : un coupe-circuit purement local (localStorage) ne protège
+  // que CE navigateur — si l'hôte ouvre /host depuis un autre appareil ou
+  // après avoir vidé son cache pendant que le quota Spotify est encore
+  // dépassé côté serveur, ce nouveau contexte n'a aucune trace du blocage et
+  // retente un appel qui échoue à nouveau. quotaLocks est synchronisé en
+  // direct via Realtime (voir l'effet plus bas) ; quotaNowTick force un
+  // recalcul du temps restant toutes les 30s même sans nouvel événement.
+  const [quotaLocks, setQuotaLocks] = useState<SpotifyQuotaLocks>({});
+  const [quotaNowTick, setQuotaNowTick] = useState(() => Date.now());
+  const searchQuotaCooldownSeconds = secondsUntil(quotaLocks.search, quotaNowTick);
+  const playlistsQuotaCooldownSeconds = secondsUntil(quotaLocks.playlists, quotaNowTick);
 
   const spotifyPlayer = useSpotifyPlayer();
   // Cache des recherches par artiste + époque, gardé pour toute la durée de
@@ -267,6 +326,30 @@ export default function HostScreen() {
       // Cache corrompu ou localStorage indisponible : on repart d'un cache
       // vide, ce n'est qu'une optimisation, pas une dépendance bloquante.
     }
+  }, []);
+
+  // Charge le verrou partagé au montage, puis reste synchronisé en direct
+  // via Realtime (voir spotifyQuotaLock.ts) : si UNE AUTRE session (autre
+  // navigateur, autre appareil, ou celle-ci après un F5) pose ou lève le
+  // verrou, cette page le sait quasi instantanément sans avoir besoin de
+  // retenter un appel Spotify pour "découvrir" le blocage. Le ticker de 30s
+  // ne resynchronise rien depuis Supabase : il force juste un recalcul de
+  // secondsUntil() pour faire décompter l'affichage et réactiver les
+  // boutons une fois le délai écoulé.
+  useEffect(() => {
+    let cancelled = false;
+    getSpotifyQuotaLocks().then((locks) => {
+      if (!cancelled) setQuotaLocks(locks);
+    });
+    const unsubscribe = subscribeToSpotifyQuotaLocks((locks) => {
+      if (!cancelled) setQuotaLocks(locks);
+    });
+    const tick = setInterval(() => setQuotaNowTick(Date.now()), 30_000);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+      clearInterval(tick);
+    };
   }, []);
 
   useEffect(() => {
@@ -481,12 +564,13 @@ export default function HostScreen() {
   ]);
 
   const handleSearch = async () => {
-    if (!spotifyPlayer.accessTokenRef.current) return;
+    if (!spotifyPlayer.accessTokenRef.current || searchQuotaCooldownSeconds > 0) return;
     try {
       const tracks = await spotify.searchTracks(query, spotifyPlayer.accessTokenRef.current);
       setResults(tracks);
     } catch (e: any) {
       setError(e?.message ?? "Recherche Spotify échouée.");
+      recordSharedQuotaLockIfNeeded("search", e);
     }
   };
 
@@ -534,7 +618,7 @@ export default function HostScreen() {
   };
 
   const handleLoadMyPlaylists = async () => {
-    if (!spotifyPlayer.accessTokenRef.current) return;
+    if (!spotifyPlayer.accessTokenRef.current || playlistsQuotaCooldownSeconds > 0) return;
     setLoadingPlaylists(true);
     try {
       const playlists = await spotify.listUserPlaylists(spotifyPlayer.accessTokenRef.current);
@@ -547,13 +631,14 @@ export default function HostScreen() {
       setMyPlaylists(sorted);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de charger tes playlists Spotify.");
+      recordSharedQuotaLockIfNeeded("playlists", e);
     } finally {
       setLoadingPlaylists(false);
     }
   };
 
   const handleImportPlaylist = async (playlistId: string) => {
-    if (!spotifyPlayer.accessTokenRef.current) return;
+    if (!spotifyPlayer.accessTokenRef.current || playlistsQuotaCooldownSeconds > 0) return;
     setImportingPlaylistId(playlistId);
     try {
       const tracks = await spotify.getPlaylistTracks(playlistId, spotifyPlayer.accessTokenRef.current);
@@ -563,6 +648,7 @@ export default function HostScreen() {
       setQueue((q) => [...q, ...shuffle(tracks)]);
     } catch (e: any) {
       setError(e?.message ?? "Impossible d’importer cette playlist.");
+      recordSharedQuotaLockIfNeeded("playlists", e);
     } finally {
       setImportingPlaylistId(null);
     }
@@ -589,7 +675,7 @@ export default function HostScreen() {
    * pas assez d'artistes distincts pour atteindre le nombre demandé.
    */
   const handleGenerateGenrePlaylist = async () => {
-    if (!spotifyPlayer.accessTokenRef.current) return;
+    if (!spotifyPlayer.accessTokenRef.current || searchQuotaCooldownSeconds > 0) return;
     const yearRange = ERA_OPTIONS[eraChoice].range;
     const pool = shuffle(getArtistPool(genreChoice));
     const wanted = Math.max(1, genreCount);
@@ -641,6 +727,7 @@ export default function HostScreen() {
     let errorCount = 0;
     let sawRateLimit = false;
     let sawAuthError = false;
+    let sawQuotaExceeded = false;
     let retryAfterSeconds: number | null = null;
     const eraCacheKey = yearRange ? `${yearRange.from}-${yearRange.to}` : "all";
 
@@ -693,6 +780,7 @@ export default function HostScreen() {
           if (e.status === 429) {
             sawRateLimit = true;
             retryAfterSeconds = e.retryAfterSeconds;
+            if (e.reason === "QUOTA_EXCEEDED") sawQuotaExceeded = true;
           }
           if (e.status === 401) sawAuthError = true;
         }
@@ -760,6 +848,13 @@ export default function HostScreen() {
       }
     }
     setGenrePlaylistResult({ foundCount: picked.length, requestedCount: wanted, error });
+    if (sawQuotaExceeded) {
+      setSpotifyQuotaLock("search", new Date(Date.now() + SHARED_QUOTA_LOCK_DURATION_MS).toISOString()).catch(
+        () => {
+          // Pas grave : le coupe-circuit local continue de protéger cette session.
+        }
+      );
+    }
     setGeneratingGenrePlaylist(false);
   };
 
@@ -1425,6 +1520,32 @@ export default function HostScreen() {
               </p>
             )}
 
+            {/* Coupe-circuit quota Spotify (verrou PARTAGÉ via Supabase, voir
+                spotifyQuotaLock.ts) : un bandeau visible plutôt que de
+                laisser l'hôte cliquer sur les boutons Spotify ci-dessous
+                pour découvrir l'erreur à chaque fois. Les deux catégories
+                sont indépendantes (voir le commentaire sur quotaLocks plus
+                haut), donc affichées séparément : un quota dépassé sur
+                l'une n'implique pas que l'autre le soit aussi. */}
+            {(searchQuotaCooldownSeconds > 0 || playlistsQuotaCooldownSeconds > 0) && (
+              <div className="flex flex-col gap-1 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
+                {searchQuotaCooldownSeconds > 0 && (
+                  <p>
+                    ⚠️ Spotify a atteint son quota de recherche — recherche manuelle et génération
+                    par genre en pause. Nouvelle tentative possible dans environ{" "}
+                    {formatCooldownDuration(searchQuotaCooldownSeconds)}.
+                  </p>
+                )}
+                {playlistsQuotaCooldownSeconds > 0 && (
+                  <p>
+                    ⚠️ Spotify a atteint son quota pour les playlists — chargement et import en
+                    pause. Nouvelle tentative possible dans environ{" "}
+                    {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
                 <h3 className="font-bold text-accentSoft">🔍 Recherche manuelle</h3>
@@ -1435,11 +1556,13 @@ export default function HostScreen() {
                     onChange={(e) => setQuery(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                     placeholder="Titre, artiste…"
-                    className="flex-1 min-w-0 bg-white/5 border-2 border-accent focus:shadow-glowAccent outline-none transition rounded-xl px-4 py-3"
+                    disabled={searchQuotaCooldownSeconds > 0}
+                    className="flex-1 min-w-0 bg-white/5 border-2 border-accent focus:shadow-glowAccent outline-none transition rounded-xl px-4 py-3 disabled:opacity-60"
                   />
                   <button
                     onClick={handleSearch}
-                    className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-xl font-bold whitespace-nowrap"
+                    disabled={searchQuotaCooldownSeconds > 0}
+                    className="bg-accent shadow-glowAccent hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold whitespace-nowrap"
                   >
                     Chercher
                   </button>
@@ -1453,7 +1576,7 @@ export default function HostScreen() {
                 </p>
                 <button
                   onClick={handleLoadMyPlaylists}
-                  disabled={loadingPlaylists || myPlaylists !== null}
+                  disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
                   className="mt-auto bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold"
                 >
                   {myPlaylists !== null
@@ -1512,7 +1635,7 @@ export default function HostScreen() {
               </div>
               <button
                 onClick={handleGenerateGenrePlaylist}
-                disabled={generatingGenrePlaylist}
+                disabled={generatingGenrePlaylist || searchQuotaCooldownSeconds > 0}
                 className="mt-auto bg-gold text-background shadow-glowGold hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold"
               >
                 {generatingGenrePlaylist
@@ -1578,7 +1701,7 @@ export default function HostScreen() {
                           </span>
                           <button
                             onClick={() => handleImportPlaylist(playlist.id)}
-                            disabled={importingPlaylistId === playlist.id}
+                            disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
                             className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
                           >
                             {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}

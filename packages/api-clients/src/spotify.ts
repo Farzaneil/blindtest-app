@@ -54,20 +54,140 @@ type SpotifySearchResponse = {
  * d'auth (401) d'un simple rate-limit (429, temporaire) plutôt que de
  * deviner à partir du texte du message.
  */
+function parseSpotifyErrorReason(bodyText: string): string | null {
+  try {
+    const parsed = JSON.parse(bodyText) as { error?: { reason?: string } };
+    return parsed.error?.reason ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export class SpotifySearchError extends Error {
   status: number;
   retryAfterSeconds: number | null;
+  // "QUOTA_EXCEEDED" (voir la mise à jour Spotify du 23/07/2026) si connu,
+  // extrait du corps de la réponse — permet aux appelants (voir
+  // host/page.tsx) de distinguer un vrai dépassement de quota confirmé d'un
+  // 429 générique, avant de poser un verrou de longue durée (1h) plutôt
+  // qu'une simple pause.
+  reason: string | null;
 
   constructor(status: number, body: string, retryAfterSeconds: number | null) {
     super(`Recherche Spotify échouée (${status}): ${body}`);
     this.name = "SpotifySearchError";
     this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.reason = parseSpotifyErrorReason(body);
   }
+}
+
+// --- Coupe-circuit local pour le quota Spotify (429 QUOTA_EXCEEDED) -------
+//
+// Spotify ne documente pas la durée de réinitialisation de ce quota (compté
+// par compte développeur depuis la mise à jour du 23/07/2026, pas par app),
+// et des retours de développeurs suggèrent que ça peut se compter en heures,
+// pas en secondes (contrairement au rate-limit classique, fenêtre glissante
+// de 30s). Sans garde-fou, chaque action de l'hôte continuerait à
+// interroger Spotify en pure perte tant que le quota est dépassé.
+//
+// IMPORTANT — le quota n'est PAS un seul bucket global pour toute l'API :
+// constaté en usage réel, /me/playlists et /playlists/{id}/items continuent
+// de répondre normalement pendant que /search renvoie 429 QUOTA_EXCEEDED.
+// Le coupe-circuit est donc scindé en deux catégories indépendantes plutôt
+// qu'un seul verrou partagé — sans ça, un quota de recherche dépassé
+// bloquerait à tort l'import de playlist, qui lui fonctionne toujours.
+type QuotaCategory = "search" | "playlists";
+
+const QUOTA_BLOCK_COOLDOWN_MS = 60 * 60 * 1000; // 1h — valeur prudente, pas de chiffre officiel disponible
+
+function quotaStorageKey(category: QuotaCategory): string {
+  return `blindtest_spotify_quota_blocked_until__${category}`;
+}
+
+function getQuotaBlockedUntil(category: QuotaCategory): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    return Number(window.localStorage.getItem(quotaStorageKey(category)) ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
+function setQuotaBlockedUntil(category: QuotaCategory, timestampMs: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(quotaStorageKey(category), String(timestampMs));
+  } catch {
+    // localStorage indisponible (navigation privée...) : le coupe-circuit
+    // ne survivra pas à un F5, mais reste actif pour le reste de la session.
+  }
+}
+
+function getQuotaCooldownRemainingSecondsFor(category: QuotaCategory): number {
+  const remaining = getQuotaBlockedUntil(category) - Date.now();
+  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+}
+
+/**
+ * Secondes restantes avant la fin du coupe-circuit pour la recherche
+ * (recherche manuelle ET génération de playlist par genre, qui passent
+ * toutes les deux par searchTracks) — 0 si aucun blocage actif. Exposé pour
+ * que l'UI (voir host/page.tsx) désactive les boutons concernés et affiche
+ * un message plutôt que de laisser l'hôte cliquer dans le vide.
+ */
+export function getSearchQuotaCooldownRemainingSeconds(): number {
+  return getQuotaCooldownRemainingSecondsFor("search");
+}
+
+/**
+ * Secondes restantes avant la fin du coupe-circuit pour les playlists
+ * (chargement de la liste + import du contenu) — indépendant du quota de
+ * recherche, voir le commentaire plus haut sur pourquoi ces deux catégories
+ * sont séparées.
+ */
+export function getPlaylistsQuotaCooldownRemainingSeconds(): number {
+  return getQuotaCooldownRemainingSecondsFor("playlists");
+}
+
+/**
+ * À appeler en tout début de toute fonction qui appelle l'API Spotify, avec
+ * la catégorie de quota concernée. Lève SpotifySearchError(429, ...)
+ * immédiatement, sans aucun appel réseau, si un 429 QUOTA_EXCEEDED a été
+ * détecté sur cette catégorie il y a moins de QUOTA_BLOCK_COOLDOWN_MS.
+ */
+function assertNotQuotaBlocked(category: QuotaCategory): void {
+  const remainingSeconds = getQuotaCooldownRemainingSecondsFor(category);
+  if (remainingSeconds > 0) {
+    throw new SpotifySearchError(
+      429,
+      '{"error":{"status":429,"message":"Quota Spotify probablement toujours dépassé (coupe-circuit local, aucune requête envoyée)","reason":"QUOTA_EXCEEDED"}}',
+      remainingSeconds
+    );
+  }
+}
+
+/**
+ * À appeler juste après avoir reçu une réponse HTTP non-OK de Spotify, avec
+ * la catégorie concernée, son statut et le corps de la réponse déjà lu —
+ * active le coupe-circuit de cette catégorie si (et seulement si) c'est
+ * bien un 429 avec reason: QUOTA_EXCEEDED (pas un simple rate-limit
+ * passager, ni une autre erreur 4xx/5xx).
+ */
+function recordIfQuotaExceeded(category: QuotaCategory, status: number, bodyText: string): void {
+  if (status !== 429) return;
+  if (parseSpotifyErrorReason(bodyText) === "QUOTA_EXCEEDED") {
+    setQuotaBlockedUntil(category, Date.now() + QUOTA_BLOCK_COOLDOWN_MS);
+  }
+  // Corps non-JSON ou reason différent : impossible de confirmer que c'est
+  // un QUOTA_EXCEEDED, on n'active pas le coupe-circuit par prudence (mieux
+  // vaut risquer un 429 de plus que bloquer l'app pour une erreur qui n'en
+  // est peut-être pas une).
 }
 
 export async function searchTracks(query: string, accessToken: string): Promise<SpotifyTrack[]> {
   if (!query.trim()) return [];
+  assertNotQuotaBlocked("search");
 
   const params = new URLSearchParams({ q: query, type: "track", limit: "10" });
   const res = await fetch(`https://api.spotify.com/v1/search?${params.toString()}`, {
@@ -76,6 +196,7 @@ export async function searchTracks(query: string, accessToken: string): Promise<
 
   if (!res.ok) {
     const text = await res.text();
+    recordIfQuotaExceeded("search", res.status, text);
     const retryAfterHeader = res.headers.get("Retry-After");
     const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : null;
     throw new SpotifySearchError(res.status, text, retryAfterSeconds);
@@ -231,11 +352,13 @@ type SpotifyPlaylistsResponse = {
  * propres playlists (voir listUserPlaylists ci-dessous).
  */
 async function getCurrentUserId(accessToken: string): Promise<string> {
+  assertNotQuotaBlocked("playlists");
   const res = await fetch("https://api.spotify.com/v1/me", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) {
     const text = await res.text();
+    recordIfQuotaExceeded("playlists", res.status, text);
     throw new Error(`Impossible de récupérer le profil Spotify (${res.status}): ${text}`);
   }
   const data = (await res.json()) as { id: string };
@@ -261,9 +384,11 @@ export async function listUserPlaylists(accessToken: string): Promise<SpotifyPla
   let url: string | null = "https://api.spotify.com/v1/me/playlists?limit=50";
 
   while (url) {
+    assertNotQuotaBlocked("playlists");
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) {
       const text = await res.text();
+      recordIfQuotaExceeded("playlists", res.status, text);
       throw new Error(`Chargement des playlists Spotify échoué (${res.status}): ${text}`);
     }
     const data = (await res.json()) as SpotifyPlaylistsResponse;
@@ -327,6 +452,7 @@ export async function getPlaylistTracks(playlistId: string, accessToken: string)
     encodeURIComponent("items(item(id,name,type,duration_ms,artists(name),album(images))),next");
 
   while (url) {
+    assertNotQuotaBlocked("playlists");
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) {
       if (res.status === 403) {
@@ -335,6 +461,7 @@ export async function getPlaylistTracks(playlistId: string, accessToken: string)
         );
       }
       const text = await res.text();
+      recordIfQuotaExceeded("playlists", res.status, text);
       throw new Error(`Chargement de la playlist Spotify échoué (${res.status}): ${text}`);
     }
     const data = (await res.json()) as SpotifyPlaylistItemsResponse;
