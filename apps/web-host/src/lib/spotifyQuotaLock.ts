@@ -11,21 +11,36 @@ import { supabase } from "./supabase";
  * "playlists" (chargement + import de playlist) sont des quotas
  * indépendants côté Spotify — voir le commentaire sur QuotaCategory dans
  * spotify.ts.
+ *
+ * consecutive_hits (voir 0013_spotify_quota_locks_backoff.sql) sert au
+ * backoff exponentiel : Spotify ne documentant aucun délai de
+ * réinitialisation, chaque confirmation QUOTA_EXCEEDED consécutive double
+ * la durée du blocage plutôt que de deviner un chiffre fixe qui serait
+ * presque sûrement faux (trop court ou trop long) — voir host/page.tsx,
+ * computeQuotaBackoffMs.
  */
 export type SpotifyQuotaCategory = "search" | "playlists";
 
-export type SpotifyQuotaLocks = Partial<Record<SpotifyQuotaCategory, string>>;
+export type SpotifyQuotaLockState = { blockedUntil: string; consecutiveHits: number };
+
+export type SpotifyQuotaLocks = Partial<Record<SpotifyQuotaCategory, SpotifyQuotaLockState>>;
 
 /**
  * Récupère l'état actuel des verrous (une entrée par catégorie déjà
- * bloquée ; absente si jamais bloquée) — utilisé au montage de /host avant
- * que l'abonnement Realtime ci-dessous ne prenne le relais.
+ * bloquée ; absente si jamais bloquée, ou si redevenue saine — voir
+ * clearSpotifyQuotaLock) — utilisé au montage de /host avant que
+ * l'abonnement Realtime ci-dessous ne prenne le relais.
  */
 export async function getSpotifyQuotaLocks(): Promise<SpotifyQuotaLocks> {
-  const { data } = await supabase.from("spotify_quota_locks").select("category, blocked_until");
+  const { data } = await supabase
+    .from("spotify_quota_locks")
+    .select("category, blocked_until, consecutive_hits");
   const locks: SpotifyQuotaLocks = {};
   for (const row of data ?? []) {
-    locks[row.category as SpotifyQuotaCategory] = row.blocked_until;
+    locks[row.category as SpotifyQuotaCategory] = {
+      blockedUntil: row.blocked_until,
+      consecutiveHits: row.consecutive_hits,
+    };
   }
   return locks;
 }
@@ -39,19 +54,34 @@ export async function getSpotifyQuotaLocks(): Promise<SpotifyQuotaLocks> {
  */
 export async function setSpotifyQuotaLock(
   category: SpotifyQuotaCategory,
-  blockedUntilIso: string
+  blockedUntilIso: string,
+  consecutiveHits: number
 ): Promise<void> {
-  await supabase
-    .from("spotify_quota_locks")
-    .upsert({ category, blocked_until: blockedUntilIso, updated_at: new Date().toISOString() });
+  await supabase.from("spotify_quota_locks").upsert({
+    category,
+    blocked_until: blockedUntilIso,
+    consecutive_hits: consecutiveHits,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Efface le verrou d'une catégorie — appelé après une requête RÉUSSIE (voir
+ * host/page.tsx) pour confirmer que le quota s'est effectivement débloqué,
+ * afin que le PROCHAIN dépassement reparte de 1h plutôt que de rester
+ * escaladé sur une durée déjà longue.
+ */
+export async function clearSpotifyQuotaLock(category: SpotifyQuotaCategory): Promise<void> {
+  await supabase.from("spotify_quota_locks").delete().eq("category", category);
 }
 
 /**
  * S'abonne aux changements du verrou partagé — rappelle onChange avec
- * l'état complet (toutes catégories) à chaque insert/update, y compris tout
- * de suite au montage (contrairement aux autres subscribeTo* de rooms.ts,
- * pas besoin d'un fetch initial séparé ici : getSpotifyQuotaLocks() est
- * appelé une fois par l'appelant avant de s'abonner, voir host/page.tsx).
+ * l'état complet (toutes catégories) à chaque insert/update/delete, y
+ * compris tout de suite au montage (contrairement aux autres subscribeTo*
+ * de rooms.ts, pas besoin d'un fetch initial séparé ici :
+ * getSpotifyQuotaLocks() est appelé une fois par l'appelant avant de
+ * s'abonner, voir host/page.tsx).
  */
 export function subscribeToSpotifyQuotaLocks(onChange: (locks: SpotifyQuotaLocks) => void) {
   const fetchAndEmit = async () => {
