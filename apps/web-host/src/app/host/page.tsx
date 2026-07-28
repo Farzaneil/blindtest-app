@@ -1400,6 +1400,19 @@ export default function HostScreen() {
           </div>
         )}
 
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && (
+          <button
+            onClick={() => {
+              if (window.confirm("Se déconnecter de Spotify pour connecter un autre compte ?")) {
+                spotifyPlayer.disconnect();
+              }
+            }}
+            className="text-xs text-muted hover:text-danger underline transition self-end -mb-2"
+          >
+            Déconnecter Spotify (changer de compte)
+          </button>
+        )}
+
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "checking" && (
           <p className="text-muted">Vérification de la connexion Spotify…</p>
         )}
