@@ -67,6 +67,13 @@ const BUILDING_STORAGE_KEY = "blindtest_host_building_playlist";
 // null = comportement historique, la partie dure jusqu'à la fin de la
 // playlist.
 const TARGET_SCORE_STORAGE_KEY = "blindtest_host_target_score";
+// Nombre de morceaux max (optionnel) : même principe que le score cible,
+// mais sur le nombre de manches jouées plutôt que sur le score — permet de
+// charger une grosse playlist existante sans devoir la jouer en entier.
+// Cumulable avec targetScore (voir maxRoundsReached / targetScoreReached
+// plus bas) : la partie s'arrête dès que la première des deux limites est
+// atteinte, ou à la fin de la playlist si aucune des deux n'est fixée.
+const MAX_ROUNDS_STORAGE_KEY = "blindtest_host_max_rounds";
 
 function readStoredJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -97,6 +104,7 @@ function clearStoredGameState() {
     QUEUE_INDEX_STORAGE_KEY,
     BUILDING_STORAGE_KEY,
     TARGET_SCORE_STORAGE_KEY,
+    MAX_ROUNDS_STORAGE_KEY,
   ]) {
     try {
       window.sessionStorage.removeItem(key);
@@ -260,6 +268,10 @@ export default function HostScreen() {
   // charger de grosses playlists (100+ morceaux) sans que la partie soit
   // interminable.
   const [targetScore, setTargetScore] = useState<number | null>(null);
+  // null = pas de limite de manches, la partie dure jusqu'à la fin de la
+  // playlist (ou jusqu'au score cible, voir ci-dessus) — voir
+  // MAX_ROUNDS_STORAGE_KEY.
+  const [maxRounds, setMaxRounds] = useState<number | null>(null);
   const [spotifyOAuthError, setSpotifyOAuthError] = useState<string | null>(null);
   // true entre le clic sur "manche suivante" et la confirmation (via
   // Supabase Realtime) que la nouvelle manche est bien passée en "playing".
@@ -425,6 +437,7 @@ export default function HostScreen() {
       setRoom({ id: existing.id, code: existing.code });
       setHostMode(readStoredJSON(MODE_STORAGE_KEY, null));
       setTargetScore(readStoredJSON(TARGET_SCORE_STORAGE_KEY, null));
+      setMaxRounds(readStoredJSON(MAX_ROUNDS_STORAGE_KEY, null));
       setQueue(readStoredJSON(QUEUE_STORAGE_KEY, []));
       setQueueIndex(readStoredJSON(QUEUE_INDEX_STORAGE_KEY, 0));
       setBuildingPlaylist(readStoredJSON(BUILDING_STORAGE_KEY, true));
@@ -443,10 +456,11 @@ export default function HostScreen() {
     if (!hydrated) return;
     writeStoredJSON(MODE_STORAGE_KEY, hostMode);
     writeStoredJSON(TARGET_SCORE_STORAGE_KEY, targetScore);
+    writeStoredJSON(MAX_ROUNDS_STORAGE_KEY, maxRounds);
     writeStoredJSON(QUEUE_STORAGE_KEY, queue);
     writeStoredJSON(QUEUE_INDEX_STORAGE_KEY, queueIndex);
     writeStoredJSON(BUILDING_STORAGE_KEY, buildingPlaylist);
-  }, [hydrated, hostMode, targetScore, queue, queueIndex, buildingPlaylist]);
+  }, [hydrated, hostMode, targetScore, maxRounds, queue, queueIndex, buildingPlaylist]);
 
   useEffect(() => {
     if (!room) return;
@@ -545,14 +559,15 @@ export default function HostScreen() {
       queueIndex > 0 &&
       targetScore !== null &&
       players.some((p) => p.score >= targetScore);
-    const over = exhausted || scoreTargetHit;
+    const roundsLimitHit = canStart && maxRounds !== null && queueIndex >= maxRounds && queueIndex > 0;
+    const over = exhausted || scoreTargetHit || roundsLimitHit;
     if (over && !finishedRoomRef.current) {
       finishedRoomRef.current = true;
       finishRoom(room.id).catch(() => {});
     } else if (!over && finishedRoomRef.current) {
       finishedRoomRef.current = false;
     }
-  }, [room, round, queueIndex, queue, targetScore, players]);
+  }, [room, round, queueIndex, queue, targetScore, maxRounds, players]);
 
   // Timer visuel de la manche en cours : calculé à partir de round.started_at
   // (horodatage serveur) plutôt qu'un simple compteur local, pour rester
@@ -1096,11 +1111,17 @@ export default function HostScreen() {
   const playersReachingTargetScore =
     targetScore !== null ? players.filter((p) => p.score >= targetScore) : [];
   const targetScoreReached = canStartRound && gameStarted && playersReachingTargetScore.length > 0;
-  // La partie est terminée soit parce que la file d'attente est épuisée,
-  // soit parce qu'un joueur a atteint le score cible avant la fin de la
-  // playlist (voir targetScore) — dans les deux cas le même écran de fin
-  // s'affiche, seul le titre change (voir plus bas).
-  const gameOver = queueExhausted || targetScoreReached;
+  // Même logique que targetScoreReached mais sur le nombre de manches
+  // jouées (queueIndex) plutôt que sur le score — cumulable avec le score
+  // cible : la partie s'arrête dès la première limite atteinte.
+  const maxRoundsReached =
+    canStartRound && maxRounds !== null && queueIndex >= maxRounds && gameStarted;
+  // La partie est terminée si l'une de ces trois conditions est vraie :
+  // playlist épuisée, score cible atteint, ou nombre de morceaux max joué.
+  // Le même écran de fin s'affiche dans les trois cas, seul le titre
+  // change (voir plus bas) — priorité au score cible s'il coïncide avec
+  // une autre limite, car c'est l'info la plus intéressante à afficher.
+  const gameOver = queueExhausted || targetScoreReached || maxRoundsReached;
   const rankedPlayers = withRanks(players);
   const modeChosen = hostMode !== null;
   const blindMode = hostMode === "player";
@@ -1440,6 +1461,32 @@ export default function HostScreen() {
                 Laisse vide pour jouer jusqu’à la fin de la playlist. Sinon, la partie se termine
                 dès qu’un joueur atteint ce score.
               </p>
+
+              <label htmlFor="max-rounds" className="text-sm font-bold text-muted mt-2">
+                🔢 Nombre de morceaux max (optionnel)
+              </label>
+              <input
+                id="max-rounds"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={maxRounds ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setMaxRounds(null);
+                    return;
+                  }
+                  const parsed = Number.parseInt(raw, 10);
+                  setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                }}
+                placeholder="Toute la playlist"
+                className="bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-xl px-4 py-2 text-sm"
+              />
+              <p className="text-xs text-muted">
+                Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce
+                nombre de morceaux a été joué. Cumulable avec le score cible ci-dessus.
+              </p>
             </div>
 
             <div className="flex flex-col md:flex-row gap-4 w-full">
@@ -1505,6 +1552,10 @@ export default function HostScreen() {
                 {playersReachingTargetScore.map((p) => p.display_name).join(" et ")}{" "}
                 {playersReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore}{" "}
                 points !
+              </p>
+            ) : maxRoundsReached ? (
+              <p className="text-3xl font-bold text-gold text-center">
+                🎼 Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte !
               </p>
             ) : (
               <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
@@ -1661,6 +1712,30 @@ export default function HostScreen() {
                 className="w-28 bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-lg px-3 py-1"
               />
               <span className="text-muted">pts</span>
+            </div>
+
+            <div className="flex items-center gap-2 text-sm">
+              <label htmlFor="max-rounds-inline" className="text-muted whitespace-nowrap">
+                🔢 Morceaux max :
+              </label>
+              <input
+                id="max-rounds-inline"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={maxRounds ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setMaxRounds(null);
+                    return;
+                  }
+                  const parsed = Number.parseInt(raw, 10);
+                  setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                }}
+                placeholder="Toute la playlist"
+                className="w-28 bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-lg px-3 py-1"
+              />
             </div>
 
             {blindMode && (
