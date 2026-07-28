@@ -45,6 +45,27 @@ type SpotifySearchResponse = {
   };
 };
 
+/**
+ * Erreur typée levée par searchTracks en cas de réponse HTTP non-OK — porte
+ * le code de statut et, pour un 429 (quota dépassé, voir le commentaire en
+ * tête de fichier sur la limite Developer Mode), le délai indiqué par
+ * Spotify dans l'en-tête Retry-After. Permet aux appelants (voir
+ * host/page.tsx, handleGenerateGenrePlaylist) de distinguer un vrai souci
+ * d'auth (401) d'un simple rate-limit (429, temporaire) plutôt que de
+ * deviner à partir du texte du message.
+ */
+export class SpotifySearchError extends Error {
+  status: number;
+  retryAfterSeconds: number | null;
+
+  constructor(status: number, body: string, retryAfterSeconds: number | null) {
+    super(`Recherche Spotify échouée (${status}): ${body}`);
+    this.name = "SpotifySearchError";
+    this.status = status;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
 export async function searchTracks(query: string, accessToken: string): Promise<SpotifyTrack[]> {
   if (!query.trim()) return [];
 
@@ -55,7 +76,9 @@ export async function searchTracks(query: string, accessToken: string): Promise<
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Recherche Spotify échouée (${res.status}): ${text}`);
+    const retryAfterHeader = res.headers.get("Retry-After");
+    const retryAfterSeconds = retryAfterHeader ? Number(retryAfterHeader) : null;
+    throw new SpotifySearchError(res.status, text, retryAfterSeconds);
   }
 
   const data = (await res.json()) as SpotifySearchResponse;

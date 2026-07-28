@@ -120,6 +120,15 @@ const ERA_OPTIONS: { label: string; range: { from: number; to: number } | null }
   { label: "Années 2020", range: { from: 2020, to: 2029 } },
 ];
 
+// Clé localStorage pour persister artistSearchCache (voir plus bas) entre
+// deux chargements de la page /host — le quota Spotify Developer Mode est
+// désormais compté par compte développeur (pas juste par app) et ne se
+// débloque pas rapidement une fois dépassé (pas de fenêtre glissante de 30s
+// comme le rate-limit classique) : un simple F5 pendant les tests ne doit
+// pas effacer ce qu'on a déjà réussi à récupérer, sous peine de re-brûler du
+// quota pour les mêmes artistes.
+const ARTIST_SEARCH_CACHE_STORAGE_KEY = "blindtest_artist_search_cache_v1";
+
 /**
  * Écran hôte / "TV" — voir les commentaires dans supabase/migrations et dans
  * lib/rooms.ts pour le détail du modèle temps réel. Rappel : cette page
@@ -215,9 +224,19 @@ export default function HostScreen() {
   const [genrePlaylistResult, setGenrePlaylistResult] = useState<{
     foundCount: number;
     requestedCount: number;
+    error?: string;
   } | null>(null);
 
   const spotifyPlayer = useSpotifyPlayer();
+  // Cache des recherches par artiste + époque, gardé pour toute la durée de
+  // la session hôte (pas juste un appel à handleGenerateGenrePlaylist) : la
+  // limite de requêtes Spotify (voir searchTracks/SpotifySearchError dans
+  // @blindtest/api-clients) est un quota Developer Mode assez strict, et
+  // pendant une soirée l'hôte régénère souvent plusieurs fois avec les mêmes
+  // paramètres (ou des paramètres proches) pour piocher un mix différent —
+  // sans cache, chaque clic re-interroge Spotify pour les mêmes artistes.
+  // Clé : "artiste::plage d'années" (ou "artiste::all" si aucune époque).
+  const artistSearchCache = useRef<Map<string, spotify.SpotifyTrack[]>>(new Map());
   const pausedForRoundId = useRef<string | null>(null);
   const timedOutRoundId = useRef<string | null>(null);
   const autoRevealedRoundKey = useRef<string | null>(null);
@@ -230,6 +249,25 @@ export default function HostScreen() {
   // rendus) — remis à false dès que la partie n'est plus en état épuisé
   // (nouvelle partie, ou reprise via "+ Ajouter d'autres morceaux").
   const finishedRoomRef = useRef(false);
+
+  // Recharge le cache de recherches par artiste (voir artistSearchCache
+  // ci-dessus) depuis localStorage au montage : survit à un F5, ce qui
+  // compte quand le quota Spotify (compté par compte développeur, pas par
+  // app, depuis la mise à jour de juillet 2026) ne se débloque pas vite —
+  // pas la peine de re-payer en quota pour des artistes déjà interrogés lors
+  // d'un chargement précédent de la page.
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(ARTIST_SEARCH_CACHE_STORAGE_KEY);
+      if (raw) {
+        const entries = JSON.parse(raw) as [string, spotify.SpotifyTrack[]][];
+        artistSearchCache.current = new Map(entries);
+      }
+    } catch {
+      // Cache corrompu ou localStorage indisponible : on repart d'un cache
+      // vide, ce n'est qu'une optimisation, pas une dépendance bloquante.
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -538,9 +576,17 @@ export default function HostScreen() {
    * le pool du genre choisi, récupère jusqu'à 3 de leurs morceaux par
    * artiste (filtrés par année si une époque est choisie), puis retient
    * `genreCount` morceaux au hasard parmi tout ce qui a été trouvé —
-   * s'arrête dès qu'il y a assez de candidats plutôt que d'interroger tout
-   * le pool, pour ne pas multiplier les appels Spotify inutilement sur un
-   * genre qui en compte beaucoup.
+   * s'arrête dès qu'on a assez d'ARTISTES DIFFÉRENTS plutôt que d'interroger
+   * tout le pool, pour ne pas multiplier les appels Spotify inutilement.
+   *
+   * La sélection finale se fait en 2 passes plutôt qu'un tirage uniforme sur
+   * tous les morceaux candidats : chaque artiste peut fournir jusqu'à 3
+   * morceaux candidats, donc un tirage uniforme pioche mécaniquement le même
+   * artiste 2-3 fois assez souvent (surtout avec peu d'artistes/morceaux
+   * demandés) — statistiquement logique, mais bizarre à l'usage pour un
+   * blind-test. On priorise donc 1 morceau par artiste, et on ne complète
+   * avec des doublons d'artiste qu'en dernier recours si le pool ne fournit
+   * pas assez d'artistes distincts pour atteindre le nombre demandé.
    */
   const handleGenerateGenrePlaylist = async () => {
     if (!spotifyPlayer.accessTokenRef.current) return;
@@ -552,34 +598,168 @@ export default function HostScreen() {
     setGenrePlaylistResult(null);
     setGenrePlaylistTried(0);
 
-    const candidates: spotify.SpotifyTrack[] = [];
-    const seenIds = new Set<string>();
-
-    for (const artistName of pool) {
-      if (candidates.length >= wanted * 3) break;
-      try {
-        const tracks = await spotify.searchArtistTracks(
-          artistName,
-          yearRange,
-          spotifyPlayer.accessTokenRef.current
-        );
-        for (const track of shuffle(tracks).slice(0, 3)) {
-          if (!seenIds.has(track.sourceTrackId)) {
-            seenIds.add(track.sourceTrackId);
-            candidates.push(track);
-          }
-        }
-      } catch {
-        // ignore, on continue avec l'artiste suivant
+    // Le token en mémoire (accessTokenRef) date du chargement de la page et
+    // peut avoir expiré depuis (durée de vie ~1h côté Spotify) : le Web
+    // Playback SDK ne le rafraîchit que quand LUI en a besoin pour la
+    // lecture, pas pour ces appels à l'API Search faits en arrière-plan. Sans
+    // ce refresh explicite, une session hôte ouverte depuis un moment fait
+    // échouer TOUTES les recherches (401) en silence (voir le catch
+    // ci-dessous) — ça ressemble à "il ne trouve plus rien", même en
+    // recréant une partie, puisque recréer une partie ne touche jamais à la
+    // session Spotify du navigateur. /api/spotify/token gère déjà le refresh
+    // via le refresh_token cookie ; on l'appelle ici pour être sûr d'avoir un
+    // token valide avant de lancer la série de recherches.
+    let accessToken = spotifyPlayer.accessTokenRef.current;
+    try {
+      const tokenRes = await fetch("/api/spotify/token");
+      const tokenData = await tokenRes.json();
+      if (!tokenData.connected) {
+        setGenrePlaylistResult({
+          foundCount: 0,
+          requestedCount: wanted,
+          error: "Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.",
+        });
+        setGeneratingGenrePlaylist(false);
+        return;
       }
-      setGenrePlaylistTried((n) => n + 1);
+      // On ne réécrit pas spotifyPlayer.accessTokenRef.current ici : c'est
+      // une valeur issue du hook useSpotifyPlayer, et ESLint (règle
+      // react-hooks/immutability, react-compiler) interdit de la muter
+      // depuis l'extérieur du hook. On garde le token frais dans une
+      // variable locale, ce qui suffit pour toute la durée de cette
+      // génération (quelques dizaines de secondes max).
+      accessToken = tokenData.accessToken;
+    } catch {
+      // Si le refresh échoue (réseau...), on retente avec le token qu'on
+      // avait déjà — au pire les recherches échoueront individuellement
+      // plus bas et seront comptées dans errorCount.
     }
 
-    const picked = shuffle(candidates).slice(0, wanted);
+    const candidates: { track: spotify.SpotifyTrack; artistName: string }[] = [];
+    const seenTrackIds = new Set<string>();
+    const contributingArtists = new Set<string>();
+    let errorCount = 0;
+    let sawRateLimit = false;
+    let sawAuthError = false;
+    let retryAfterSeconds: number | null = null;
+    const eraCacheKey = yearRange ? `${yearRange.from}-${yearRange.to}` : "all";
+
+    for (const artistName of pool) {
+      // Marge x2 : laisse de la place au tirage aléatoire final sans être
+      // bloqué par des morceaux déjà vus ou des artistes sans résultat pour
+      // l'année choisie.
+      if (contributingArtists.size >= wanted * 2) break;
+      // Dès qu'on a tapé un 429, tous les artistes suivants échoueront aussi
+      // (même fenêtre de quota) : on arrête plutôt que de brûler encore plus
+      // de quota pour rien et allonger l'attente avant que ça se débloque.
+      if (sawRateLimit) break;
+
+      const cacheKey = `${artistName}::${eraCacheKey}`;
+      const cached = artistSearchCache.current.get(cacheKey);
+
+      if (cached) {
+        // Déjà interrogé pendant cette session hôte (une régénération
+        // précédente avec le même genre/époque, par exemple) : pas besoin de
+        // re-solliciter Spotify, ça ne consomme aucun quota.
+        for (const track of shuffle(cached).slice(0, 3)) {
+          if (!seenTrackIds.has(track.sourceTrackId)) {
+            seenTrackIds.add(track.sourceTrackId);
+            candidates.push({ track, artistName });
+            contributingArtists.add(artistName);
+          }
+        }
+        setGenrePlaylistTried((n) => n + 1);
+        continue;
+      }
+
+      try {
+        const tracks = await spotify.searchArtistTracks(artistName, yearRange, accessToken);
+        artistSearchCache.current.set(cacheKey, tracks);
+        for (const track of shuffle(tracks).slice(0, 3)) {
+          if (!seenTrackIds.has(track.sourceTrackId)) {
+            seenTrackIds.add(track.sourceTrackId);
+            candidates.push({ track, artistName });
+            contributingArtists.add(artistName);
+          }
+        }
+      } catch (e) {
+        // On continue avec l'artiste suivant, mais on compte l'échec pour
+        // pouvoir distinguer "aucun résultat pertinent" d'une vraie panne
+        // dans le message final. SpotifySearchError porte le code HTTP et,
+        // pour un 429, le Retry-After renvoyé par Spotify — on ne le
+        // met PAS en cache (échec transitoire, pas un "pas de morceaux").
+        errorCount += 1;
+        if (e instanceof spotify.SpotifySearchError) {
+          if (e.status === 429) {
+            sawRateLimit = true;
+            retryAfterSeconds = e.retryAfterSeconds;
+          }
+          if (e.status === 401) sawAuthError = true;
+        }
+      }
+      setGenrePlaylistTried((n) => n + 1);
+      // Petite pause entre deux recherches (seulement pour les vrais appels
+      // réseau, pas les hits de cache ci-dessus) : une génération enchaîne
+      // des dizaines de requêtes Spotify à la suite, et les envoyer en
+      // rafale sans aucune pause est ce qui déclenche le 429 en premier
+      // lieu, même en usage normal.
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+
+    // Sauvegarde le cache mis à jour (nouveaux artistes interrogés pendant
+    // cette génération) en une seule écriture localStorage groupée, plutôt
+    // qu'à chaque itération de la boucle ci-dessus — inutile d'écrire sur
+    // disque des dizaines de fois pour une seule génération.
+    try {
+      window.localStorage.setItem(
+        ARTIST_SEARCH_CACHE_STORAGE_KEY,
+        JSON.stringify(Array.from(artistSearchCache.current.entries()))
+      );
+    } catch {
+      // Quota localStorage dépassé ou navigateur en mode privé : tant pis,
+      // le cache reste utile pour le reste de cette session en mémoire.
+    }
+
+    const shuffledCandidates = shuffle(candidates);
+    const picked: spotify.SpotifyTrack[] = [];
+    const pickedIds = new Set<string>();
+    const usedArtists = new Set<string>();
+
+    // Passe 1 : au plus 1 morceau par artiste.
+    for (const c of shuffledCandidates) {
+      if (picked.length >= wanted) break;
+      if (usedArtists.has(c.artistName)) continue;
+      usedArtists.add(c.artistName);
+      pickedIds.add(c.track.sourceTrackId);
+      picked.push(c.track);
+    }
+    // Passe 2 (dernier recours) : complète avec des doublons d'artiste si le
+    // pool n'avait pas assez d'artistes distincts pour atteindre `wanted`.
+    if (picked.length < wanted) {
+      for (const c of shuffledCandidates) {
+        if (picked.length >= wanted) break;
+        if (pickedIds.has(c.track.sourceTrackId)) continue;
+        pickedIds.add(c.track.sourceTrackId);
+        picked.push(c.track);
+      }
+    }
+
     if (picked.length > 0) {
       setQueue((q) => [...q, ...picked]);
     }
-    setGenrePlaylistResult({ foundCount: picked.length, requestedCount: wanted });
+    let error: string | undefined;
+    if (picked.length === 0 && errorCount > 0) {
+      if (sawRateLimit) {
+        error = retryAfterSeconds
+          ? `Spotify a temporairement bloqué les recherches (trop de requêtes d'un coup) — réessaie dans ${retryAfterSeconds} secondes.`
+          : "Spotify a temporairement bloqué les recherches (trop de requêtes d'un coup) — attends une minute avant de réessayer, ou demande moins de morceaux.";
+      } else if (sawAuthError) {
+        error = "Connexion Spotify expirée — recharge la page (F5) pour te reconnecter, puis réessaie.";
+      } else {
+        error = "Erreur de connexion à Spotify pendant la recherche — réessaie dans quelques instants.";
+      }
+    }
+    setGenrePlaylistResult({ foundCount: picked.length, requestedCount: wanted, error });
     setGeneratingGenrePlaylist(false);
   };
 
@@ -1340,10 +1520,12 @@ export default function HostScreen() {
                   : "🎲 Générer la playlist"}
               </button>
               {genrePlaylistResult !== null && (
-                <p className="text-sm text-muted">
-                  {genrePlaylistResult.foundCount >= genrePlaylistResult.requestedCount
-                    ? `✅ ${genrePlaylistResult.foundCount} morceau(x) ajouté(s).`
-                    : `${genrePlaylistResult.foundCount} morceau(x) trouvé(s) sur ${genrePlaylistResult.requestedCount} demandé(s) — essaie une époque plus large ou "${ALL_GENRES_KEY}" si tu en veux plus.`}
+                <p className={`text-sm ${genrePlaylistResult.error ? "text-danger" : "text-muted"}`}>
+                  {genrePlaylistResult.error
+                    ? `⚠️ ${genrePlaylistResult.error}`
+                    : genrePlaylistResult.foundCount >= genrePlaylistResult.requestedCount
+                      ? `✅ ${genrePlaylistResult.foundCount} morceau(x) ajouté(s).`
+                      : `${genrePlaylistResult.foundCount} morceau(x) trouvé(s) sur ${genrePlaylistResult.requestedCount} demandé(s) — essaie une époque plus large ou "${ALL_GENRES_KEY}" si tu en veux plus.`}
                 </p>
               )}
             </div>
