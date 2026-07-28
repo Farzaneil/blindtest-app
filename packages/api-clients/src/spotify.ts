@@ -99,28 +99,79 @@ export class SpotifySearchError extends Error {
 // bloquerait à tort l'import de playlist, qui lui fonctionne toujours.
 type QuotaCategory = "search" | "playlists";
 
-const QUOTA_BLOCK_COOLDOWN_MS = 60 * 60 * 1000; // 1h — valeur prudente, pas de chiffre officiel disponible
+// Spotify ne documente aucun délai de réinitialisation pour ce quota (voir
+// le commentaire en tête de section) — une valeur fixe devinée au hasard
+// serait soit trop courte (on retente pour rien, ça arrive vraiment : un
+// hôte a vu son quota encore dépassé après seulement 1h d'attente), soit
+// trop longue (on bloque l'app inutilement si le quota s'est en fait
+// débloqué plus vite). À la place : backoff exponentiel — 1h la première
+// fois, doublé à chaque nouvelle confirmation QUOTA_EXCEEDED consécutive
+// (2h, 4h, 8h...), plafonné à 24h. Remis à zéro dès qu'une requête RÉUSSIT
+// pour la catégorie concernée (voir resetQuotaHits, appelé juste avant
+// chaque `return` de succès ci-dessous) : un pic isolé n'escalade pas le
+// délai pour toujours, seuls des échecs RÉPÉTÉS le font monter.
+const QUOTA_BLOCK_BASE_MS = 60 * 60 * 1000; // 1h
+const QUOTA_BLOCK_MAX_MS = 24 * 60 * 60 * 1000; // 24h — plafond de sécurité, pas un chiffre officiel
 
-function quotaStorageKey(category: QuotaCategory): string {
+function quotaBlockedUntilKey(category: QuotaCategory): string {
   return `blindtest_spotify_quota_blocked_until__${category}`;
+}
+
+function quotaHitsKey(category: QuotaCategory): string {
+  return `blindtest_spotify_quota_hits__${category}`;
 }
 
 function getQuotaBlockedUntil(category: QuotaCategory): number {
   if (typeof window === "undefined") return 0;
   try {
-    return Number(window.localStorage.getItem(quotaStorageKey(category)) ?? 0);
+    return Number(window.localStorage.getItem(quotaBlockedUntilKey(category)) ?? 0);
   } catch {
     return 0;
   }
 }
 
-function setQuotaBlockedUntil(category: QuotaCategory, timestampMs: number): void {
+function getQuotaHits(category: QuotaCategory): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    return Number(window.localStorage.getItem(quotaHitsKey(category)) ?? 0);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Pose (ou prolonge, avec backoff exponentiel) le blocage local pour une
+ * catégorie — incrémente le compteur de coups consécutifs et calcule la
+ * nouvelle durée à partir de lui, voir le commentaire sur
+ * QUOTA_BLOCK_BASE_MS plus haut.
+ */
+function bumpQuotaBlock(category: QuotaCategory): void {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(quotaStorageKey(category), String(timestampMs));
+    const hits = getQuotaHits(category) + 1;
+    const durationMs = Math.min(QUOTA_BLOCK_BASE_MS * 2 ** (hits - 1), QUOTA_BLOCK_MAX_MS);
+    window.localStorage.setItem(quotaHitsKey(category), String(hits));
+    window.localStorage.setItem(quotaBlockedUntilKey(category), String(Date.now() + durationMs));
   } catch {
     // localStorage indisponible (navigation privée...) : le coupe-circuit
     // ne survivra pas à un F5, mais reste actif pour le reste de la session.
+  }
+}
+
+/**
+ * Remet le compteur de coups consécutifs à zéro pour une catégorie — appelé
+ * juste avant de renvoyer un résultat qui a réussi (voir les `return` de
+ * searchTracks / listUserPlaylists / getPlaylistTracks) : confirme que le
+ * quota s'est effectivement débloqué, pour que le PROCHAIN dépassement
+ * reparte de 1h plutôt que de rester bloqué sur une durée déjà escaladée.
+ */
+function resetQuotaHits(category: QuotaCategory): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(quotaHitsKey(category));
+    window.localStorage.removeItem(quotaBlockedUntilKey(category));
+  } catch {
+    // ignore
   }
 }
 
@@ -177,7 +228,7 @@ function assertNotQuotaBlocked(category: QuotaCategory): void {
 function recordIfQuotaExceeded(category: QuotaCategory, status: number, bodyText: string): void {
   if (status !== 429) return;
   if (parseSpotifyErrorReason(bodyText) === "QUOTA_EXCEEDED") {
-    setQuotaBlockedUntil(category, Date.now() + QUOTA_BLOCK_COOLDOWN_MS);
+    bumpQuotaBlock(category);
   }
   // Corps non-JSON ou reason différent : impossible de confirmer que c'est
   // un QUOTA_EXCEEDED, on n'active pas le coupe-circuit par prudence (mieux
@@ -204,6 +255,7 @@ export async function searchTracks(query: string, accessToken: string): Promise<
 
   const data = (await res.json()) as SpotifySearchResponse;
   const items = data.tracks?.items ?? [];
+  resetQuotaHits("search");
 
   return items.map((item) => ({
     sourceTrackId: item.id,
@@ -411,6 +463,7 @@ export async function listUserPlaylists(accessToken: string): Promise<SpotifyPla
     url = data.next;
   }
 
+  resetQuotaHits("playlists");
   return playlists;
 }
 
@@ -479,5 +532,6 @@ export async function getPlaylistTracks(playlistId: string, accessToken: string)
     url = data.next;
   }
 
+  resetQuotaHits("playlists");
   return tracks;
 }

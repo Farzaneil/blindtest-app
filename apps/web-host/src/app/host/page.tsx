@@ -31,6 +31,7 @@ import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
 import {
   getSpotifyQuotaLocks,
   setSpotifyQuotaLock,
+  clearSpotifyQuotaLock,
   subscribeToSpotifyQuotaLocks,
   type SpotifyQuotaLocks,
 } from "../../lib/spotifyQuotaLock";
@@ -155,20 +156,42 @@ function secondsUntil(blockedUntilIso: string | undefined, now: number): number 
   return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
 }
 
-const SHARED_QUOTA_LOCK_DURATION_MS = 60 * 60 * 1000; // 1h, même valeur prudente que le coupe-circuit local
+// Spotify ne documente aucun délai de réinitialisation pour ce quota — un
+// délai fixe deviné au hasard est soit trop court (constaté : un 429 encore
+// actif après seulement 1h d'attente), soit trop long. Backoff exponentiel
+// à la place, en miroir du coupe-circuit local (voir QUOTA_BLOCK_BASE_MS
+// dans packages/api-clients/src/spotify.ts) : 1h la première fois, doublé à
+// chaque confirmation QUOTA_EXCEEDED consécutive, plafonné à 24h — et remis
+// à zéro dès qu'une requête réussit (voir les clearSpotifyQuotaLock
+// ci-dessous, dans les handlers).
+const SHARED_QUOTA_LOCK_BASE_MS = 60 * 60 * 1000; // 1h
+const SHARED_QUOTA_LOCK_MAX_MS = 24 * 60 * 60 * 1000; // 24h — plafond de sécurité, pas un chiffre officiel
+
+function computeSharedQuotaBackoffMs(previousHits: number): number {
+  const nextHits = previousHits + 1;
+  return Math.min(SHARED_QUOTA_LOCK_BASE_MS * 2 ** (nextHits - 1), SHARED_QUOTA_LOCK_MAX_MS);
+}
 
 /**
- * Pose le verrou PARTAGÉ (voir spotifyQuotaLock.ts) uniquement si l'erreur
- * capturée est un 429 QUOTA_EXCEEDED confirmé (pas n'importe quelle erreur
- * réseau) — appelé depuis les catch de handleSearch / handleLoadMyPlaylists
- * / handleImportPlaylist / handleGenerateGenrePlaylist. Le "await" est
- * volontairement absent côté appelant (fire-and-forget) : un échec de
- * l'écriture Supabase ne doit pas empêcher d'afficher l'erreur Spotify
- * elle-même à l'hôte.
+ * Pose (ou prolonge avec backoff) le verrou PARTAGÉ (voir
+ * spotifyQuotaLock.ts) uniquement si l'erreur capturée est un 429
+ * QUOTA_EXCEEDED confirmé (pas n'importe quelle erreur réseau) — appelé
+ * depuis les catch de handleSearch / handleLoadMyPlaylists /
+ * handleImportPlaylist / handleGenerateGenrePlaylist, avec le nombre de
+ * coups consécutifs déjà connus (quotaLocks[category]?.consecutiveHits) en
+ * paramètre puisque cette fonction, hors du composant, n'a pas accès à
+ * l'état React. Le "await" est volontairement absent côté appelant
+ * (fire-and-forget) : un échec de l'écriture Supabase ne doit pas empêcher
+ * d'afficher l'erreur Spotify elle-même à l'hôte.
  */
-function recordSharedQuotaLockIfNeeded(category: "search" | "playlists", error: unknown): void {
+function recordSharedQuotaLockIfNeeded(
+  category: "search" | "playlists",
+  error: unknown,
+  previousHits: number
+): void {
   if (!(error instanceof spotify.SpotifySearchError) || error.reason !== "QUOTA_EXCEEDED") return;
-  setSpotifyQuotaLock(category, new Date(Date.now() + SHARED_QUOTA_LOCK_DURATION_MS).toISOString()).catch(
+  const durationMs = computeSharedQuotaBackoffMs(previousHits);
+  setSpotifyQuotaLock(category, new Date(Date.now() + durationMs).toISOString(), previousHits + 1).catch(
     () => {
       // Pas grave : le coupe-circuit local (packages/api-clients/src/spotify.ts)
       // continue de protéger cette session même si l'écriture partagée échoue.
@@ -283,8 +306,8 @@ export default function HostScreen() {
   // recalcul du temps restant toutes les 30s même sans nouvel événement.
   const [quotaLocks, setQuotaLocks] = useState<SpotifyQuotaLocks>({});
   const [quotaNowTick, setQuotaNowTick] = useState(() => Date.now());
-  const searchQuotaCooldownSeconds = secondsUntil(quotaLocks.search, quotaNowTick);
-  const playlistsQuotaCooldownSeconds = secondsUntil(quotaLocks.playlists, quotaNowTick);
+  const searchQuotaCooldownSeconds = secondsUntil(quotaLocks.search?.blockedUntil, quotaNowTick);
+  const playlistsQuotaCooldownSeconds = secondsUntil(quotaLocks.playlists?.blockedUntil, quotaNowTick);
 
   const spotifyPlayer = useSpotifyPlayer();
   // Cache des recherches par artiste + époque, gardé pour toute la durée de
@@ -568,9 +591,10 @@ export default function HostScreen() {
     try {
       const tracks = await spotify.searchTracks(query, spotifyPlayer.accessTokenRef.current);
       setResults(tracks);
+      if (quotaLocks.search) clearSpotifyQuotaLock("search").catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? "Recherche Spotify échouée.");
-      recordSharedQuotaLockIfNeeded("search", e);
+      recordSharedQuotaLockIfNeeded("search", e, quotaLocks.search?.consecutiveHits ?? 0);
     }
   };
 
@@ -629,9 +653,10 @@ export default function HostScreen() {
         a.name.localeCompare(b.name, "fr", { sensitivity: "base" })
       );
       setMyPlaylists(sorted);
+      if (quotaLocks.playlists) clearSpotifyQuotaLock("playlists").catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? "Impossible de charger tes playlists Spotify.");
-      recordSharedQuotaLockIfNeeded("playlists", e);
+      recordSharedQuotaLockIfNeeded("playlists", e, quotaLocks.playlists?.consecutiveHits ?? 0);
     } finally {
       setLoadingPlaylists(false);
     }
@@ -646,9 +671,10 @@ export default function HostScreen() {
       // déduire l'ordre des prochaines manches à partir de sa propre
       // playlist.
       setQueue((q) => [...q, ...shuffle(tracks)]);
+      if (quotaLocks.playlists) clearSpotifyQuotaLock("playlists").catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? "Impossible d’importer cette playlist.");
-      recordSharedQuotaLockIfNeeded("playlists", e);
+      recordSharedQuotaLockIfNeeded("playlists", e, quotaLocks.playlists?.consecutiveHits ?? 0);
     } finally {
       setImportingPlaylistId(null);
     }
@@ -849,11 +875,20 @@ export default function HostScreen() {
     }
     setGenrePlaylistResult({ foundCount: picked.length, requestedCount: wanted, error });
     if (sawQuotaExceeded) {
-      setSpotifyQuotaLock("search", new Date(Date.now() + SHARED_QUOTA_LOCK_DURATION_MS).toISOString()).catch(
-        () => {
-          // Pas grave : le coupe-circuit local continue de protéger cette session.
-        }
-      );
+      const durationMs = computeSharedQuotaBackoffMs(quotaLocks.search?.consecutiveHits ?? 0);
+      setSpotifyQuotaLock(
+        "search",
+        new Date(Date.now() + durationMs).toISOString(),
+        (quotaLocks.search?.consecutiveHits ?? 0) + 1
+      ).catch(() => {
+        // Pas grave : le coupe-circuit local continue de protéger cette session.
+      });
+    } else if (candidates.length > 0 && quotaLocks.search) {
+      // Au moins une recherche a réussi pendant cette génération sans
+      // qu'aucun 429 QUOTA_EXCEEDED ne soit survenu : le quota semble bien
+      // débloqué, on efface le verrou plutôt que de laisser une escalade
+      // passée traîner inutilement.
+      clearSpotifyQuotaLock("search").catch(() => {});
     }
     setGeneratingGenrePlaylist(false);
   };
