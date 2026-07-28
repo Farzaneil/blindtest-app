@@ -77,6 +77,13 @@ export default function SpotifyTestPage() {
         <div className="w-full max-w-xl flex flex-col gap-4">
           <p className="text-green-400 text-center">✅ Player prêt (device connecté)</p>
 
+          <button
+            onClick={() => player.disconnect()}
+            className="text-sm text-gray-400 hover:text-red-400 underline transition self-center"
+          >
+            Déconnecter Spotify (changer de compte)
+          </button>
+
           <div className="flex gap-2">
             <input
               value={query}

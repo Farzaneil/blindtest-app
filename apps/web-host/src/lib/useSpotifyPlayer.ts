@@ -115,6 +115,37 @@ export function useSpotifyPlayer() {
     window.location.href = "/api/spotify/login";
   };
 
+  // Déconnexion explicite : coupe le device Web Playback SDK côté navigateur,
+  // efface les cookies de session Spotify côté serveur (route /api/spotify/logout,
+  // qui existait déjà) et repasse l'état local à "disconnected" pour réafficher
+  // le bouton "Se connecter". Permet de brancher un autre compte Spotify sans
+  // fermer complètement l'appli : Spotify affiche alors son propre écran
+  // d'autorisation avec un lien "pas vous ?" pour changer de compte (voir
+  // https://developer.spotify.com/documentation/web-api/tutorials/code-flow —
+  // Spotify ne propose pas de sélecteur de compte natif dans le flow PKCE,
+  // c'est ce lien qui permet de switcher).
+  const disconnect = async () => {
+    try {
+      playerRef.current?.disconnect?.();
+    } catch {
+      // ignore
+    }
+    playerRef.current = null;
+    accessTokenRef.current = null;
+    setDeviceId(null);
+    setErrorMessage(null);
+
+    try {
+      await fetch("/api/spotify/logout", { method: "POST" });
+    } catch {
+      // Même si l'appel réseau échoue, on repasse quand même l'UI en
+      // "disconnected" : au pire les cookies (httpOnly, expiration courte
+      // pour l'access token) redeviendront invalides tout seuls.
+    }
+
+    setState("disconnected");
+  };
+
   // Sur Safari iOS (et d'autres navigateurs mobiles), transférer la lecture
   // via l'API Spotify passe par les serveurs Spotify plutôt que par une
   // action directe du navigateur : iOS bloque alors l'audio comme s'il
@@ -128,5 +159,5 @@ export function useSpotifyPlayer() {
     playerRef.current?.activateElement?.();
   };
 
-  return { state, deviceId, errorMessage, accessTokenRef, connect, activateElement };
+  return { state, deviceId, errorMessage, accessTokenRef, connect, disconnect, activateElement };
 }
