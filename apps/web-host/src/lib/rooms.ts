@@ -67,16 +67,19 @@ export type RoundAttempt = {
  * l'alphabet à 32 caractères ^ 6).
  */
 export async function createRoom(): Promise<Room> {
+  console.log("[DEBUG] createRoom: start");
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateRoomCode();
+    console.log("[DEBUG] createRoom: avant insert, tentative", attempt, code);
     const { data, error } = await supabase
       .from("rooms")
       .insert({ code, status: "lobby" })
       .select()
       .single();
+    console.log("[DEBUG] createRoom: après insert", { data, error });
 
     if (!error && data) return data as Room;
-    if (error && error.code !== "23505") throw error; // 23505 = violation de contrainte unique
+    if (error && error.code !== "23505") throw error;
   }
   throw new Error("Impossible de générer un code de partie unique après plusieurs tentatives.");
 }
