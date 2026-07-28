@@ -63,6 +63,10 @@ const MODE_STORAGE_KEY = "blindtest_host_mode";
 const QUEUE_STORAGE_KEY = "blindtest_host_queue";
 const QUEUE_INDEX_STORAGE_KEY = "blindtest_host_queue_index";
 const BUILDING_STORAGE_KEY = "blindtest_host_building_playlist";
+// Score à atteindre pour gagner (optionnel) : voir `targetScore` plus bas.
+// null = comportement historique, la partie dure jusqu'à la fin de la
+// playlist.
+const TARGET_SCORE_STORAGE_KEY = "blindtest_host_target_score";
 
 function readStoredJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -92,6 +96,7 @@ function clearStoredGameState() {
     QUEUE_STORAGE_KEY,
     QUEUE_INDEX_STORAGE_KEY,
     BUILDING_STORAGE_KEY,
+    TARGET_SCORE_STORAGE_KEY,
   ]) {
     try {
       window.sessionStorage.removeItem(key);
@@ -248,6 +253,13 @@ export default function HostScreen() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
+  // null = pas de score cible, la partie dure jusqu'à la fin de la
+  // playlist (comportement historique). Sinon, la partie se termine dès
+  // qu'un joueur atteint (ou dépasse) ce score, même si la playlist n'est
+  // pas épuisée (voir `targetScoreReached` plus bas) — pensé pour pouvoir
+  // charger de grosses playlists (100+ morceaux) sans que la partie soit
+  // interminable.
+  const [targetScore, setTargetScore] = useState<number | null>(null);
   const [spotifyOAuthError, setSpotifyOAuthError] = useState<string | null>(null);
   // true entre le clic sur "manche suivante" et la confirmation (via
   // Supabase Realtime) que la nouvelle manche est bien passée en "playing".
@@ -412,6 +424,7 @@ export default function HostScreen() {
       }
       setRoom({ id: existing.id, code: existing.code });
       setHostMode(readStoredJSON(MODE_STORAGE_KEY, null));
+      setTargetScore(readStoredJSON(TARGET_SCORE_STORAGE_KEY, null));
       setQueue(readStoredJSON(QUEUE_STORAGE_KEY, []));
       setQueueIndex(readStoredJSON(QUEUE_INDEX_STORAGE_KEY, 0));
       setBuildingPlaylist(readStoredJSON(BUILDING_STORAGE_KEY, true));
@@ -429,10 +442,11 @@ export default function HostScreen() {
   useEffect(() => {
     if (!hydrated) return;
     writeStoredJSON(MODE_STORAGE_KEY, hostMode);
+    writeStoredJSON(TARGET_SCORE_STORAGE_KEY, targetScore);
     writeStoredJSON(QUEUE_STORAGE_KEY, queue);
     writeStoredJSON(QUEUE_INDEX_STORAGE_KEY, queueIndex);
     writeStoredJSON(BUILDING_STORAGE_KEY, buildingPlaylist);
-  }, [hydrated, hostMode, queue, queueIndex, buildingPlaylist]);
+  }, [hydrated, hostMode, targetScore, queue, queueIndex, buildingPlaylist]);
 
   useEffect(() => {
     if (!room) return;
@@ -516,7 +530,7 @@ export default function HostScreen() {
   }, [round, hostMode]);
 
   // Marque la room comme "finished" dès que la file d'attente est épuisée
-  // (canStartRound + au moins une manche déjà jouée + plus rien à venir) :
+  // OU dès qu'un joueur a atteint le score cible (voir targetScore) —
   // c'est le seul signal dont dispose /play pour savoir que la partie est
   // terminée, puisque `rounds` ne change plus une fois la dernière manche
   // jouée. Le ref évite de renvoyer la même mise à jour à chaque render tant
@@ -526,13 +540,19 @@ export default function HostScreen() {
     if (!room) return;
     const canStart = !round || round.status === "scored";
     const exhausted = canStart && queueIndex > 0 && queue.slice(queueIndex).length === 0;
-    if (exhausted && !finishedRoomRef.current) {
+    const scoreTargetHit =
+      canStart &&
+      queueIndex > 0 &&
+      targetScore !== null &&
+      players.some((p) => p.score >= targetScore);
+    const over = exhausted || scoreTargetHit;
+    if (over && !finishedRoomRef.current) {
       finishedRoomRef.current = true;
       finishRoom(room.id).catch(() => {});
-    } else if (!exhausted && finishedRoomRef.current) {
+    } else if (!over && finishedRoomRef.current) {
       finishedRoomRef.current = false;
     }
-  }, [room, round, queueIndex, queue]);
+  }, [room, round, queueIndex, queue, targetScore, players]);
 
   // Timer visuel de la manche en cours : calculé à partir de round.started_at
   // (horodatage serveur) plutôt qu'un simple compteur local, pour rester
@@ -1068,8 +1088,20 @@ export default function HostScreen() {
   const canStartRound = !round || round.status === "scored";
   const upcomingQueue = queue.slice(queueIndex);
   const queueExhausted = canStartRound && queueIndex > 0 && upcomingQueue.length === 0;
-  const rankedPlayers = withRanks(players);
   const gameStarted = queueIndex > 0;
+  // Joueur(s) ayant atteint (ou dépassé) le score cible — s'il y en a
+  // plusieurs sur la même manche, c'est une égalité traitée comme une
+  // victoire partagée plutôt qu'un vainqueur unique (voir podium plus bas,
+  // qui gère déjà les rangs à égalité).
+  const playersReachingTargetScore =
+    targetScore !== null ? players.filter((p) => p.score >= targetScore) : [];
+  const targetScoreReached = canStartRound && gameStarted && playersReachingTargetScore.length > 0;
+  // La partie est terminée soit parce que la file d'attente est épuisée,
+  // soit parce qu'un joueur a atteint le score cible avant la fin de la
+  // playlist (voir targetScore) — dans les deux cas le même écran de fin
+  // s'affiche, seul le titre change (voir plus bas).
+  const gameOver = queueExhausted || targetScoreReached;
+  const rankedPlayers = withRanks(players);
   const modeChosen = hostMode !== null;
   const blindMode = hostMode === "player";
   // Manche clôturée par expiration du timer (personne n'a buzzé) et pas
@@ -1375,6 +1407,41 @@ export default function HostScreen() {
         {canStartRound && !modeChosen && !isUnresolvedTimeout && (
           <div className="flex flex-col items-center gap-6">
             <p className="text-2xl font-bold">Comment veux-tu jouer cette partie ?</p>
+
+            {/* Score cible optionnel : permet de charger une grosse playlist
+                (100+ morceaux) sans que la partie soit interminable, en la
+                terminant dès qu'un joueur atteint ce score plutôt que
+                d'attendre la fin de la file d'attente. Vide = comportement
+                historique (jusqu'à la fin de la playlist). Réglable aussi
+                plus tard depuis le panneau playlist (voir plus bas). */}
+            <div className="w-full max-w-sm bg-surface border border-surfaceBorder rounded-2xl px-5 py-4 flex flex-col gap-2">
+              <label htmlFor="target-score" className="text-sm font-bold text-muted">
+                🎯 Score à atteindre pour gagner (optionnel)
+              </label>
+              <input
+                id="target-score"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={targetScore ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setTargetScore(null);
+                    return;
+                  }
+                  const parsed = Number.parseInt(raw, 10);
+                  setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                }}
+                placeholder="Illimité (jusqu'à la fin de la playlist)"
+                className="bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-xl px-4 py-2 text-sm"
+              />
+              <p className="text-xs text-muted">
+                Laisse vide pour jouer jusqu’à la fin de la playlist. Sinon, la partie se termine
+                dès qu’un joueur atteint ce score.
+              </p>
+            </div>
+
             <div className="flex flex-col md:flex-row gap-4 w-full">
               <button
                 onClick={() => setHostMode("gamemaster")}
@@ -1430,9 +1497,18 @@ export default function HostScreen() {
           <p className="text-muted">Connexion au lecteur Spotify…</p>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && queueExhausted && !buildingPlaylist && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-6 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
-            <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
+            {targetScoreReached ? (
+              <p className="text-3xl font-bold text-gold text-center">
+                🏆{" "}
+                {playersReachingTargetScore.map((p) => p.display_name).join(" et ")}{" "}
+                {playersReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore}{" "}
+                points !
+              </p>
+            ) : (
+              <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
+            )}
 
             {/* Podium visuel des 3 premiers (gestion des égalités déjà faite
                 par withRanks : deux joueurs à égalité partagent le même
@@ -1509,7 +1585,7 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !queueExhausted && !buildingPlaylist && (
+        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !gameOver && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
             {launchingRound ? (
               <p className="text-xl font-bold text-muted animate-pulse">Lancement de la manche…</p>
@@ -1558,6 +1634,33 @@ export default function HostScreen() {
               >
                 Changer de mode
               </button>
+            </div>
+
+            {/* Réglage du score cible toujours accessible ici, sans avoir à
+                repasser par "Changer de mode" (voir targetScore plus haut). */}
+            <div className="flex items-center gap-2 text-sm">
+              <label htmlFor="target-score-inline" className="text-muted whitespace-nowrap">
+                🎯 Score cible :
+              </label>
+              <input
+                id="target-score-inline"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={targetScore ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === "") {
+                    setTargetScore(null);
+                    return;
+                  }
+                  const parsed = Number.parseInt(raw, 10);
+                  setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                }}
+                placeholder="Illimité"
+                className="w-28 bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-lg px-3 py-1"
+              />
+              <span className="text-muted">pts</span>
             </div>
 
             {blindMode && (
