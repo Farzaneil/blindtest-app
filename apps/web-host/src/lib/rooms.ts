@@ -153,6 +153,25 @@ export async function resumeRoom(roomId: string): Promise<void> {
   await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
 }
 
+/**
+ * "Redémarrer une partie" côté hôte : remet tous les scores de la room à
+ * zéro et efface l'historique des manches jouées, sans recréer de room ni
+ * forcer les joueurs à se reconnecter (contrairement au bouton "↻ Nouvelle
+ * partie" de l'écran hôte, qui crée un tout nouveau code). La file
+ * d'attente (queue/queueIndex, gérée côté navigateur hôte en
+ * sessionStorage) n'est pas touchée ici : voir handleRestartGame dans
+ * app/host/page.tsx.
+ *
+ * Passe par la fonction Postgres reset_room_scores (voir
+ * supabase/migrations/0014_reset_room_scores.sql) pour la même raison que
+ * resolveRoundAttempt/timeoutRound : aucune policy UPDATE n'est ouverte sur
+ * `players` côté client depuis le durcissement RLS.
+ */
+export async function resetRoomScores(roomId: string): Promise<void> {
+  const { error } = await supabase.rpc("reset_room_scores", { p_room_id: roomId });
+  if (error) throw error;
+}
+
 export function subscribeToPlayers(roomId: string, onChange: (players: Player[]) => void) {
   const fetchAndEmit = async () => {
     const { data } = await supabase

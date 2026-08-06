@@ -22,6 +22,7 @@ import {
   timeoutRound,
   finishRoom,
   resumeRoom,
+  resetRoomScores,
   type Player,
   type Round,
   type RoundAttempt,
@@ -1036,6 +1037,41 @@ export default function HostScreen() {
   // plus tout seul depuis qu'on reprend la partie stockée en
   // sessionStorage. Confirmation demandée car c'est irréversible pour tout
   // le monde (joueurs déjà connectés compris).
+  // "Redémarrer une partie" (bouton sur l'écran de fin) : contrairement à
+  // handleStartNewGame ci-dessous, la room et les joueurs connectés restent
+  // les mêmes (pas de nouveau code, pas de reconnexion à faire) — seuls les
+  // scores et l'historique des manches repartent à zéro. La file d'attente
+  // n'est PAS réinitialisée : queueIndex reste où il était, donc les
+  // morceaux déjà joués ne repasseront pas, et l'hôte peut toujours en
+  // ajouter d'autres via le panneau playlist ensuite (setBuildingPlaylist).
+  const handleRestartGame = async () => {
+    if (!room) return;
+    if (
+      !window.confirm(
+        "Redémarrer la partie ? Les scores et l'historique actuels seront remis à zéro (les joueurs restent connectés)."
+      )
+    ) {
+      return;
+    }
+    try {
+      await resetRoomScores(room.id);
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de redémarrer la partie.");
+      return;
+    }
+    // Si la partie s'est terminée parce que la limite de morceaux (et non le
+    // score cible) était atteinte, la lever : queueIndex ne changeant pas au
+    // redémarrage, cette limite resterait sinon immédiatement franchie et la
+    // partie repasserait en "terminée" dès le prochain rendu (voir l'effet
+    // qui appelle finishRoom plus haut). Le score cible n'a pas ce problème,
+    // les scores repassant justement à zéro.
+    if (maxRoundsReached) {
+      setMaxRounds(null);
+    }
+    resumeRoom(room.id).catch(() => {});
+    setBuildingPlaylist(true);
+  };
+
   const handleStartNewGame = async () => {
     if (
       !window.confirm(
@@ -1624,15 +1660,27 @@ export default function HostScreen() {
                 </li>
               ))}
             </ul>
-            <button
-              onClick={() => {
-                resumeRoom(room.id).catch(() => {});
-                setBuildingPlaylist(true);
-              }}
-              className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full font-bold"
-            >
-              + Ajouter d’autres morceaux
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => {
+                  resumeRoom(room.id).catch(() => {});
+                  setBuildingPlaylist(true);
+                }}
+                className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full font-bold"
+              >
+                ▶ Continuer la partie
+              </button>
+              <button
+                onClick={handleRestartGame}
+                className="bg-surface border-2 border-accent2 hover:shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full font-bold text-accent2Soft"
+              >
+                🔄 Redémarrer une partie
+              </button>
+            </div>
+            <p className="text-xs text-muted text-center max-w-sm">
+              « Continuer » garde les scores et ajoute d’autres morceaux à la suite. «
+              Redémarrer » garde les mêmes joueurs mais remet les scores et l’historique à zéro.
+            </p>
           </div>
         )}
 
