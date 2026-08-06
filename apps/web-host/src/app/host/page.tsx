@@ -37,6 +37,33 @@ import {
   type SpotifyQuotaLocks,
 } from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
+import {
+  ArrowLeft,
+  RefreshCw,
+  RotateCcw,
+  LogOut,
+  Music2,
+  CheckCircle2,
+  XCircle,
+  Mic,
+  Bell,
+  Eye,
+  Target,
+  Hash,
+  Headphones,
+  Mic2,
+  Trophy,
+  Music,
+  Zap,
+  Flame,
+  Play,
+  Search,
+  ListMusic,
+  Dice5,
+  AlertTriangle,
+  Check,
+  GripVertical,
+} from "lucide-react";
 
 type HostMode = "gamemaster" | "player";
 
@@ -125,6 +152,29 @@ function shuffle<T>(array: T[]): T[] {
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
+}
+
+// Badge de rang réutilisé partout où un classement est affiché (liste des
+// joueurs pendant la partie, écran de fin) : or/argent/bronze pour le
+// podium (1er/2e/3e), même badge neutre pour tous les joueurs suivants —
+// pas une couleur différente par rang au-delà du podium (voir la maquette
+// direction_visuelle_minimal_premium.html validée).
+function RankBadge({ rank }: { rank: number }) {
+  const style =
+    rank === 1
+      ? "bg-gold text-goldOn border-gold"
+      : rank === 2
+        ? "bg-silver text-silverOn border-silver"
+        : rank === 3
+          ? "bg-bronze text-bronzeOn border-bronze"
+          : "bg-inkSurface2 text-inkMuted border-inkBorder";
+  return (
+    <span
+      className={`inline-flex items-center justify-center w-6 h-6 rounded-md border text-xs font-bold font-display ${style}`}
+    >
+      {rank}
+    </span>
+  );
 }
 
 // Options d'époque pour la génération de playlist par genre (voir
@@ -261,6 +311,13 @@ export default function HostScreen() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
+  // Les 3 méthodes d'ajout de morceaux (recherche / import Spotify /
+  // génération par genre) partagent le même panneau plutôt que d'être
+  // empilées verticalement : ça libère la place pour garder la file
+  // d'attente visible en permanence à côté (voir le layout deux colonnes
+  // plus bas). Chaque onglet a sa propre couleur d'identité (sauge / bleu
+  // "info" / ambre) reprise du mockup validé.
+  const [addMethodTab, setAddMethodTab] = useState<"search" | "import" | "genre">("search");
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
   // null = pas de score cible, la partie dure jusqu'à la fin de la
   // playlist (comportement historique). Sinon, la partie se termine dès
@@ -1105,13 +1162,13 @@ export default function HostScreen() {
 
   if (error) {
     return (
-      <main className="flex items-center justify-center min-h-screen p-10 text-center">
-        <div className="max-w-md bg-surface border border-danger/40 shadow-glowDanger rounded-3xl p-8">
+      <main className="flex items-center justify-center min-h-screen p-10 text-center bg-ink">
+        <div className="max-w-md bg-inkSurface border border-danger/40 rounded-2xl p-8">
           <p className="text-xl text-danger font-bold mb-2">Oups</p>
           <p className="text-white/90">
             {error}
             <br />
-            <span className="text-muted text-sm">
+            <span className="text-inkMuted text-sm">
               Vérifie que apps/web-host/.env.local contient bien NEXT_PUBLIC_SUPABASE_URL et
               NEXT_PUBLIC_SUPABASE_ANON_KEY, puis relance `npm run web-host`.
             </span>
@@ -1123,8 +1180,8 @@ export default function HostScreen() {
 
   if (!room) {
     return (
-      <main className="flex items-center justify-center min-h-screen">
-        <p className="text-xl text-muted animate-pulse">Création de la partie…</p>
+      <main className="flex items-center justify-center min-h-screen bg-ink">
+        <p className="text-xl text-inkMuted animate-pulse">Création de la partie…</p>
       </main>
     );
   }
@@ -1206,65 +1263,108 @@ export default function HostScreen() {
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10">
-      <div className="text-center bg-surface border border-surfaceBorder rounded-3xl px-10 py-6 shadow-glowAccent">
-        <p className="text-sm uppercase tracking-[0.3em] text-muted mb-1">
-          Rejoignez la partie avec le code
-        </p>
-        <p className="text-6xl font-black tracking-widest text-accentSoft">{room.code}</p>
-        <div className="flex justify-center gap-4 mt-3">
-          <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
-            ← Accueil
-          </Link>
-          <button
-            onClick={handleStartNewGame}
-            className="text-xs text-muted hover:text-danger underline transition"
-          >
-            ↻ Nouvelle partie
-          </button>
-        </div>
-      </div>
+    <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-ink">
+      {gameStarted ? (
+        <>
+          <div className="text-center bg-inkSurface border border-inkBorder rounded-2xl px-10 py-6">
+            <p className="text-sm uppercase tracking-[0.3em] text-inkMuted mb-1">
+              Rejoignez la partie avec le code
+            </p>
+            <p className="text-6xl font-bold tracking-widest text-sage font-display">{room.code}</p>
+            <div className="flex justify-center gap-4 mt-3">
+              <Link
+                href="/"
+                className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Accueil
+              </Link>
+              <button
+                onClick={handleStartNewGame}
+                className="text-xs text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Nouvelle partie
+              </button>
+            </div>
+          </div>
 
-      <div className="w-full max-w-xl bg-surface border border-surfaceBorder rounded-3xl p-6">
-        <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
-        <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
-          {players.length === 0 && <li className="text-muted">En attente de joueurs…</li>}
-          {gameStarted
-            ? rankedPlayers.map((p) => (
+          <div className="w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl p-6">
+            <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
+            <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              {players.length === 0 && <li className="text-inkMuted">En attente de joueurs…</li>}
+              {rankedPlayers.map((p) => (
                 <li
                   key={p.id}
-                  className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
+                  className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-inkSurface2"
                 >
-                  <span>
-                    {p.rank}. {p.display_name}
+                  <span className="flex items-center gap-3">
+                    <RankBadge rank={p.rank} />
+                    {p.display_name}
                   </span>
-                  <span className="font-bold">{p.score} pts</span>
-                </li>
-              ))
-            : players.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-white/5"
-                >
-                  <span>{p.display_name}</span>
+                  <span className="font-bold font-display">{p.score} pts</span>
                 </li>
               ))}
-        </ul>
-      </div>
+            </ul>
+          </div>
+        </>
+      ) : (
+        // Avant le début de la partie, les scores n'ont aucun sens (tout le
+        // monde est à 0) : un bandeau compact (code + joueurs + mode) suffit
+        // et laisse toute la place à la préparation de la playlist plutôt
+        // que d'empiler 2 grandes cartes peu informatives à ce stade.
+        <div className="w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-2xl font-bold tracking-widest text-sage font-display">{room.code}</span>
+            <div className="flex gap-4">
+              <Link
+                href="/"
+                className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Accueil
+              </Link>
+              <button
+                onClick={handleStartNewGame}
+                className="text-xs text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Nouvelle partie
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 text-sm text-inkMuted">
+            <span className="truncate">
+              {players.length === 0
+                ? "En attente de joueurs…"
+                : `${players.length} joueur${players.length > 1 ? "s" : ""} : ${players
+                    .map((p) => p.display_name)
+                    .join(", ")}`}
+            </span>
+            {hostMode && (
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                {hostMode === "gamemaster" ? (
+                  <Mic2 className="w-3.5 h-3.5 text-sage" />
+                ) : (
+                  <Headphones className="w-3.5 h-3.5 text-sage" />
+                )}
+                {hostMode === "gamemaster" ? "Maître du jeu" : "Tout le monde participe"}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
+      {roundHistory.length > 0 && (
       <div className="w-full max-w-xl">
         <button
           onClick={() => setShowHistory((s) => !s)}
-          className="text-sm text-muted hover:text-accentSoft underline transition"
+          className="text-sm text-inkMuted hover:text-sage underline transition"
         >
           {showHistory
             ? "▲ Masquer l’historique des manches"
             : `▼ Voir l’historique des manches (${roundHistory.length})`}
         </button>
         {showHistory && (
-          <div className="mt-2 bg-surface border border-surfaceBorder rounded-3xl p-4 max-h-72 overflow-y-auto">
+          <div className="mt-2 bg-inkSurface border border-inkBorder rounded-2xl p-4 max-h-72 overflow-y-auto">
             {roundHistory.length === 0 ? (
-              <p className="text-muted text-sm">Aucune manche jouée pour l’instant.</p>
+              <p className="text-inkMuted text-sm">Aucune manche jouée pour l’instant.</p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {[...roundHistory].reverse().map((r) => {
@@ -1276,12 +1376,12 @@ export default function HostScreen() {
                   const i = roundHistory.findIndex((h) => h.id === r.id);
                   const attemptsForRound = roundAttempts.filter((a) => a.round_id === r.id);
                   return (
-                    <li key={r.id} className="bg-white/5 rounded-xl px-4 py-2 text-sm">
+                    <li key={r.id} className="bg-inkSurface2 rounded-xl px-4 py-2 text-sm">
                       <p className="truncate font-medium">
                         {i + 1}. {r.title} — {r.artist}
                       </p>
                       {attemptsForRound.length === 0 ? (
-                        <p className="text-muted">Personne n’a trouvé</p>
+                        <p className="text-inkMuted">Personne n’a trouvé</p>
                       ) : (
                         <ul className="mt-1 flex flex-col gap-0.5">
                           {attemptsForRound.map((a) => {
@@ -1294,7 +1394,7 @@ export default function HostScreen() {
                                   ? "artiste seul"
                                   : "rien trouvé";
                             const colorClass =
-                              a.points_awarded > 0 ? "text-accentSoft" : "text-danger";
+                              a.points_awarded > 0 ? "text-sage" : "text-danger";
                             return (
                               <li key={a.id} className={`flex justify-between gap-3 ${colorClass}`}>
                                 <span className="truncate">
@@ -1316,40 +1416,43 @@ export default function HostScreen() {
           </div>
         )}
       </div>
+      )}
 
       <div className="w-full max-w-6xl text-center">
         {!canStartRound && round?.status === "playing" && (
-          <div className="bg-surface border border-surfaceBorder rounded-3xl px-8 py-10 animate-pulseGlow">
-            <p className="text-2xl font-bold">🎵 Manche en cours — en attente d’un buzz…</p>
+          <div className="bg-inkSurface border border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow">
+            <p className="text-2xl font-bold flex items-center justify-center gap-2">
+              <Music2 className="w-6 h-6 text-sage" /> Manche en cours — en attente d’un buzz…
+            </p>
             {!blindMode && (
-              <p className="text-lg text-muted mt-1">
+              <p className="text-lg text-inkMuted mt-1">
                 {round.title} — {round.artist}
               </p>
             )}
             {(round.title_found || round.artist_found) && (
-              <p className="text-lg text-muted mt-2">
-                {round.title_found ? `✅ Titre trouvé : ${round.title}` : "🎵 Titre encore à trouver"}
+              <p className="text-lg text-inkMuted mt-2">
+                {round.title_found ? `Titre trouvé : ${round.title}` : "Titre encore à trouver"}
                 {" · "}
-                {round.artist_found ? `✅ Artiste trouvé : ${round.artist}` : "🎤 Artiste encore à trouver"}
+                {round.artist_found ? `Artiste trouvé : ${round.artist}` : "Artiste encore à trouver"}
               </p>
             )}
             {timeLeft !== null && (
-              <p className="text-5xl font-black mt-4 text-accentSoft tabular-nums">⏱ {timeLeft}s</p>
+              <p className="text-5xl font-bold mt-4 text-sage tabular-nums font-display">{timeLeft}s</p>
             )}
           </div>
         )}
         {!canStartRound && round?.status === "buzzed" && (
-          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
-            <p className="text-3xl font-bold text-accent2Soft">
-              🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
+              <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
             {!blindMode && (
-              <p className="text-lg text-muted">
+              <p className="text-lg text-inkMuted">
                 {round.title} — {round.artist}
               </p>
             )}
             {(round.title_found || round.artist_found) && (
-              <p className="text-sm text-muted">
+              <p className="text-sm text-inkMuted">
                 Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
                   .filter(Boolean)
                   .join(" et ")}
@@ -1357,86 +1460,86 @@ export default function HostScreen() {
             )}
             {blindMode ? (
               <>
-                <p className="text-sm text-muted">
+                <p className="text-sm text-inkMuted">
                   Laisse-le/la donner sa réponse à voix haute, puis révèle le titre.
                 </p>
                 <button
                   onClick={handleReveal}
-                  className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                  className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2"
                 >
-                  👁️ Révéler la réponse
+                  <Eye className="w-5 h-5" /> Révéler la réponse
                 </button>
               </>
             ) : (
-              <p className="text-sm text-muted">
+              <p className="text-sm text-inkMuted">
                 Laisse-le/la donner sa réponse à voix haute…
               </p>
             )}
           </div>
         )}
         {!canStartRound && round?.status === "revealed" && (
-          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
-            <p className="text-3xl font-bold text-accent2Soft">
-              🔔 {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
+              <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
-            <p className="text-lg text-muted">
+            <p className="text-lg text-inkMuted">
               {round.title} — {round.artist}
             </p>
             {round.title_found && !round.artist_found ? (
-              <div className="flex gap-4">
+              <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
                 >
-                  ✅ Artiste trouvé
+                  <CheckCircle2 className="w-5 h-5 text-sage" /> Artiste trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-danger shadow-glowDanger hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                  className="flex-1 bg-transparent border border-danger/50 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
                 >
-                  ❌ Toujours pas
+                  <XCircle className="w-5 h-5" /> Toujours pas
                 </button>
               </div>
             ) : !round.title_found && round.artist_found ? (
-              <div className="flex gap-4">
+              <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
                 >
-                  ✅ Titre trouvé
+                  <CheckCircle2 className="w-5 h-5 text-sage" /> Titre trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-danger shadow-glowDanger hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+                  className="flex-1 bg-transparent border border-danger/50 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
                 >
-                  ❌ Toujours pas
+                  <XCircle className="w-5 h-5" /> Toujours pas
                 </button>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  🎵 Titre seul (+1)
+                  <Music className="w-4 h-4 text-sage" /> Titre seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="bg-accent2 shadow-glowAccent2 hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  🎤 Artiste seul (+1)
+                  <Mic className="w-4 h-4 text-sage" /> Artiste seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(true, true)}
-                  className="bg-accent shadow-glowAccent hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                  className="bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  ✅ Les deux (+2)
+                  <CheckCircle2 className="w-4 h-4" /> Les deux (+2)
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-danger shadow-glowDanger hover:brightness-110 transition px-4 py-3 rounded-full font-bold"
+                  className="bg-transparent border border-danger/50 text-danger hover:bg-danger/10 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  ❌ Aucun (-1)
+                  <XCircle className="w-4 h-4" /> Aucun (-1)
                 </button>
               </div>
             )}
@@ -1444,17 +1547,17 @@ export default function HostScreen() {
         )}
 
         {isUnresolvedTimeout && round && (
-          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
-            <p className="text-3xl font-bold text-danger">⏱ Personne n’a buzzé à temps</p>
-            <p className="text-lg text-muted">
+          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <p className="text-3xl font-bold text-danger">Personne n’a buzzé à temps</p>
+            <p className="text-lg text-inkMuted">
               La réponse était :{" "}
-              <span className="font-bold text-accentSoft">
+              <span className="font-bold text-sage">
                 {round.title} — {round.artist}
               </span>
             </p>
             <button
               onClick={() => setAcknowledgedTimeoutRoundId(round.id)}
-              className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full text-lg font-bold"
+              className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold"
             >
               Continuer
             </button>
@@ -1471,9 +1574,9 @@ export default function HostScreen() {
                 d'attendre la fin de la file d'attente. Vide = comportement
                 historique (jusqu'à la fin de la playlist). Réglable aussi
                 plus tard depuis le panneau playlist (voir plus bas). */}
-            <div className="w-full max-w-sm bg-surface border border-surfaceBorder rounded-2xl px-5 py-4 flex flex-col gap-2">
-              <label htmlFor="target-score" className="text-sm font-bold text-muted">
-                🎯 Score à atteindre pour gagner (optionnel)
+            <div className="w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-5 py-4 flex flex-col gap-2">
+              <label htmlFor="target-score" className="text-sm font-bold text-inkMuted flex items-center gap-1.5">
+                <Target className="w-4 h-4" /> Score à atteindre pour gagner (optionnel)
               </label>
               <input
                 id="target-score"
@@ -1491,15 +1594,15 @@ export default function HostScreen() {
                   setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Illimité (jusqu'à la fin de la playlist)"
-                className="bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-xl px-4 py-2 text-sm"
+                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm"
               />
-              <p className="text-xs text-muted">
+              <p className="text-xs text-inkMuted">
                 Laisse vide pour jouer jusqu’à la fin de la playlist. Sinon, la partie se termine
                 dès qu’un joueur atteint ce score.
               </p>
 
-              <label htmlFor="max-rounds" className="text-sm font-bold text-muted mt-2">
-                🔢 Nombre de morceaux max (optionnel)
+              <label htmlFor="max-rounds" className="text-sm font-bold text-inkMuted mt-2 flex items-center gap-1.5">
+                <Hash className="w-4 h-4" /> Nombre de morceaux max (optionnel)
               </label>
               <input
                 id="max-rounds"
@@ -1517,9 +1620,9 @@ export default function HostScreen() {
                   setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Toute la playlist"
-                className="bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-xl px-4 py-2 text-sm"
+                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm"
               />
-              <p className="text-xs text-muted">
+              <p className="text-xs text-inkMuted">
                 Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce
                 nombre de morceaux a été joué. Cumulable avec le score cible ci-dessus.
               </p>
@@ -1528,20 +1631,24 @@ export default function HostScreen() {
             <div className="flex flex-col md:flex-row gap-4 w-full">
               <button
                 onClick={() => setHostMode("gamemaster")}
-                className="flex-1 bg-surface hover:bg-surface/70 transition border-2 border-accent hover:shadow-glowAccent rounded-3xl px-6 py-5 text-left"
+                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
               >
-                <p className="text-lg font-bold mb-1 text-accentSoft">🎙️ Maître du jeu</p>
-                <p className="text-sm text-muted">
+                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
+                  <Mic2 className="w-5 h-5 text-sage" /> Maître du jeu
+                </p>
+                <p className="text-sm text-inkMuted">
                   Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
                   les titres à l’avance.
                 </p>
               </button>
               <button
                 onClick={() => setHostMode("player")}
-                className="flex-1 bg-surface hover:bg-surface/70 transition border-2 border-accent2 hover:shadow-glowAccent2 rounded-3xl px-6 py-5 text-left"
+                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
               >
-                <p className="text-lg font-bold mb-1 text-accent2Soft">🎧 Tout le monde participe</p>
-                <p className="text-sm text-muted">
+                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
+                  <Headphones className="w-5 h-5 text-sage" /> Tout le monde participe
+                </p>
+                <p className="text-sm text-inkMuted">
                   Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
                   révélés seulement pour valider une réponse.
                 </p>
@@ -1557,44 +1664,44 @@ export default function HostScreen() {
                 spotifyPlayer.disconnect();
               }
             }}
-            className="text-xs text-muted hover:text-danger underline transition self-end -mb-2"
+            className="text-xs text-inkMuted hover:text-danger underline transition self-end -mb-2 inline-flex items-center gap-1"
           >
-            Déconnecter Spotify (changer de compte)
+            <LogOut className="w-3.5 h-3.5" /> Déconnecter Spotify (changer de compte)
           </button>
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "checking" && (
-          <p className="text-muted">Vérification de la connexion Spotify…</p>
+          <p className="text-inkMuted">Vérification de la connexion Spotify…</p>
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "disconnected" && (
           <button
             onClick={spotifyPlayer.connect}
-            className="bg-accent shadow-glowAccent hover:brightness-110 transition px-8 py-4 rounded-full text-xl font-bold"
+            className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold"
           >
             Se connecter à Spotify pour préparer une playlist
           </button>
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (
-          <p className="text-muted">Connexion au lecteur Spotify…</p>
+          <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-6 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
+          <div className="flex flex-col items-center gap-6 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <Trophy className="w-10 h-10 text-gold" />
             {targetScoreReached ? (
-              <p className="text-3xl font-bold text-gold text-center">
-                🏆{" "}
+              <p className="text-2xl font-bold text-white text-center font-display">
                 {playersReachingTargetScore.map((p) => p.display_name).join(" et ")}{" "}
                 {playersReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore}{" "}
-                points !
+                points
               </p>
             ) : maxRoundsReached ? (
-              <p className="text-3xl font-bold text-gold text-center">
-                🎼 Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte !
+              <p className="text-2xl font-bold text-white text-center font-display">
+                Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte
               </p>
             ) : (
-              <p className="text-3xl font-bold text-gold">🏁 Playlist terminée !</p>
+              <p className="text-2xl font-bold text-white font-display">Playlist terminée</p>
             )}
 
             {/* Podium visuel des 3 premiers (gestion des égalités déjà faite
@@ -1608,12 +1715,16 @@ export default function HostScreen() {
                   .sort((a, b) => a.rank - b.rank)
                   .map((p) => {
                     const height = p.rank === 1 ? "h-24" : p.rank === 2 ? "h-16" : "h-12";
+                    // Or / argent / bronze pour le podium (1er, 2e, 3e) —
+                    // seuls les 3 premiers RANGS sont affichés ici (voir le
+                    // filter juste au-dessus), donc rank vaut toujours 1, 2
+                    // ou 3 à ce stade.
                     const podiumColor =
                       p.rank === 1
-                        ? "border-accent bg-accent/10 text-accentSoft"
+                        ? "border-gold bg-gold/10 text-gold"
                         : p.rank === 2
-                          ? "border-accent2 bg-accent2/10 text-accent2Soft"
-                          : "border-danger bg-danger/10 text-danger";
+                          ? "border-silver bg-silver/10 text-silver"
+                          : "border-bronze bg-bronze/10 text-bronze";
                     return (
                       <div key={p.id} className="flex flex-col items-center gap-1 w-20">
                         <span className="text-sm truncate w-full text-center">{p.display_name}</span>
@@ -1631,18 +1742,18 @@ export default function HostScreen() {
             {(fastestAttempt || mostContestedCount > 1) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
                 {fastestAttempt && (
-                  <div className="bg-white/5 rounded-xl px-4 py-3 text-left">
-                    <p className="text-xs text-muted">⚡ Buzzeur le plus rapide</p>
-                    <p className="text-sm font-bold text-accentSoft">
+                  <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
+                    <p className="text-xs text-inkMuted flex items-center gap-1"><Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide</p>
+                    <p className="text-sm font-bold text-sage">
                       {fastestPlayer?.display_name ?? "Joueur"} —{" "}
                       {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
                     </p>
                   </div>
                 )}
                 {mostContestedRound && mostContestedCount > 1 && (
-                  <div className="bg-white/5 rounded-xl px-4 py-3 text-left">
-                    <p className="text-xs text-muted">🔥 Manche la plus disputée</p>
-                    <p className="text-sm font-bold text-accentSoft">
+                  <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
+                    <p className="text-xs text-inkMuted flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Manche la plus disputée</p>
+                    <p className="text-sm font-bold text-sage">
                       {mostContestedRound.title} ({mostContestedCount} tentatives)
                     </p>
                   </div>
@@ -1652,32 +1763,36 @@ export default function HostScreen() {
 
             <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
               {rankedPlayers.map((p) => (
-                <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-white/5">
-                  <span>
-                    {p.rank}. {p.display_name}
+                <li
+                  key={p.id}
+                  className="flex justify-between items-center rounded-xl px-4 py-3 bg-inkSurface2"
+                >
+                  <span className="flex items-center gap-3">
+                    <RankBadge rank={p.rank} />
+                    {p.display_name}
                   </span>
-                  <span className="font-bold">{p.score} pts</span>
+                  <span className="font-bold font-display">{p.score} pts</span>
                 </li>
               ))}
             </ul>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
               <button
                 onClick={() => {
                   resumeRoom(room.id).catch(() => {});
                   setBuildingPlaylist(true);
                 }}
-                className="bg-accent shadow-glowAccent hover:brightness-110 transition px-6 py-3 rounded-full font-bold"
+                className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
-                ▶ Continuer la partie
+                <Play className="w-4 h-4" /> Continuer la partie
               </button>
               <button
                 onClick={handleRestartGame}
-                className="bg-surface border-2 border-accent2 hover:shadow-glowAccent2 hover:brightness-110 transition px-6 py-3 rounded-full font-bold text-accent2Soft"
+                className="flex-none sm:min-w-[220px] bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-6 py-3 rounded-xl font-bold text-white inline-flex items-center justify-center gap-2"
               >
-                🔄 Redémarrer une partie
+                <RotateCcw className="w-4 h-4" /> Redémarrer une partie
               </button>
             </div>
-            <p className="text-xs text-muted text-center max-w-sm">
+            <p className="text-xs text-inkMuted text-center max-w-sm">
               « Continuer » garde les scores et ajoute d’autres morceaux à la suite. «
               Redémarrer » garde les mêmes joueurs mais remet les scores et l’historique à zéro.
             </p>
@@ -1685,12 +1800,12 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !gameOver && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-4 bg-surface border border-surfaceBorder rounded-3xl px-8 py-8">
+          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
             {launchingRound ? (
-              <p className="text-xl font-bold text-muted animate-pulse">Lancement de la manche…</p>
+              <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
             ) : (
               <>
-                <p className="text-muted">
+                <p className="text-inkMuted">
                   Manche {queueIndex + 1} / {queue.length} à venir :
                 </p>
                 <p className="text-xl font-bold">
@@ -1703,18 +1818,18 @@ export default function HostScreen() {
             <button
               onClick={handlePlayNextInQueue}
               disabled={players.length === 0 || launchingRound}
-              className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-8 py-4 rounded-full text-xl font-bold"
+              className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-4 rounded-xl text-xl font-bold inline-flex items-center gap-2"
             >
-              ▶ Manche suivante
+              <Play className="w-5 h-5" /> Manche suivante
             </button>
             {players.length === 0 && (
-              <p className="text-sm text-muted">
+              <p className="text-sm text-inkMuted">
                 En attente d’au moins un joueur avant de pouvoir lancer la manche.
               </p>
             )}
             <button
               onClick={() => setBuildingPlaylist(true)}
-              className="text-sm text-muted hover:text-accentSoft underline transition"
+              className="text-sm text-inkMuted hover:text-sage underline transition"
             >
               + Ajouter d’autres morceaux à la file
             </button>
@@ -1722,14 +1837,23 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
-          <div className="flex flex-col gap-4 text-left bg-surface border border-surfaceBorder rounded-3xl p-6">
+          <div className="flex flex-col gap-4 text-left bg-inkSurface border border-inkBorder rounded-2xl p-6">
             <div className="flex justify-between items-center">
-              <span className="text-sm text-muted">
-                Mode : {hostMode === "gamemaster" ? "🎙️ Maître du jeu" : "🎧 Tout le monde participe"}
+              <span className="text-sm text-inkMuted flex items-center gap-1.5">
+                Mode :
+                {hostMode === "gamemaster" ? (
+                  <span className="inline-flex items-center gap-1 text-white font-medium">
+                    <Mic2 className="w-3.5 h-3.5 text-sage" /> Maître du jeu
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-white font-medium">
+                    <Headphones className="w-3.5 h-3.5 text-sage" /> Tout le monde participe
+                  </span>
+                )}
               </span>
               <button
                 onClick={() => setHostMode(null)}
-                className="text-sm text-muted hover:text-accentSoft underline transition"
+                className="text-sm text-inkMuted hover:text-sage underline transition"
               >
                 Changer de mode
               </button>
@@ -1738,8 +1862,8 @@ export default function HostScreen() {
             {/* Réglage du score cible toujours accessible ici, sans avoir à
                 repasser par "Changer de mode" (voir targetScore plus haut). */}
             <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="target-score-inline" className="text-muted whitespace-nowrap">
-                🎯 Score cible :
+              <label htmlFor="target-score-inline" className="text-inkMuted whitespace-nowrap flex items-center gap-1.5">
+                <Target className="w-4 h-4" /> Score cible :
               </label>
               <input
                 id="target-score-inline"
@@ -1757,14 +1881,14 @@ export default function HostScreen() {
                   setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Illimité"
-                className="w-28 bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-lg px-3 py-1"
+                className="w-28 bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-lg px-3 py-1"
               />
-              <span className="text-muted">pts</span>
+              <span className="text-inkMuted">pts</span>
             </div>
 
             <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="max-rounds-inline" className="text-muted whitespace-nowrap">
-                🔢 Morceaux max :
+              <label htmlFor="max-rounds-inline" className="text-inkMuted whitespace-nowrap flex items-center gap-1.5">
+                <Hash className="w-4 h-4" /> Morceaux max :
               </label>
               <input
                 id="max-rounds-inline"
@@ -1782,12 +1906,12 @@ export default function HostScreen() {
                   setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Toute la playlist"
-                className="w-28 bg-white/5 border-2 border-surfaceBorder focus:border-accent rounded-lg px-3 py-1"
+                className="w-28 bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-lg px-3 py-1"
               />
             </div>
 
             {blindMode && (
-              <p className="text-sm text-muted bg-white/5 border border-surfaceBorder rounded-xl px-4 py-3">
+              <p className="text-sm text-inkMuted bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
                 Les morceaux ajoutés à la file restent masqués. Pour être surpris toi aussi,
                 préfère importer une playlist entière plutôt que la recherche manuelle (chercher
                 un titre te le révèle forcément).
@@ -1802,204 +1926,253 @@ export default function HostScreen() {
                 haut), donc affichées séparément : un quota dépassé sur
                 l'une n'implique pas que l'autre le soit aussi. */}
             {(searchQuotaCooldownSeconds > 0 || playlistsQuotaCooldownSeconds > 0) && (
-              <div className="flex flex-col gap-1 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
+              <div className="flex flex-col gap-2 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
                 {searchQuotaCooldownSeconds > 0 && (
-                  <p>
-                    ⚠️ Spotify a atteint son quota de recherche — recherche manuelle et génération
-                    par genre en pause. Nouvelle tentative possible dans environ{" "}
-                    {formatCooldownDuration(searchQuotaCooldownSeconds)}.
+                  <p className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Spotify a atteint son quota de recherche — recherche manuelle et génération
+                      par genre en pause. Nouvelle tentative possible dans environ{" "}
+                      {formatCooldownDuration(searchQuotaCooldownSeconds)}.
+                    </span>
                   </p>
                 )}
                 {playlistsQuotaCooldownSeconds > 0 && (
-                  <p>
-                    ⚠️ Spotify a atteint son quota pour les playlists — chargement et import en
-                    pause. Nouvelle tentative possible dans environ{" "}
-                    {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
+                  <p className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Spotify a atteint son quota pour les playlists — chargement et import en
+                      pause. Nouvelle tentative possible dans environ{" "}
+                      {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
+                    </span>
                   </p>
                 )}
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
-                <h3 className="font-bold text-accentSoft">🔍 Recherche manuelle</h3>
-                <p className="text-sm text-muted">Ajoute un morceau précis à la file, un par un.</p>
-                <div className="flex gap-2 mt-auto">
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                    placeholder="Titre, artiste…"
-                    disabled={searchQuotaCooldownSeconds > 0}
-                    className="flex-1 min-w-0 bg-white/5 border-2 border-accent focus:shadow-glowAccent outline-none transition rounded-xl px-4 py-3 disabled:opacity-60"
-                  />
-                  <button
-                    onClick={handleSearch}
-                    disabled={searchQuotaCooldownSeconds > 0}
-                    className="bg-accent shadow-glowAccent hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold whitespace-nowrap"
-                  >
-                    Chercher
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
-                <h3 className="font-bold text-accent2Soft">📻 Importer une playlist</h3>
-                <p className="text-sm text-muted">
-                  Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
-                </p>
-                <button
-                  onClick={handleLoadMyPlaylists}
-                  disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
-                  className="mt-auto bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold"
-                >
-                  {myPlaylists !== null
-                    ? "Playlists chargées ✓"
-                    : loadingPlaylists
-                      ? "Chargement…"
-                      : "Charger mes playlists Spotify"}
-                </button>
-              </div>
-            </div>
-
-            {/* Génération de playlist "à l'aveugle" : contrairement aux 2
-                options ci-dessus (recherche, import direct), l'hôte ne voit
-                jamais les morceaux se choisir un par un — il pose 3
-                paramètres et la playlist apparaît déjà faite, ce qui garde
-                la surprise même pour lui s'il joue aussi (voir
-                handleGenerateGenrePlaylist). */}
-            <div className="flex flex-col gap-3 bg-white/5 border border-surfaceBorder rounded-2xl p-4">
-              <h3 className="font-bold text-gold">🎲 Générer une playlist par genre</h3>
-              <p className="text-sm text-muted">
-                Choisis un genre, une époque et un nombre de morceaux : la playlist se construit
-                toute seule, tu ne sais pas d’avance ce qui va tomber.
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <select
-                  value={genreChoice}
-                  onChange={(e) => setGenreChoice(e.target.value)}
-                  className="bg-white/5 border-2 border-gold/60 focus:shadow-glowGold outline-none transition rounded-xl px-3 py-3"
-                >
-                  <option value={ALL_GENRES_KEY}>{ALL_GENRES_KEY}</option>
-                  {Object.keys(GENRE_PRESETS).map((genre) => (
-                    <option key={genre} value={genre}>
-                      {genre}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={eraChoice}
-                  onChange={(e) => setEraChoice(Number(e.target.value))}
-                  className="bg-white/5 border-2 border-gold/60 focus:shadow-glowGold outline-none transition rounded-xl px-3 py-3"
-                >
-                  {ERA_OPTIONS.map((era, i) => (
-                    <option key={era.label} value={i}>
-                      {era.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min={1}
-                  max={40}
-                  value={genreCount}
-                  onChange={(e) => setGenreCount(Number(e.target.value))}
-                  className="bg-white/5 border-2 border-gold/60 focus:shadow-glowGold outline-none transition rounded-xl px-3 py-3"
-                />
-              </div>
+            {/* Les 3 méthodes d'ajout partagent un même panneau à onglets
+                (plutôt que d'être empilées verticalement) : ça libère la
+                place pour garder la file d'attente toujours visible à
+                côté, voir la colonne de droite ci-dessous. Chaque onglet a
+                sa propre couleur d'identité (sauge / bleu "info" / ambre),
+                reprise du mockup validé. */}
+            <div className="flex gap-2">
               <button
-                onClick={handleGenerateGenrePlaylist}
-                disabled={generatingGenrePlaylist || searchQuotaCooldownSeconds > 0}
-                className="mt-auto bg-gold text-background shadow-glowGold hover:brightness-110 disabled:opacity-60 disabled:shadow-none transition px-6 py-3 rounded-xl font-bold"
+                type="button"
+                onClick={() => setAddMethodTab("search")}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2.5 rounded-xl border transition ${
+                  addMethodTab === "search"
+                    ? "border-sage text-sage bg-sage/10"
+                    : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
+                }`}
               >
-                {generatingGenrePlaylist
-                  ? `Recherche… (${genrePlaylistTried} artiste(s) exploré(s))`
-                  : "🎲 Générer la playlist"}
+                <Search className="w-4 h-4" /> Recherche
               </button>
-              {genrePlaylistResult !== null && (
-                <p className={`text-sm ${genrePlaylistResult.error ? "text-danger" : "text-muted"}`}>
-                  {genrePlaylistResult.error
-                    ? `⚠️ ${genrePlaylistResult.error}`
-                    : genrePlaylistResult.foundCount >= genrePlaylistResult.requestedCount
-                      ? `✅ ${genrePlaylistResult.foundCount} morceau(x) ajouté(s).`
-                      : `${genrePlaylistResult.foundCount} morceau(x) trouvé(s) sur ${genrePlaylistResult.requestedCount} demandé(s) — essaie une époque plus large ou "${ALL_GENRES_KEY}" si tu en veux plus.`}
-                </p>
-              )}
+              <button
+                type="button"
+                onClick={() => setAddMethodTab("import")}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2.5 rounded-xl border transition ${
+                  addMethodTab === "import"
+                    ? "border-info text-info bg-info/10"
+                    : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
+                }`}
+              >
+                <ListMusic className="w-4 h-4" /> Import Spotify
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddMethodTab("genre")}
+                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2.5 rounded-xl border transition ${
+                  addMethodTab === "genre"
+                    ? "border-amber text-amber bg-amber/10"
+                    : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
+                }`}
+              >
+                <Dice5 className="w-4 h-4" /> Par genre
+              </button>
             </div>
 
-            {results.length > 0 && (
-              <ul className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
-                {results.map((track) => (
-                  <li
-                    key={track.sourceTrackId}
-                    className="flex justify-between items-center bg-white/5 rounded-xl px-4 py-3"
-                  >
-                    <span>
-                      {track.title} — {track.artist}
-                    </span>
-                    <button
-                      onClick={() => handleAddToQueue(track)}
-                      className="bg-accent shadow-glowAccent hover:brightness-110 transition px-4 py-2 rounded-full text-sm font-bold"
-                    >
-                      + Ajouter à la playlist
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {myPlaylists !== null && myPlaylists.length === 0 && (
-              <p className="text-sm text-muted">Aucune playlist trouvée sur ton compte Spotify.</p>
-            )}
-
-            {/* Playlists Spotify à importer et file d'attente du jeu côte à
-                côte (plutôt qu'empilées verticalement) : les deux restent
-                visibles en même temps sans avoir à faire défiler l'une pour
-                voir l'autre, ce qui aide surtout quand on veut piocher dans
-                une playlist tout en gardant un œil sur ce qui est déjà dans
-                la file. Grille à une seule colonne sur mobile (pas assez de
-                largeur pour deux colonnes lisibles). */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {myPlaylists !== null && myPlaylists.length > 0 && (
-                <div>
-                  <h3 className="font-bold mb-2 text-accent2Soft">
-                    Tes playlists Spotify
-                  </h3>
-                  <div className="max-h-64 overflow-y-auto pr-1">
-                    <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
-                      {myPlaylists.map((playlist) => (
-                        <li key={playlist.id} className="contents">
-                          <span className="bg-white/5 rounded-xl px-4 py-3 truncate">
-                            {playlist.name}{" "}
-                            <span className="text-muted">({playlist.trackCount} morceaux)</span>
-                          </span>
-                          <button
-                            onClick={() => handleImportPlaylist(playlist.id)}
-                            disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
-                            className="bg-accent2 shadow-glowAccent2 hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-4 py-2 rounded-full text-sm font-bold whitespace-nowrap"
+            <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 items-start">
+              {/* Panneau de la méthode active */}
+              <div className="flex flex-col gap-3 bg-inkSurface2 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
+                {addMethodTab === "search" && (
+                  <>
+                    <p className="text-sm text-inkMuted">Ajoute un morceau précis à la file, un par un.</p>
+                    <div className="flex gap-2">
+                      <input
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                        placeholder="Titre, artiste…"
+                        disabled={searchQuotaCooldownSeconds > 0}
+                        className="flex-1 min-w-0 bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3 disabled:opacity-60"
+                      />
+                      <button
+                        onClick={handleSearch}
+                        disabled={searchQuotaCooldownSeconds > 0}
+                        className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold whitespace-nowrap"
+                      >
+                        Chercher
+                      </button>
+                    </div>
+                    {results.length > 0 && (
+                      <ul className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                        {results.map((track) => (
+                          <li
+                            key={track.sourceTrackId}
+                            className="flex justify-between items-center bg-inkSurface border border-inkBorder rounded-xl px-4 py-3"
                           >
-                            {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
+                            <span className="truncate">
+                              {track.title} — {track.artist}
+                            </span>
+                            <button
+                              onClick={() => handleAddToQueue(track)}
+                              className="bg-sage text-ink hover:bg-sage/90 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
+                            >
+                              + Ajouter
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
 
-              {upcomingQueue.length > 0 && (
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="font-bold text-accentSoft">
-                      Playlist ({upcomingQueue.length} morceau(x) à venir)
-                    </h3>
+                {addMethodTab === "import" && (
+                  <>
+                    <p className="text-sm text-inkMuted">
+                      Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
+                    </p>
+                    <button
+                      onClick={handleLoadMyPlaylists}
+                      disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
+                      className="bg-inkSurface2 border border-inkBorderStrong hover:border-info disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
+                    >
+                      {myPlaylists !== null
+                        ? (
+                          <span className="inline-flex items-center gap-2">
+                            <Check className="w-4 h-4" /> Playlists chargées
+                          </span>
+                        )
+                        : loadingPlaylists
+                          ? "Chargement…"
+                          : "Charger mes playlists Spotify"}
+                    </button>
+                    {myPlaylists !== null && myPlaylists.length === 0 && (
+                      <p className="text-sm text-inkMuted">Aucune playlist trouvée sur ton compte Spotify.</p>
+                    )}
+                    {myPlaylists !== null && myPlaylists.length > 0 && (
+                      <div className="max-h-72 overflow-y-auto pr-1">
+                        <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
+                          {myPlaylists.map((playlist) => (
+                            <li key={playlist.id} className="contents">
+                              <span className="bg-inkSurface rounded-xl px-4 py-3 truncate">
+                                {playlist.name}{" "}
+                                <span className="text-inkMuted">({playlist.trackCount} morceaux)</span>
+                              </span>
+                              <button
+                                onClick={() => handleImportPlaylist(playlist.id)}
+                                disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
+                                className="bg-inkSurface border border-inkBorderStrong hover:border-info disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
+                              >
+                                {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {addMethodTab === "genre" && (
+                  <>
+                    <p className="text-sm text-inkMuted">
+                      Choisis un genre, une époque et un nombre de morceaux : la playlist se
+                      construit toute seule, tu ne sais pas d’avance ce qui va tomber.
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <select
+                        value={genreChoice}
+                        onChange={(e) => setGenreChoice(e.target.value)}
+                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3"
+                      >
+                        <option value={ALL_GENRES_KEY}>{ALL_GENRES_KEY}</option>
+                        {Object.keys(GENRE_PRESETS).map((genre) => (
+                          <option key={genre} value={genre}>
+                            {genre}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={eraChoice}
+                        onChange={(e) => setEraChoice(Number(e.target.value))}
+                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3"
+                      >
+                        {ERA_OPTIONS.map((era, i) => (
+                          <option key={era.label} value={i}>
+                            {era.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={1}
+                        max={40}
+                        value={genreCount}
+                        onChange={(e) => setGenreCount(Number(e.target.value))}
+                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3"
+                      />
+                    </div>
+                    <button
+                      onClick={handleGenerateGenrePlaylist}
+                      disabled={generatingGenrePlaylist || searchQuotaCooldownSeconds > 0}
+                      className="bg-amber text-amberOn hover:bg-amber/90 disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
+                    >
+                      {generatingGenrePlaylist ? (
+                        `Recherche… (${genrePlaylistTried} artiste(s) exploré(s))`
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <Dice5 className="w-4 h-4" /> Générer la playlist
+                        </span>
+                      )}
+                    </button>
+                    {genrePlaylistResult !== null && (
+                      <p className={`text-sm ${genrePlaylistResult.error ? "text-danger" : "text-inkMuted"}`}>
+                        {genrePlaylistResult.error
+                          ? genrePlaylistResult.error
+                          : genrePlaylistResult.foundCount >= genrePlaylistResult.requestedCount
+                            ? `${genrePlaylistResult.foundCount} morceau(x) ajouté(s).`
+                            : `${genrePlaylistResult.foundCount} morceau(x) trouvé(s) sur ${genrePlaylistResult.requestedCount} demandé(s) — essaie une époque plus large ou "${ALL_GENRES_KEY}" si tu en veux plus.`}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* File d'attente : toujours visible avec le bouton de
+                  lancement juste dessous, pour ne jamais avoir à scroller
+                  pour démarrer la partie (voir la proposition d'agencement
+                  validée). */}
+              <div className="flex flex-col gap-3 bg-inkSurface border border-sage/40 rounded-2xl p-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-bold text-white">
+                    File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
+                  </h3>
+                  {upcomingQueue.length > 0 && (
                     <button
                       onClick={handleClearQueue}
                       className="text-danger text-sm hover:brightness-110 transition"
                     >
                       Tout retirer
                     </button>
-                  </div>
+                  )}
+                </div>
+                {upcomingQueue.length === 0 ? (
+                  <p className="text-sm text-inkMuted">
+                    Aucun morceau pour l’instant — utilise un des onglets à gauche pour en ajouter.
+                  </p>
+                ) : (
                   <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
                     {upcomingQueue.map((track, i) => (
                       <li
@@ -2008,10 +2181,10 @@ export default function HostScreen() {
                         onDragStart={handleDragStart(i)}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop(i)}
-                        className="flex justify-between items-center gap-3 bg-white/5 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
+                        className="flex justify-between items-center gap-3 bg-inkSurface2 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
                       >
                         <span className="flex items-center gap-2 min-w-0">
-                          <span className="text-muted select-none">⠿</span>
+                          <GripVertical className="w-4 h-4 text-inkMuted flex-shrink-0" />
                           <span className="truncate">
                             {blindMode
                               ? `Morceau ${queueIndex + i + 1}`
@@ -2027,26 +2200,29 @@ export default function HostScreen() {
                       </li>
                     ))}
                   </ul>
-                </div>
-              )}
-            </div>
+                )}
 
-            {players.length === 0 && (
-              <p className="text-sm text-muted">
-                En attente d’au moins un joueur avant de pouvoir lancer la manche.
-              </p>
-            )}
-            <button
-              onClick={handlePlayNextInQueue}
-              disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
-              className="bg-accent shadow-glowAccent hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-8 py-4 rounded-full text-xl font-bold mt-2"
-            >
-              {launchingRound
-                ? "Lancement…"
-                : queueIndex === 0
-                  ? `▶ Démarrer la partie (${upcomingQueue.length} morceau(x))`
-                  : `▶ Reprendre la partie (${upcomingQueue.length} restant(s))`}
-            </button>
+                {players.length === 0 && (
+                  <p className="text-sm text-inkMuted">
+                    En attente d’au moins un joueur avant de pouvoir lancer la manche.
+                  </p>
+                )}
+                <button
+                  onClick={handlePlayNextInQueue}
+                  disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1"
+                >
+                  <span className="inline-flex items-center justify-center gap-2">
+                    {!launchingRound && <Play className="w-5 h-5" />}
+                    {launchingRound
+                      ? "Lancement…"
+                      : queueIndex === 0
+                        ? `Démarrer la partie (${upcomingQueue.length} morceau(x))`
+                        : `Reprendre la partie (${upcomingQueue.length} restant(s))`}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
