@@ -371,9 +371,9 @@ export function subscribeToRoundAttempts(
 
 // Probabilité qu'une manche soit tirée "joker" (double les points, dans
 // les deux sens — voir migration 0017 et resolve_round_attempt). ~1
-// manche sur 5 : assez rare pour rester une surprise, assez fréquent pour
-// arriver plusieurs fois sur une partie normale.
-const JOKER_ROUND_PROBABILITY = 0.2;
+// manche sur 10 (resserré depuis 1 sur 5, jugé trop fréquent après une
+// première partie de test) : reste une surprise sans devenir la norme.
+const JOKER_ROUND_PROBABILITY = 0.1;
 
 async function insertRound(
   roomId: string,

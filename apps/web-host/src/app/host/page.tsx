@@ -2465,7 +2465,7 @@ export default function HostScreen() {
                   </span>
                   <BonusMalusToggleRow
                     label="Manche joker"
-                    description="Environ 1 manche sur 5 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
+                    description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
                     icon={<Dice5 className="w-4 h-4" />}
                     iconClassName="text-amber"
                     enabled={room.bonus_joker_enabled}
@@ -2474,7 +2474,7 @@ export default function HostScreen() {
                   />
                   <BonusMalusToggleRow
                     label="Bonus vitesse"
-                    description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 5 secondes."
+                    description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 2 secondes."
                     icon={<Zap className="w-4 h-4" />}
                     iconClassName="text-sage"
                     enabled={room.bonus_speed_enabled}
@@ -2483,7 +2483,7 @@ export default function HostScreen() {
                   />
                   <BonusMalusToggleRow
                     label="Bonus remontada"
-                    description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement (et qu'au moins une personne est devant)."
+                    description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement, avec plus de 5 points d'écart avec l'avant-dernier."
                     icon={<TrendingUp className="w-4 h-4" />}
                     iconClassName="text-sage"
                     enabled={room.bonus_remontada_enabled}
