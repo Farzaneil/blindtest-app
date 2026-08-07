@@ -1,0 +1,17 @@
+-- Dénormalise le mode de jeu ("Tout le monde participe" vs "Maître du jeu")
+-- sur chaque manche, pour que les écrans joueurs (/play, voir
+-- subscribeToCurrentRoundForPlayer dans apps/web-host/src/lib/rooms.ts)
+-- puissent savoir sans info supplémentaire s'ils doivent révéler la
+-- réponse dès "revealed" (mode "Tout le monde participe", un seul buzz
+-- suffit à clôturer la manche, aucun risque de fuite pour un futur
+-- buzzeur sur CETTE manche) ou seulement à "scored" comme avant (mode
+-- "Maître du jeu", où une manche peut reprendre après une réponse
+-- partielle — révéler plus tôt donnerait la réponse aux joueurs qui n'ont
+-- pas encore buzzé sur cette même manche).
+--
+-- Sur `rounds` plutôt que sur `rooms` : le mode de jeu ne change jamais en
+-- cours de partie aujourd'hui, mais dénormaliser au niveau de la manche
+-- (comme title/artist) reste plus robuste si ça change un jour, et évite
+-- une jointure côté joueur qui n'a par ailleurs aucun accès à `rooms` au-
+-- delà de son `status`.
+alter table rounds add column blind_mode boolean not null default false;
