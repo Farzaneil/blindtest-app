@@ -222,7 +222,18 @@ function BuzzerView({
 
   const alreadyBuzzed =
     round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
-  const answerRevealed = round?.status === "scored";
+  // En mode "Tout le monde participe" (round.blind_mode), un seul buzz
+  // clôture toujours la manche (voir resolveRoundAttempt/forceEnd côté
+  // hôte) : révéler dès "revealed" plutôt qu'attendre "scored" ne peut
+  // donc jamais donner un avantage à un futur buzzeur sur CETTE manche, et
+  // évite l'attente inutile pendant que l'hôte choisit le nombre de
+  // points à attribuer. En mode "Maître du jeu", une manche peut au
+  // contraire reprendre après une réponse partielle : revealed y reste
+  // réservé à l'hôte (voir round.status === "revealed" côté
+  // app/host/page.tsx), pas affiché ici avant "scored".
+  const answerRevealed = round?.blind_mode
+    ? round?.status === "revealed" || round?.status === "scored"
+    : round?.status === "scored";
   // Mode "Maître du jeu" uniquement : ce joueur vient de répondre (bon ou
   // mauvais) sur cette manche et doit laisser un autre joueur tenter sa
   // chance avant de pouvoir rebuzzer — débloqué dès qu'un autre joueur

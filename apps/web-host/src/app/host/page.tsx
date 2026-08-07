@@ -865,9 +865,16 @@ export default function HostScreen() {
             // même côté base, le morceau continuera juste un peu en fond.
           });
         }
-        timeoutRound(roundId).catch((e: any) => {
-          setError(e?.message ?? "Impossible de clôturer la manche.");
-        });
+        // Ce timer côté navigateur et un buzz réel côté serveur peuvent se
+        // produire à quelques millisecondes d'écart : si un joueur buzze
+        // juste avant l'expiration, la RPC timeout_round (qui exige
+        // status='playing') ne trouve plus rien à clôturer et lève une
+        // erreur — un vrai no-op côté résultat de la manche (le buzz a
+        // déjà pris le relais), mais qui remontait jusqu'ici comme un
+        // message rouge trompeur côté hôte tant que la page n'était pas
+        // rechargée. Volontairement silencieux : rien n'est réellement en
+        // échec dans ce cas précis.
+        timeoutRound(roundId).catch(() => {});
       }
     };
 
@@ -1198,11 +1205,15 @@ export default function HostScreen() {
         spotifyPlayer.deviceId,
         spotifyPlayer.accessTokenRef.current
       );
-      const newRound = await startRoundWithTrack(room.id, {
-        sourceTrackId: track.sourceTrackId,
-        title: track.title,
-        artist: track.artist,
-      });
+      const newRound = await startRoundWithTrack(
+        room.id,
+        {
+          sourceTrackId: track.sourceTrackId,
+          title: track.title,
+          artist: track.artist,
+        },
+        blindMode
+      );
       // Mise à jour immédiate depuis la ligne retournée par l'insert (déjà
       // au statut "playing"), sans attendre l'écho de Supabase Realtime :
       // ce canal est indépendant et peut arriver après que queueIndex ait

@@ -41,6 +41,13 @@ export type Round = {
   // manche (voir resolveRoundAttempt) — débloqué dès qu'un autre joueur
   // buzze à sa suite.
   locked_player_id: string | null;
+  // Dénormalisé au moment de la création de la manche (voir insertRound et
+  // la migration 0016) : mode "Tout le monde participe" actif pour CETTE
+  // manche précise. Permet aux écrans joueurs de savoir s'ils peuvent
+  // afficher la réponse dès "revealed" (voir PlayerRound/answerRevealed
+  // côté /play) sans dépendre d'un état côté hôte auquel ils n'ont pas
+  // accès.
+  blind_mode: boolean;
 };
 
 export type RoundAttempt = {
@@ -298,7 +305,8 @@ export function subscribeToRoundAttempts(
 
 async function insertRound(
   roomId: string,
-  track: { sourceTrackId: string; title: string; artist: string }
+  track: { sourceTrackId: string; title: string; artist: string },
+  blindMode: boolean
 ): Promise<Round> {
   const { data: existing } = await supabase
     .from("rounds")
@@ -320,6 +328,7 @@ async function insertRound(
       artist: track.artist,
       status: "playing",
       started_at: new Date().toISOString(),
+      blind_mode: blindMode,
     })
     .select()
     .single();
@@ -337,12 +346,16 @@ async function insertRound(
  * Lance une manche "factice" (pas de vrai morceau) — utile pour retester le
  * mécanisme de buzz seul, indépendamment de Spotify.
  */
-export async function startTestRound(roomId: string): Promise<void> {
-  await insertRound(roomId, {
-    sourceTrackId: "test-track",
-    title: "Morceau de test",
-    artist: "Artiste de test",
-  });
+export async function startTestRound(roomId: string, blindMode = false): Promise<void> {
+  await insertRound(
+    roomId,
+    {
+      sourceTrackId: "test-track",
+      title: "Morceau de test",
+      artist: "Artiste de test",
+    },
+    blindMode
+  );
 }
 
 /**
@@ -354,9 +367,10 @@ export async function startTestRound(roomId: string): Promise<void> {
  */
 export async function startRoundWithTrack(
   roomId: string,
-  track: { sourceTrackId: string; title: string; artist: string }
+  track: { sourceTrackId: string; title: string; artist: string },
+  blindMode: boolean
 ): Promise<Round> {
-  return insertRound(roomId, track);
+  return insertRound(roomId, track, blindMode);
 }
 
 /**
@@ -442,6 +456,8 @@ export type PlayerRound = {
   artist_found: boolean;
   title: string;
   artist: string;
+  // Voir le commentaire sur Round.blind_mode plus haut.
+  blind_mode: boolean;
 };
 
 function generateWebDeviceId(): string {
@@ -528,7 +544,9 @@ export function subscribeToCurrentRoundForPlayer(
   const fetchAndEmit = async () => {
     const { data } = await supabase
       .from("rounds")
-      .select("id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist")
+      .select(
+        "id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist, blind_mode"
+      )
       .eq("room_id", roomId)
       .order("order_index", { ascending: false })
       .limit(1)
