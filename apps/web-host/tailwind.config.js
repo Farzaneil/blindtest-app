@@ -30,11 +30,15 @@ module.exports = {
         // écrans (/, /play, /rules, /about) gardent l'ancienne palette
         // jusqu'à leur passe de refonte à venir — pas de risque de casser
         // leur rendu en touchant ce fichier partagé.
-        ink: "#0B0B0D",
-        inkSurface: "#15151A",
-        inkSurface2: "#1D1D24",
-        inkBorder: "#2A2A33",
-        inkBorderStrong: "#3A3A46",
+        // Valeurs de contraste corrigees suite au retour "trop sombre, on
+        // ne distingue rien" (validees dans direction_visuelle_minimal_premium.html
+        // mais jamais reellement portees ici a l'epoque -- oubli corrige
+        // maintenant) : ecart fond/carte nettement plus marque.
+        ink: "#0A0A0C",
+        inkSurface: "#1C1C23",
+        inkSurface2: "#27272F",
+        inkBorder: "#3A3A45",
+        inkBorderStrong: "#4D4D5A",
         inkMuted: "#8B8B96",
         sage: "#3ECF7E",
         sageOn: "#06110A",
@@ -63,11 +67,11 @@ module.exports = {
           "#120E1A",
       },
       fontFamily: {
-        // Chargées via next/font dans layout.tsx (voir les variables CSS
-        // --font-inter / --font-space-grotesk) : polices auto-hébergées,
-        // pas de dépendance à un CDN externe en prod.
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["var(--font-space-grotesk)", "var(--font-inter)", "sans-serif"],
+        // Chargées via @fontsource dans layout.tsx (fichiers de police
+        // livrés avec le bundle npm, pas de fetch réseau au build — voir
+        // le commentaire dans layout.tsx pour le contexte du changement).
+        sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ['"Space Grotesk"', "Inter", "sans-serif"],
       },
       keyframes: {
         pulseGlow: {

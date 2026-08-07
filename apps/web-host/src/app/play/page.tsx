@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2 } from "lucide-react";
 import {
   joinRoomByCode,
   getPlayerSession,
@@ -105,9 +106,9 @@ export default function PlayPage() {
   };
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6">
+    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-ink">
       {checkingSession ? (
-        <p className="text-muted animate-pulse">Reconnexion…</p>
+        <p className="text-inkMuted animate-pulse">Reconnexion…</p>
       ) : session ? (
         <BuzzerView roomId={session.roomId} playerId={session.playerId} onLeave={handleLeave} />
       ) : (
@@ -139,30 +140,33 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-sm bg-surface border border-surfaceBorder rounded-3xl px-6 py-8 shadow-glowAccent">
-      <h1 className="text-3xl font-black mb-2 text-accentSoft">Rejoindre une partie</h1>
+    <div className="flex flex-col items-center gap-4 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+      <h1 className="text-3xl font-bold mb-2 font-display text-white">Rejoindre une partie</h1>
       <input
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder="Code de la partie"
-        className="w-full text-center text-xl uppercase bg-white/5 border-2 border-accent focus:shadow-glowAccent outline-none transition rounded-xl px-4 py-3"
+        className="w-full text-center text-xl uppercase bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
       />
       <input
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Ton pseudo"
-        className="w-full text-center text-xl bg-white/5 border-2 border-accent focus:shadow-glowAccent outline-none transition rounded-xl px-4 py-3"
+        className="w-full text-center text-xl bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
       />
       {error && <p className="text-danger text-center">{error}</p>}
       <button
         onClick={onSubmit}
         disabled={!canSubmit}
-        className="bg-accent shadow-glowAccent hover:brightness-110 disabled:opacity-40 disabled:shadow-none transition px-8 py-3 rounded-full text-lg font-bold w-full"
+        className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-3 rounded-xl text-lg font-bold w-full"
       >
         {loading ? "..." : "Rejoindre"}
       </button>
-      <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
-        ← Accueil
+      <Link
+        href="/"
+        className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" /> Accueil
       </Link>
     </div>
   );
@@ -274,8 +278,9 @@ function BuzzerView({
 
   if (roomStatus === "finished") {
     return (
-      <div className="flex flex-col items-center gap-6 w-full max-w-sm bg-surface border border-surfaceBorder rounded-3xl px-6 py-8">
-        <p className="text-3xl font-bold text-gold text-center">🏁 Partie terminée !</p>
+      <div className="flex flex-col items-center gap-6 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+        <Trophy className="w-10 h-10 text-gold" />
+        <p className="text-2xl font-bold text-white text-center font-display">Partie terminée !</p>
 
         {ranked.length > 0 && (
           <div className="flex items-end justify-center gap-3">
@@ -286,10 +291,10 @@ function BuzzerView({
                 const height = p.rank === 1 ? "h-24" : p.rank === 2 ? "h-16" : "h-12";
                 const podiumColor =
                   p.rank === 1
-                    ? "border-accent bg-accent/10 text-accentSoft"
+                    ? "border-gold bg-gold/10 text-gold"
                     : p.rank === 2
-                      ? "border-accent2 bg-accent2/10 text-accent2Soft"
-                      : "border-danger bg-danger/10 text-danger";
+                      ? "border-silver bg-silver/10 text-silver"
+                      : "border-bronze bg-bronze/10 text-bronze";
                 return (
                   <div key={p.id} className="flex flex-col items-center gap-1 w-20">
                     <span className="text-sm truncate w-full text-center">{p.display_name}</span>
@@ -307,18 +312,22 @@ function BuzzerView({
         {(fastestAttempt || mostContestedCount > 1) && (
           <div className="grid grid-cols-1 gap-3 w-full">
             {fastestAttempt && (
-              <div className="bg-white/5 rounded-xl px-4 py-3 text-left">
-                <p className="text-xs text-muted">⚡ Buzzeur le plus rapide</p>
-                <p className="text-sm font-bold text-accentSoft">
+              <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
+                <p className="text-xs text-inkMuted flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide
+                </p>
+                <p className="text-sm font-bold text-sage">
                   {fastestPlayer?.display_name ?? "Joueur"} —{" "}
                   {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
                 </p>
               </div>
             )}
             {mostContestedRound && mostContestedCount > 1 && (
-              <div className="bg-white/5 rounded-xl px-4 py-3 text-left">
-                <p className="text-xs text-muted">🔥 Manche la plus disputée</p>
-                <p className="text-sm font-bold text-accentSoft">
+              <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
+                <p className="text-xs text-inkMuted flex items-center gap-1">
+                  <Flame className="w-3.5 h-3.5" /> Manche la plus disputée
+                </p>
+                <p className="text-sm font-bold text-sage">
                   {mostContestedRound.title} ({mostContestedCount} tentatives)
                 </p>
               </div>
@@ -328,7 +337,7 @@ function BuzzerView({
 
         <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
           {ranked.map((p) => (
-            <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-white/5">
+            <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-inkSurface2">
               <span>
                 {p.rank}. {p.display_name}
               </span>
@@ -338,10 +347,13 @@ function BuzzerView({
         </ul>
 
         <div className="flex gap-4">
-          <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
-            ← Accueil
+          <Link
+            href="/"
+            className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Accueil
           </Link>
-          <button onClick={onLeave} className="text-xs text-muted hover:text-danger underline transition">
+          <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
             Quitter la partie
           </button>
         </div>
@@ -354,22 +366,22 @@ function BuzzerView({
       {/* Toujours visible : pseudo, score et position au classement, pas
           seulement entre les manches — pour que le joueur garde un œil sur
           sa progression même pendant qu'une manche est en cours. */}
-      <div className="w-full flex justify-between items-center bg-surface border border-surfaceBorder rounded-2xl px-5 py-3">
+      <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
         <span className="font-bold truncate">{me?.display_name ?? "…"}</span>
-        <span className="text-sm text-muted whitespace-nowrap">
+        <span className="text-sm text-inkMuted whitespace-nowrap">
           {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
-          <span className="font-bold text-accentSoft">· {me?.score ?? 0} pts</span>
+          <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
         </span>
       </div>
 
       {!round ? (
-        <p className="text-xl text-muted text-center animate-pulse">
+        <p className="text-xl text-inkMuted text-center animate-pulse">
           En attente du lancement d’une manche par l’hôte…
         </p>
       ) : (
         <>
           {somethingAlreadyFound && (
-            <p className="text-sm text-muted text-center">
+            <p className="text-sm text-inkMuted text-center">
               Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
                 .filter(Boolean)
                 .join(" et ")}
@@ -381,18 +393,29 @@ function BuzzerView({
             disabled={!canBuzz}
             className={`w-56 h-56 rounded-full text-3xl font-black border-4 transition ${
               canBuzz
-                ? "bg-accent border-accentSoft shadow-glowAccent animate-pulseGlow active:scale-95"
+                ? "bg-sage border-sage text-ink active:scale-95"
                 : alreadyBuzzed
                   ? iWon
-                    ? "bg-accent2 border-accent2Soft shadow-glowAccent2"
-                    : "bg-white/10 border-white/10 text-muted"
-                  : "bg-white/10 border-white/10 text-muted"
+                    ? "bg-transparent border-sage text-sage"
+                    : "bg-inkSurface2 border-inkBorder text-inkMuted"
+                  : "bg-inkSurface2 border-inkBorder text-inkMuted"
             }`}
           >
-            {alreadyBuzzed ? "BUZZÉ !" : "BUZZ"}
+            {alreadyBuzzed ? (
+              iWon ? (
+                <span className="inline-flex flex-col items-center gap-1">
+                  <CheckCircle2 className="w-9 h-9" />
+                  BUZZÉ !
+                </span>
+              ) : (
+                "BUZZÉ"
+              )
+            ) : (
+              "BUZZ"
+            )}
           </button>
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-accent2Soft" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -401,14 +424,14 @@ function BuzzerView({
             </p>
           )}
           {isLocked && (
-            <p className="text-sm text-muted text-center">
+            <p className="text-sm text-inkMuted text-center">
               Tu viens de répondre — attends qu’un autre joueur tente sa chance avant de rebuzzer.
             </p>
           )}
           {answerRevealed && (
-            <div className="w-full text-center bg-white/5 border border-surfaceBorder rounded-2xl px-6 py-4">
-              <p className="text-sm text-muted mb-1">La réponse était :</p>
-              <p className="text-xl font-bold text-accentSoft">
+            <div className="w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
+              <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
+              <p className="text-xl font-bold text-sage font-display">
                 {round.title} — {round.artist}
               </p>
             </div>
@@ -416,10 +439,13 @@ function BuzzerView({
         </>
       )}
       <div className="flex gap-4">
-        <Link href="/" className="text-xs text-muted hover:text-accentSoft underline transition">
-          ← Accueil
+        <Link
+          href="/"
+          className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Accueil
         </Link>
-        <button onClick={onLeave} className="text-xs text-muted hover:text-danger underline transition">
+        <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
           Quitter la partie
         </button>
       </div>
