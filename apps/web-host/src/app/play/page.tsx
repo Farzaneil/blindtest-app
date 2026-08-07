@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5 } from "lucide-react";
 import {
   joinRoomByCode,
   getPlayerSession,
@@ -32,6 +32,7 @@ import {
   type RoundAttempt,
 } from "../../lib/rooms";
 import { withRanks, formatOrdinal } from "../../lib/ranking";
+import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 
 type Session = { roomId: string; playerId: string };
 
@@ -239,7 +240,6 @@ function BuzzerView({
   // chance avant de pouvoir rebuzzer — débloqué dès qu'un autre joueur
   // buzze à son tour (voir resolveRoundAttempt côté hôte).
   const isLocked = round?.status === "playing" && round.locked_player_id === playerId;
-  const canBuzz = round?.status === "playing" && !sending && !isLocked;
   const iWon = alreadyBuzzed && round?.buzzed_by_player_id === playerId;
   const buzzer = round?.buzzed_by_player_id
     ? players.find((p) => p.id === round.buzzed_by_player_id)
@@ -249,12 +249,38 @@ function BuzzerView({
   const ranked = withRanks(players);
   const me = ranked.find((p) => p.id === playerId);
 
+  // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
+  // application se fait côté serveur (resolve_buzz_winner) — ceci ne sert
+  // qu'à refléter visuellement l'état à ce joueur (bouton désactivé,
+  // compte à rebours). Tick toutes les 250ms tant qu'une manche est en
+  // cours, comme le timer équivalent côté hôte.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    if (round?.status !== "playing") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNow(null);
+      return;
+    }
+    const tick = () => setNow(Date.now());
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [round?.id, round?.status]);
+
+  const fullyBlocked = me && round ? isFullyBlockedThisRound(me, round) : false;
+  const unlockedAtMs = me && round ? buzzUnlockedAtMs(me.correct_streak_count, round.started_at) : null;
+  const lockoutRemainingSeconds =
+    now !== null && unlockedAtMs ? Math.max(0, Math.ceil((unlockedAtMs - now) / 1000)) : 0;
+  const isLockedOut = lockoutRemainingSeconds > 0;
+
+  const canBuzz = round?.status === "playing" && !sending && !isLocked && !fullyBlocked && !isLockedOut;
+
   // Mêmes calculs que sur l'écran hôte (voir app/host/page.tsx) : temps de
   // réaction minimal parmi les tentatives qui ont valu 2 points (titre ET
   // artiste trouvés — une réponse fausse ou partielle rapide ne doit pas
   // gagner ce titre), et manche ayant reçu le plus de tentatives jugées.
   const fastestAttempt = roundAttempts
-    .filter((a) => a.points_awarded === 2 && a.reaction_seconds !== null)
+    .filter((a) => a.title_found && a.artist_found && a.reaction_seconds !== null)
     .reduce<RoundAttempt | null>((best, a) => {
       if (!best || (a.reaction_seconds as number) < (best.reaction_seconds as number)) return a;
       return best;
@@ -262,6 +288,14 @@ function BuzzerView({
   const fastestPlayer = fastestAttempt
     ? players.find((p) => p.id === fastestAttempt.player_id)
     : null;
+
+  // Bonus vitesse/remontada (voir migration 0017) éventuellement obtenus
+  // sur LA manche en cours, pour affichage dans le bloc réponse révélée
+  // ci-dessous — pas besoin d'une souscription dédiée, roundAttempts est
+  // déjà là pour les stats de fin de partie.
+  const currentRoundAttempts = round ? roundAttempts.filter((a) => a.round_id === round.id) : [];
+  const currentRoundHadSpeedBonus = currentRoundAttempts.some((a) => a.speed_bonus_awarded);
+  const currentRoundHadRemontadaBonus = currentRoundAttempts.some((a) => a.remontada_bonus_awarded);
 
   const attemptCountByRound = new Map<string, number>();
   for (const a of roundAttempts) {
@@ -378,7 +412,19 @@ function BuzzerView({
           seulement entre les manches — pour que le joueur garde un œil sur
           sa progression même pendant qu'une manche est en cours. */}
       <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
-        <span className="font-bold truncate">{me?.display_name ?? "…"}</span>
+        <span className="font-bold truncate flex items-center gap-1.5">
+          {me?.display_name ?? "…"}
+          {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
+              informatif, l'application réelle se fait côté serveur. */}
+          {me && me.correct_streak_count >= 3 && (
+            <span
+              className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
+              title={`${me.correct_streak_count} bonnes réponses d'affilée — ton buzzer est retardé en début de manche`}
+            >
+              <Flame className="w-3.5 h-3.5" /> {me.correct_streak_count}
+            </span>
+          )}
+        </span>
         <span className="text-sm text-inkMuted whitespace-nowrap">
           {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
           <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
@@ -391,6 +437,11 @@ function BuzzerView({
         </p>
       ) : (
         <>
+          {round.is_joker && (
+            <p className="text-sm font-bold text-amber flex items-center gap-1.5">
+              <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
+            </p>
+          )}
           {somethingAlreadyFound && (
             <p className="text-sm text-inkMuted text-center">
               Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
@@ -421,6 +472,10 @@ function BuzzerView({
               ) : (
                 "BUZZÉ"
               )
+            ) : fullyBlocked ? (
+              "BLOQUÉ"
+            ) : isLockedOut ? (
+              `${lockoutRemainingSeconds}s`
             ) : (
               "BUZZ"
             )}
@@ -434,6 +489,16 @@ function BuzzerView({
                   : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
             </p>
           )}
+          {!alreadyBuzzed && fullyBlocked && (
+            <p className="text-sm text-danger text-center">
+              Ton buzzer est bloqué ce tour-ci — trop de premières réponses ratées d’affilée.
+            </p>
+          )}
+          {!alreadyBuzzed && !fullyBlocked && isLockedOut && (
+            <p className="text-sm text-inkMuted text-center">
+              Trop de bonnes réponses d’affilée : buzzer débloqué dans {lockoutRemainingSeconds}s.
+            </p>
+          )}
           {isLocked && (
             <p className="text-sm text-inkMuted text-center">
               Tu viens de répondre — attends qu’un autre joueur tente sa chance avant de rebuzzer.
@@ -445,6 +510,13 @@ function BuzzerView({
               <p className="text-xl font-bold text-sage font-display">
                 {round.title} — {round.artist}
               </p>
+              {(currentRoundHadSpeedBonus || currentRoundHadRemontadaBonus) && (
+                <p className="text-xs text-amber mt-2">
+                  {[currentRoundHadSpeedBonus && "bonus vitesse", currentRoundHadRemontadaBonus && "bonus remontada"]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </p>
+              )}
             </div>
           )}
         </>

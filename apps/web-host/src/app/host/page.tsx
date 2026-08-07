@@ -25,11 +25,14 @@ import {
   resetRoomScores,
   joinRoomAsHost,
   sendBuzz,
+  updateRoomBonusMalusSettings,
   type Player,
   type Round,
   type RoundAttempt,
+  type Room,
 } from "../../lib/rooms";
 import { withRanks, formatOrdinal } from "../../lib/ranking";
+import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
 import {
   getSpotifyQuotaLocks,
@@ -68,9 +71,22 @@ import {
   LayoutDashboard,
   Gamepad2,
   UserPlus,
+  TrendingUp,
 } from "lucide-react";
 
 type HostMode = "gamemaster" | "player";
+
+// Les 5 réglages bonus/malus (voir migration 0018 et Room dans lib/rooms.ts)
+// regroupés sous un seul type utilitaire — évite de répéter l'union des 5
+// clés à chaque fois (handleToggleBonusMalusSetting, BonusMalusToggleRow).
+type BonusMalusSettings = Pick<
+  Room,
+  | "bonus_joker_enabled"
+  | "bonus_speed_enabled"
+  | "bonus_remontada_enabled"
+  | "malus_streak_lockout_enabled"
+  | "malus_streak_block_enabled"
+>;
 
 // Durée du timer visuel par manche : purement indicatif jusqu'à 0, à ce
 // moment-là la musique est coupée et la manche est clôturée sans gagnant
@@ -177,6 +193,61 @@ function shuffle<T>(array: T[]): T[] {
   return result;
 }
 
+// Une ligne de réglage bonus/malus (voir migration 0018) : nom clair +
+// icône + interrupteur compact, explication complète au survol via l'attribut
+// title natif (choisi plutôt qu'un popover custom — demandé "qui ne
+// prennent pas trop de place", pas la peine d'ajouter la mécanique d'un
+// vrai tooltip pour ça). Interrupteur volontairement plus petit
+// (w-9 h-5) que celui utilisé par le passé pour "l'hôte joue aussi"
+// (w-14 h-8, retiré depuis) : cinq d'entre eux tiennent côte à côte sans
+// prendre toute la largeur du panneau.
+function BonusMalusToggleRow({
+  label,
+  description,
+  icon,
+  iconClassName,
+  enabled,
+  saving,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  iconClassName: string;
+  enabled: boolean;
+  saving: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      title={description}
+      className="flex items-center justify-between gap-3 py-1.5 cursor-default"
+    >
+      <span className="flex items-center gap-1.5 text-sm text-inkMuted min-w-0">
+        <span className={`shrink-0 ${iconClassName}`}>{icon}</span>
+        <span className="truncate">{label}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        aria-label={label}
+        disabled={saving}
+        onClick={onToggle}
+        className={`relative shrink-0 w-9 h-5 rounded-full border transition-colors disabled:opacity-50 ${
+          enabled ? "bg-sage border-sage" : "bg-inkSurface2 border-inkBorder"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
+            enabled ? "translate-x-4" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 // Badge de rang réutilisé partout où un classement est affiché (liste des
 // joueurs pendant la partie, écran de fin) : or/argent/bronze pour le
 // podium (1er/2e/3e), même badge neutre pour tous les joueurs suivants —
@@ -236,7 +307,6 @@ function HostBuzzerView({
   // les deux modes côté données, gardé ici pour rester symétrique avec
   // BuzzerView.
   const isLocked = round?.status === "playing" && round.locked_player_id === hostPlayerId;
-  const canBuzz = round?.status === "playing" && !sending && !isLocked;
   const iWon = alreadyBuzzed && round?.buzzed_by_player_id === hostPlayerId;
   const buzzer = round?.buzzed_by_player_id
     ? players.find((p) => p.id === round.buzzed_by_player_id)
@@ -251,6 +321,33 @@ function HostBuzzerView({
 
   const ranked = withRanks(players);
   const me = ranked.find((p) => p.id === hostPlayerId);
+
+  // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
+  // application se fait côté serveur (resolve_buzz_winner), ceci ne sert
+  // qu'à refléter visuellement l'état à l'hôte quand il joue. Tick toutes
+  // les 250ms (même granularité que le timer de manche côté vue admin)
+  // pour faire décompter le délai malus 1 et réactiver le bouton pile au
+  // bon moment.
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    if (round?.status !== "playing") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNow(null);
+      return;
+    }
+    const tick = () => setNow(Date.now());
+    tick();
+    const interval = setInterval(tick, 250);
+    return () => clearInterval(interval);
+  }, [round?.id, round?.status]);
+
+  const fullyBlocked = me && round ? isFullyBlockedThisRound(me, round) : false;
+  const unlockedAtMs = me && round ? buzzUnlockedAtMs(me.correct_streak_count, round.started_at) : null;
+  const lockoutRemainingSeconds =
+    now !== null && unlockedAtMs ? Math.max(0, Math.ceil((unlockedAtMs - now) / 1000)) : 0;
+  const isLockedOut = lockoutRemainingSeconds > 0;
+
+  const canBuzz = round?.status === "playing" && !sending && !isLocked && !fullyBlocked && !isLockedOut;
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
@@ -272,6 +369,11 @@ function HostBuzzerView({
         </p>
       ) : (
         <>
+          {round.is_joker && (
+            <p className="text-sm font-bold text-amber flex items-center gap-1.5">
+              <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
+            </p>
+          )}
           {somethingAlreadyFound && (
             <p className="text-sm text-inkMuted text-center">
               Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
@@ -302,6 +404,10 @@ function HostBuzzerView({
               ) : (
                 "BUZZÉ"
               )
+            ) : fullyBlocked ? (
+              "BLOQUÉ"
+            ) : isLockedOut ? (
+              `${lockoutRemainingSeconds}s`
             ) : (
               "BUZZ"
             )}
@@ -313,6 +419,16 @@ function HostBuzzerView({
                 : round.buzzed_by_player_id === null
                   ? "Personne n’a buzzé à temps"
                   : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+            </p>
+          )}
+          {!alreadyBuzzed && fullyBlocked && (
+            <p className="text-sm text-danger text-center">
+              Ton buzzer est bloqué ce tour-ci — trop de premières réponses ratées d’affilée.
+            </p>
+          )}
+          {!alreadyBuzzed && !fullyBlocked && isLockedOut && (
+            <p className="text-sm text-inkMuted text-center">
+              Trop de bonnes réponses d’affilée : buzzer débloqué dans {lockoutRemainingSeconds}s.
             </p>
           )}
           {isLocked && (
@@ -459,7 +575,7 @@ function recordSharedQuotaLockIfNeeded(
 export default function HostScreen() {
   useForceLoopbackHost();
 
-  const [room, setRoom] = useState<{ id: string; code: string } | null>(null);
+  const [room, setRoom] = useState<Room | null>(null);
   // Passe à true une fois qu'on sait si on a repris une partie existante
   // (sessionStorage + vérif Supabase) ou créé une nouvelle room à zéro.
   // Tant que ce n'est pas fait, on n'écrit rien dans sessionStorage — sinon
@@ -491,6 +607,11 @@ export default function HostScreen() {
   const [hostNameDraft, setHostNameDraft] = useState("Hôte");
   const [joiningAsHost, setJoiningAsHost] = useState(false);
   const [sendingHostBuzz, setSendingHostBuzz] = useState(false);
+  // Clé du réglage bonus/malus en cours d'écriture (voir
+  // handleToggleBonusMalusSetting) — juste pour désactiver brièvement le
+  // toggle correspondant et éviter un double-clic pendant l'aller-retour
+  // réseau, pas un vrai état de chargement bloquant.
+  const [savingBonusMalusSetting, setSavingBonusMalusSetting] = useState<string | null>(null);
   // null = pas de score cible, la partie dure jusqu'à la fin de la
   // playlist (comportement historique). Sinon, la partie se termine dès
   // qu'un joueur atteint (ou dépasse) ce score, même si la playlist n'est
@@ -638,7 +759,7 @@ export default function HostScreen() {
         const r = await createRoom();
         if (cancelled) return;
         writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
-        setRoom({ id: r.id, code: r.code });
+        setRoom(r);
         setHostMode(null);
         setQueue([]);
         setQueueIndex(0);
@@ -667,7 +788,7 @@ export default function HostScreen() {
         await startFresh();
         return;
       }
-      setRoom({ id: existing.id, code: existing.code });
+      setRoom(existing);
       setHostMode(readStoredJSON(MODE_STORAGE_KEY, null));
       setHostPlayerId(readStoredJSON(HOST_PLAYER_ID_STORAGE_KEY, null));
       setHostJoinSkipped(readStoredJSON(HOST_JOIN_SKIPPED_STORAGE_KEY, false));
@@ -1212,7 +1333,8 @@ export default function HostScreen() {
           title: track.title,
           artist: track.artist,
         },
-        blindMode
+        blindMode,
+        room.bonus_joker_enabled
       );
       // Mise à jour immédiate depuis la ligne retournée par l'insert (déjà
       // au statut "playing"), sans attendre l'écho de Supabase Realtime :
@@ -1309,6 +1431,30 @@ export default function HostScreen() {
       await sendBuzz(round.id, hostPlayerId);
     } finally {
       setSendingHostBuzz(false);
+    }
+  };
+
+  // Active/désactive un réglage bonus/malus (voir migration 0018) —
+  // modifiable à tout moment, y compris en cours de partie, comme le score
+  // cible et le nombre de morceaux max. Mise à jour optimiste (le toggle
+  // bascule immédiatement) : ces colonnes n'ont aucun effet tant que la
+  // manche en cours n'est pas terminée (voir resolve_round_attempt/
+  // resolve_buzz_winner côté SQL, qui relisent la room à chaque appel), donc
+  // pas besoin d'attendre la confirmation serveur pour refléter le choix.
+  const handleToggleBonusMalusSetting = async (key: keyof BonusMalusSettings) => {
+    if (!room) return;
+    const nextValue = !room[key];
+    setRoom({ ...room, [key]: nextValue });
+    setSavingBonusMalusSetting(key);
+    try {
+      await updateRoomBonusMalusSettings(room.id, { [key]: nextValue });
+    } catch (e: any) {
+      // Rollback si l'écriture serveur échoue, pour ne pas laisser le
+      // toggle mentir sur l'état réellement appliqué.
+      setRoom((current) => (current ? { ...current, [key]: !nextValue } : current));
+      setError(e?.message ?? "Impossible de mettre à jour ce réglage.");
+    } finally {
+      setSavingBonusMalusSetting(null);
     }
   };
 
@@ -1413,7 +1559,7 @@ export default function HostScreen() {
     try {
       const r = await createRoom();
       writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
-      setRoom({ id: r.id, code: r.code });
+      setRoom(r);
       setHydrated(true);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de créer une nouvelle partie.");
@@ -1501,7 +1647,7 @@ export default function HostScreen() {
   // remporter le titre de "buzzeur le plus rapide", même si son
   // reaction_seconds est très bas).
   const fastestAttempt = roundAttempts
-    .filter((a) => a.points_awarded === 2 && a.reaction_seconds !== null)
+    .filter((a) => a.title_found && a.artist_found && a.reaction_seconds !== null)
     .reduce<RoundAttempt | null>((best, a) => {
       if (!best || (a.reaction_seconds as number) < (best.reaction_seconds as number)) return a;
       return best;
@@ -1586,11 +1732,26 @@ export default function HostScreen() {
                   key={p.id}
                   className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-inkSurface2"
                 >
-                  <span className="flex items-center gap-3">
+                  <span className="flex items-center gap-3 min-w-0">
                     <RankBadge rank={p.rank} />
-                    {p.display_name}
+                    <span className="truncate">{p.display_name}</span>
+                    {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
+                        informatif ici, l'application réelle se fait côté serveur. */}
+                    {p.correct_streak_count >= 3 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
+                        title={`${p.correct_streak_count} bonnes réponses d'affilée — buzzer retardé`}
+                      >
+                        <Flame className="w-3.5 h-3.5" /> {p.correct_streak_count}
+                      </span>
+                    )}
+                    {round && isFullyBlockedThisRound(p, round) && (
+                      <span className="text-xs text-danger shrink-0" title="Buzzer bloqué ce tour-ci">
+                        bloqué
+                      </span>
+                    )}
                   </span>
-                  <span className="font-bold font-display">{p.score} pts</span>
+                  <span className="font-bold font-display shrink-0">{p.score} pts</span>
                 </li>
               ))}
             </ul>
@@ -1684,8 +1845,9 @@ export default function HostScreen() {
                   const attemptsForRound = roundAttempts.filter((a) => a.round_id === r.id);
                   return (
                     <li key={r.id} className="bg-inkSurface2 rounded-xl px-4 py-2 text-sm">
-                      <p className="truncate font-medium">
+                      <p className="truncate font-medium flex items-center gap-1.5">
                         {i + 1}. {r.title} — {r.artist}
+                        {r.is_joker && <Dice5 className="w-3.5 h-3.5 text-amber shrink-0" />}
                       </p>
                       {attemptsForRound.length === 0 ? (
                         <p className="text-inkMuted">Personne n’a trouvé</p>
@@ -1702,10 +1864,15 @@ export default function HostScreen() {
                                   : "rien trouvé";
                             const colorClass =
                               a.points_awarded > 0 ? "text-sage" : "text-danger";
+                            const bonusLabels = [
+                              a.speed_bonus_awarded && "bonus vitesse",
+                              a.remontada_bonus_awarded && "bonus remontada",
+                            ].filter(Boolean);
                             return (
                               <li key={a.id} className={`flex justify-between gap-3 ${colorClass}`}>
                                 <span className="truncate min-w-0 flex-1">
                                   {attemptPlayer?.display_name ?? "Joueur"} — {label}
+                                  {bonusLabels.length > 0 && ` (${bonusLabels.join(", ")})`}
                                 </span>
                                 <span className="whitespace-nowrap font-bold">
                                   {a.points_awarded > 0 ? `+${a.points_awarded}` : a.points_awarded} pt
@@ -1728,6 +1895,11 @@ export default function HostScreen() {
       <div className="w-full max-w-6xl text-center">
         {!canStartRound && round?.status === "playing" && (
           <div className="bg-inkSurface border border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow">
+            {round.is_joker && (
+              <p className="text-sm font-bold text-amber flex items-center justify-center gap-1.5 mb-2">
+                <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
+              </p>
+            )}
             <p className="text-2xl font-bold flex items-center justify-center gap-2">
               <Music2 className="w-6 h-6 text-sage" /> Manche en cours — en attente d’un buzz…
             </p>
@@ -1750,6 +1922,11 @@ export default function HostScreen() {
         )}
         {!canStartRound && round?.status === "buzzed" && (
           <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            {round.is_joker && (
+              <p className="text-sm font-bold text-amber flex items-center gap-1.5">
+                <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
+              </p>
+            )}
             <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
@@ -1786,6 +1963,11 @@ export default function HostScreen() {
         )}
         {!canStartRound && round?.status === "revealed" && (
           <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            {round.is_joker && (
+              <p className="text-sm font-bold text-amber flex items-center gap-1.5">
+                <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
+              </p>
+            )}
             <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
@@ -2268,6 +2450,72 @@ export default function HostScreen() {
                 className="w-28 bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-lg px-3 py-1"
               />
             </div>
+
+            {/* Réglages bonus/malus (voir migration 0018) : comme le score
+                cible et les morceaux max ci-dessus, modifiables à tout
+                moment en cours de partie — un changement s'applique dès la
+                prochaine manche jugée (voire dès le prochain tirage pour le
+                joker). Regroupés en 2 sous-sections pour rester lisible même
+                à 5 réglages. */}
+            {room && (
+              <div className="flex flex-col gap-3 text-sm bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
+                    Bonus
+                  </span>
+                  <BonusMalusToggleRow
+                    label="Manche joker"
+                    description="Environ 1 manche sur 5 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
+                    icon={<Dice5 className="w-4 h-4" />}
+                    iconClassName="text-amber"
+                    enabled={room.bonus_joker_enabled}
+                    saving={savingBonusMalusSetting === "bonus_joker_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("bonus_joker_enabled")}
+                  />
+                  <BonusMalusToggleRow
+                    label="Bonus vitesse"
+                    description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 5 secondes."
+                    icon={<Zap className="w-4 h-4" />}
+                    iconClassName="text-sage"
+                    enabled={room.bonus_speed_enabled}
+                    saving={savingBonusMalusSetting === "bonus_speed_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("bonus_speed_enabled")}
+                  />
+                  <BonusMalusToggleRow
+                    label="Bonus remontada"
+                    description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement (et qu'au moins une personne est devant)."
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    iconClassName="text-sage"
+                    enabled={room.bonus_remontada_enabled}
+                    saving={savingBonusMalusSetting === "bonus_remontada_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("bonus_remontada_enabled")}
+                  />
+                </div>
+                <div className="flex flex-col gap-1 pt-1 border-t border-inkBorder">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
+                    Malus
+                  </span>
+                  <BonusMalusToggleRow
+                    label="Malus série"
+                    description="3 bonnes réponses d'affilée par la même personne : son buzzer est retardé de 5s, puis 10s, puis 15s au tour suivant, tant que personne d'autre n'a répondu juste."
+                    icon={<Flame className="w-4 h-4" />}
+                    iconClassName="text-amber"
+                    enabled={room.malus_streak_lockout_enabled}
+                    saving={savingBonusMalusSetting === "malus_streak_lockout_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("malus_streak_lockout_enabled")}
+                  />
+                  <BonusMalusToggleRow
+                    label="Malus buzzer bloqué"
+                    description="3 premiers-buzz ratés d'affilée par la même personne : son buzzer est complètement bloqué à la manche suivante."
+                    icon={<XCircle className="w-4 h-4" />}
+                    iconClassName="text-danger"
+                    enabled={room.malus_streak_block_enabled}
+                    saving={savingBonusMalusSetting === "malus_streak_block_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("malus_streak_block_enabled")}
+                  />
+                </div>
+              </div>
+            )}
 
             {blindMode && (
               <p className="text-sm text-inkMuted bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">

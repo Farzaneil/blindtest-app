@@ -5,6 +5,17 @@ export type Room = {
   id: string;
   code: string;
   status: "lobby" | "in_progress" | "finished";
+  // Réglages bonus/malus (voir migration 0018) : par room plutôt que côté
+  // client, car resolve_round_attempt/resolve_buzz_winner tournent
+  // indépendamment du navigateur de l'hôte et ont besoin d'une source de
+  // vérité côté serveur. Activés par défaut. bonus_joker_enabled ne
+  // conditionne que le TIRAGE (voir insertRound plus bas) : si
+  // désactivé, aucune manche n'est jamais tirée joker.
+  bonus_joker_enabled: boolean;
+  bonus_speed_enabled: boolean;
+  bonus_remontada_enabled: boolean;
+  malus_streak_lockout_enabled: boolean;
+  malus_streak_block_enabled: boolean;
 };
 
 export type Player = {
@@ -14,6 +25,26 @@ export type Player = {
   is_host: boolean;
   score: number;
   connected: boolean;
+  // Bonus/malus (voir migration 0017) : nombre de bonnes réponses
+  // d'affilée pour CE joueur — il n'y en a jamais qu'un seul avec un
+  // compteur > 0 dans toute la room à un instant donné (resolve_round_
+  // attempt remet les autres à zéro), donc pas besoin d'info
+  // supplémentaire pour savoir "qui détient la série". À partir de 3,
+  // délai de buzz de 5/10/15s en début de manche (voir resolve_buzz_
+  // winner) ; calcul du délai fait côté client à partir de cette seule
+  // valeur, voir buzzLockoutSeconds dans app/play/page.tsx.
+  correct_streak_count: number;
+  // Nombre de premiers-buzz ratés d'affilée pour ce joueur (personnel,
+  // pas de notion de "détenteur unique" ici). Remis à zéro par
+  // resolve_round_attempt dès que ce joueur répond correctement, ou dès
+  // que le blocage complet (voir wrong_streak_block_round_index) a été
+  // posé.
+  wrong_streak_count: number;
+  // order_index de la manche dont les 3 échecs d'affilée ont déclenché le
+  // blocage complet — le buzzer de ce joueur est bloqué sur la manche
+  // (wrong_streak_block_round_index + 1) uniquement (voir resolve_buzz_
+  // winner) : null si aucun blocage n'est en attente.
+  wrong_streak_block_round_index: number | null;
 };
 
 export type Round = {
@@ -48,6 +79,10 @@ export type Round = {
   // côté /play) sans dépendre d'un état côté hôte auquel ils n'ont pas
   // accès.
   blind_mode: boolean;
+  // Tiré au hasard côté client au moment de créer la manche (voir
+  // insertRound, migration 0017) : double les points de cette manche,
+  // dans les deux sens (resolve_round_attempt).
+  is_joker: boolean;
 };
 
 export type RoundAttempt = {
@@ -66,6 +101,11 @@ export type RoundAttempt = {
   // remporter ce titre.
   reaction_seconds: number | null;
   created_at: string;
+  // Bonus/malus (voir migration 0017) : posés par resolve_round_attempt,
+  // purement informatifs pour l'affichage ("+1 bonus vitesse !" etc.) —
+  // déjà inclus dans points_awarded, pas à additionner à part.
+  speed_bonus_awarded: boolean;
+  remontada_bonus_awarded: boolean;
 };
 
 /**
@@ -98,7 +138,7 @@ export async function createRoom(): Promise<Room> {
 export async function getRoomById(roomId: string): Promise<Room | null> {
   const { data } = await supabase
     .from("rooms")
-    .select("id, code, status")
+    .select("id, code, status, bonus_joker_enabled, bonus_speed_enabled, bonus_remontada_enabled, malus_streak_lockout_enabled, malus_streak_block_enabled")
     .eq("id", roomId)
     .maybeSingle();
   return (data as Room) ?? null;
@@ -116,7 +156,7 @@ export function subscribeToRoom(roomId: string, onChange: (room: Room | null) =>
   const fetchAndEmit = async () => {
     const { data } = await supabase
       .from("rooms")
-      .select("id, code, status")
+      .select("id, code, status, bonus_joker_enabled, bonus_speed_enabled, bonus_remontada_enabled, malus_streak_lockout_enabled, malus_streak_block_enabled")
       .eq("id", roomId)
       .maybeSingle();
     onChange((data as Room) ?? null);
@@ -146,6 +186,32 @@ export function subscribeToRoom(roomId: string, onChange: (room: Room | null) =>
  * supabase/migrations/0004_rls_hardening.sql), donc pas besoin d'une
  * fonction SECURITY DEFINER pour cette transition précise.
  */
+/**
+ * Met à jour un ou plusieurs réglages bonus/malus de la room (voir
+ * migration 0018) — modifiable à tout moment pendant la partie depuis le
+ * panneau playlist côté hôte (voir app/host/page.tsx). Update direct (pas
+ * de RPC) : ces colonnes sont explicitement accordées en écriture aux
+ * clients anon/authenticated (voir la migration), contrairement à
+ * score/correct_streak_count etc. qui restent réservés aux fonctions
+ * SECURITY DEFINER.
+ */
+export async function updateRoomBonusMalusSettings(
+  roomId: string,
+  settings: Partial<
+    Pick<
+      Room,
+      | "bonus_joker_enabled"
+      | "bonus_speed_enabled"
+      | "bonus_remontada_enabled"
+      | "malus_streak_lockout_enabled"
+      | "malus_streak_block_enabled"
+    >
+  >
+): Promise<void> {
+  const { error } = await supabase.from("rooms").update(settings).eq("id", roomId);
+  if (error) throw error;
+}
+
 export async function finishRoom(roomId: string): Promise<void> {
   await supabase.from("rooms").update({ status: "finished" }).eq("id", roomId);
 }
@@ -303,10 +369,17 @@ export function subscribeToRoundAttempts(
   };
 }
 
+// Probabilité qu'une manche soit tirée "joker" (double les points, dans
+// les deux sens — voir migration 0017 et resolve_round_attempt). ~1
+// manche sur 5 : assez rare pour rester une surprise, assez fréquent pour
+// arriver plusieurs fois sur une partie normale.
+const JOKER_ROUND_PROBABILITY = 0.2;
+
 async function insertRound(
   roomId: string,
   track: { sourceTrackId: string; title: string; artist: string },
-  blindMode: boolean
+  blindMode: boolean,
+  jokerEnabled: boolean
 ): Promise<Round> {
   const { data: existing } = await supabase
     .from("rounds")
@@ -317,6 +390,14 @@ async function insertRound(
     .maybeSingle();
 
   const nextIndex = (existing?.order_index ?? -1) + 1;
+
+  // Manche joker (voir migration 0017) : tirée au hasard ici plutôt que
+  // côté serveur — purement cosmétique/ludique, aucune conséquence de
+  // sécurité à avoir ça décidé côté client, comme le mélange de playlist
+  // ou la génération par genre juste au-dessus dans ce fichier. Si le
+  // bonus est désactivé dans les réglages de la room, on ne tire même pas
+  // au hasard : is_joker restera toujours false.
+  const isJoker = jokerEnabled && Math.random() < JOKER_ROUND_PROBABILITY;
 
   const { data, error } = await supabase
     .from("rounds")
@@ -329,6 +410,7 @@ async function insertRound(
       status: "playing",
       started_at: new Date().toISOString(),
       blind_mode: blindMode,
+      is_joker: isJoker,
     })
     .select()
     .single();
@@ -346,7 +428,11 @@ async function insertRound(
  * Lance une manche "factice" (pas de vrai morceau) — utile pour retester le
  * mécanisme de buzz seul, indépendamment de Spotify.
  */
-export async function startTestRound(roomId: string, blindMode = false): Promise<void> {
+export async function startTestRound(
+  roomId: string,
+  blindMode = false,
+  jokerEnabled = true
+): Promise<void> {
   await insertRound(
     roomId,
     {
@@ -354,7 +440,8 @@ export async function startTestRound(roomId: string, blindMode = false): Promise
       title: "Morceau de test",
       artist: "Artiste de test",
     },
-    blindMode
+    blindMode,
+    jokerEnabled
   );
 }
 
@@ -368,9 +455,10 @@ export async function startTestRound(roomId: string, blindMode = false): Promise
 export async function startRoundWithTrack(
   roomId: string,
   track: { sourceTrackId: string; title: string; artist: string },
-  blindMode: boolean
+  blindMode: boolean,
+  jokerEnabled: boolean
 ): Promise<Round> {
-  return insertRound(roomId, track, blindMode);
+  return insertRound(roomId, track, blindMode, jokerEnabled);
 }
 
 /**
@@ -458,6 +546,15 @@ export type PlayerRound = {
   artist: string;
   // Voir le commentaire sur Round.blind_mode plus haut.
   blind_mode: boolean;
+  // Voir le commentaire sur Round.is_joker plus haut.
+  is_joker: boolean;
+  // Nécessaire pour savoir si CE joueur est bloqué sur CETTE manche par le
+  // malus 2 (voir lib/buzzLockout.ts) : comparé à
+  // player.wrong_streak_block_round_index côté client, purement pour
+  // l'affichage (l'application réelle du blocage se fait côté serveur,
+  // voir resolve_buzz_winner).
+  order_index: number;
+  started_at: string | null;
 };
 
 function generateWebDeviceId(): string {
@@ -545,7 +642,7 @@ export function subscribeToCurrentRoundForPlayer(
     const { data } = await supabase
       .from("rounds")
       .select(
-        "id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist, blind_mode"
+        "id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist, blind_mode, is_joker, order_index, started_at"
       )
       .eq("room_id", roomId)
       .order("order_index", { ascending: false })
