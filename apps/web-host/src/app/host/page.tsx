@@ -23,11 +23,13 @@ import {
   finishRoom,
   resumeRoom,
   resetRoomScores,
+  joinRoomAsHost,
+  sendBuzz,
   type Player,
   type Round,
   type RoundAttempt,
 } from "../../lib/rooms";
-import { withRanks } from "../../lib/ranking";
+import { withRanks, formatOrdinal } from "../../lib/ranking";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
 import {
   getSpotifyQuotaLocks,
@@ -63,6 +65,9 @@ import {
   AlertTriangle,
   Check,
   GripVertical,
+  LayoutDashboard,
+  Gamepad2,
+  UserPlus,
 } from "lucide-react";
 
 type HostMode = "gamemaster" | "player";
@@ -102,6 +107,21 @@ const TARGET_SCORE_STORAGE_KEY = "blindtest_host_target_score";
 // plus bas) : la partie s'arrête dès que la première des deux limites est
 // atteinte, ou à la fin de la playlist si aucune des deux n'est fixée.
 const MAX_ROUNDS_STORAGE_KEY = "blindtest_host_max_rounds";
+// "Tu joues aussi sur cet écran ?" (mode "Tout le monde participe"
+// uniquement, voir blindMode) : décision prise UNE SEULE FOIS, avant le
+// lancement de la toute première manche (sinon le premier morceau démarre
+// avant que l'hôte ait pu s'inscrire comme joueur) — pas un toggle qu'on
+// peut changer d'avis en cours de partie, voir hostJoinResolved plus bas.
+// hostPlayerId identifie la ligne `players` (is_host = true, voir
+// joinRoomAsHost) créée si l'hôte répond "oui" ; hostJoinSkipped mémorise
+// qu'il a répondu "non" (pour ne pas réafficher la question). hostView ne
+// pilote que l'écran actuellement affiché (admin vs buzzer) : basculé
+// automatiquement au lancement d'une manche et au premier buzz, voir
+// handlePlayNextInQueue et l'effet de bascule automatique plus bas — plus
+// aucun contrôle manuel côté hôte pour ça.
+const HOST_PLAYER_ID_STORAGE_KEY = "blindtest_host_player_id";
+const HOST_JOIN_SKIPPED_STORAGE_KEY = "blindtest_host_join_skipped";
+const HOST_VIEW_STORAGE_KEY = "blindtest_host_view";
 
 function readStoredJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -133,6 +153,9 @@ function clearStoredGameState() {
     BUILDING_STORAGE_KEY,
     TARGET_SCORE_STORAGE_KEY,
     MAX_ROUNDS_STORAGE_KEY,
+    HOST_PLAYER_ID_STORAGE_KEY,
+    HOST_JOIN_SKIPPED_STORAGE_KEY,
+    HOST_VIEW_STORAGE_KEY,
   ]) {
     try {
       window.sessionStorage.removeItem(key);
@@ -174,6 +197,147 @@ function RankBadge({ rank }: { rank: number }) {
     >
       {rank}
     </span>
+  );
+}
+
+/**
+ * Vue "hôte joueur" (montée dès que hostView === "buzzer", voir l'early
+ * return dans HostScreen) : porte
+ * quasiment tel quel la logique de BuzzerView (app/play/page.tsx) — même
+ * calculs canBuzz/alreadyBuzzed/iWon, même style de bouton fixe vert plein
+ * / outlined — mais réutilise round/players déjà chargés côté hôte
+ * (subscribeToRounds/subscribeToPlayers dans HostScreen) plutôt que
+ * d'ouvrir une deuxième souscription Realtime redondante. Ne réplique pas
+ * l'écran de fin de partie enrichi de /play (podium, stats) : quand la
+ * partie est terminée, un simple message renvoie vers la vue admin, qui a
+ * déjà son propre écran de fin.
+ */
+function HostBuzzerView({
+  round,
+  players,
+  hostPlayerId,
+  gameOver,
+  sending,
+  onBuzz,
+  onBackToAdmin,
+}: {
+  round: Round | null;
+  players: Player[];
+  hostPlayerId: string;
+  gameOver: boolean;
+  sending: boolean;
+  onBuzz: () => void;
+  onBackToAdmin: () => void;
+}) {
+  const alreadyBuzzed =
+    round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
+  // Mode "Maître du jeu" uniquement en pratique (voir HostScreen : ce
+  // composant n'est monté qu'en blindMode) — locked_player_id existe pour
+  // les deux modes côté données, gardé ici pour rester symétrique avec
+  // BuzzerView.
+  const isLocked = round?.status === "playing" && round.locked_player_id === hostPlayerId;
+  const canBuzz = round?.status === "playing" && !sending && !isLocked;
+  const iWon = alreadyBuzzed && round?.buzzed_by_player_id === hostPlayerId;
+  const buzzer = round?.buzzed_by_player_id
+    ? players.find((p) => p.id === round.buzzed_by_player_id)
+    : null;
+  const somethingAlreadyFound = round && (round.title_found || round.artist_found);
+  // Comme côté /play : la réponse ne s'affiche sur CE buzzer qu'une fois
+  // "scored", jamais dès "revealed" — sinon l'hôte verrait le titre/artiste
+  // s'afficher ici avant même d'avoir basculé sur la vue admin pour juger,
+  // ce qui casserait l'effet "je ne connais pas la réponse à l'avance" pour
+  // lui-même.
+  const answerRevealed = round?.status === "scored";
+
+  const ranked = withRanks(players);
+  const me = ranked.find((p) => p.id === hostPlayerId);
+
+  return (
+    <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+      <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
+        <span className="font-bold truncate">{me?.display_name ?? "Toi"}</span>
+        <span className="text-sm text-inkMuted whitespace-nowrap">
+          {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
+          <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
+        </span>
+      </div>
+
+      {gameOver ? (
+        <p className="text-xl text-inkMuted text-center">
+          La partie est terminée — reviens sur la vue admin pour voir les résultats.
+        </p>
+      ) : !round ? (
+        <p className="text-xl text-inkMuted text-center animate-pulse">
+          En attente du lancement d’une manche…
+        </p>
+      ) : (
+        <>
+          {somethingAlreadyFound && (
+            <p className="text-sm text-inkMuted text-center">
+              Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+                .filter(Boolean)
+                .join(" et ")}
+              {" — à vous de jouer pour le reste !"}
+            </p>
+          )}
+          <button
+            onClick={onBuzz}
+            disabled={!canBuzz}
+            className={`w-56 h-56 rounded-full text-3xl font-black border-4 transition ${
+              canBuzz
+                ? "bg-sage border-sage text-ink active:scale-95"
+                : alreadyBuzzed
+                  ? iWon
+                    ? "bg-transparent border-sage text-sage"
+                    : "bg-inkSurface2 border-inkBorder text-inkMuted"
+                  : "bg-inkSurface2 border-inkBorder text-inkMuted"
+            }`}
+          >
+            {alreadyBuzzed ? (
+              iWon ? (
+                <span className="inline-flex flex-col items-center gap-1">
+                  <CheckCircle2 className="w-9 h-9" />
+                  BUZZÉ !
+                </span>
+              ) : (
+                "BUZZÉ"
+              )
+            ) : (
+              "BUZZ"
+            )}
+          </button>
+          {alreadyBuzzed && (
+            <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
+              {iWon
+                ? "Tu as buzzé en premier !"
+                : round.buzzed_by_player_id === null
+                  ? "Personne n’a buzzé à temps"
+                  : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+            </p>
+          )}
+          {isLocked && (
+            <p className="text-sm text-inkMuted text-center">
+              Tu viens de répondre — attends qu’un autre joueur tente sa chance avant de rebuzzer.
+            </p>
+          )}
+          {answerRevealed && (
+            <div className="w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
+              <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
+              <p className="text-xl font-bold text-sage font-display">
+                {round.title} — {round.artist}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      <button
+        onClick={onBackToAdmin}
+        className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+      >
+        <LayoutDashboard className="w-3.5 h-3.5" /> Vue admin
+      </button>
+    </div>
   );
 }
 
@@ -319,6 +483,14 @@ export default function HostScreen() {
   // "info" / ambre) reprise du mockup validé.
   const [addMethodTab, setAddMethodTab] = useState<"search" | "import" | "genre">("search");
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
+  // Voir le commentaire sur HOST_PLAYER_ID_STORAGE_KEY plus haut.
+  const [hostPlayerId, setHostPlayerId] = useState<string | null>(null);
+  const [hostJoinSkipped, setHostJoinSkipped] = useState(false);
+  const [hostView, setHostView] = useState<"admin" | "buzzer">("admin");
+  const [joinHostFormOpen, setJoinHostFormOpen] = useState(false);
+  const [hostNameDraft, setHostNameDraft] = useState("Hôte");
+  const [joiningAsHost, setJoiningAsHost] = useState(false);
+  const [sendingHostBuzz, setSendingHostBuzz] = useState(false);
   // null = pas de score cible, la partie dure jusqu'à la fin de la
   // playlist (comportement historique). Sinon, la partie se termine dès
   // qu'un joueur atteint (ou dépasse) ce score, même si la playlist n'est
@@ -471,6 +643,9 @@ export default function HostScreen() {
         setQueue([]);
         setQueueIndex(0);
         setBuildingPlaylist(true);
+        setHostPlayerId(null);
+        setHostJoinSkipped(false);
+        setHostView("admin");
         setHydrated(true);
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Erreur de connexion à Supabase");
@@ -494,6 +669,9 @@ export default function HostScreen() {
       }
       setRoom({ id: existing.id, code: existing.code });
       setHostMode(readStoredJSON(MODE_STORAGE_KEY, null));
+      setHostPlayerId(readStoredJSON(HOST_PLAYER_ID_STORAGE_KEY, null));
+      setHostJoinSkipped(readStoredJSON(HOST_JOIN_SKIPPED_STORAGE_KEY, false));
+      setHostView(readStoredJSON(HOST_VIEW_STORAGE_KEY, "admin"));
       setTargetScore(readStoredJSON(TARGET_SCORE_STORAGE_KEY, null));
       setMaxRounds(readStoredJSON(MAX_ROUNDS_STORAGE_KEY, null));
       setQueue(readStoredJSON(QUEUE_STORAGE_KEY, []));
@@ -518,7 +696,21 @@ export default function HostScreen() {
     writeStoredJSON(QUEUE_STORAGE_KEY, queue);
     writeStoredJSON(QUEUE_INDEX_STORAGE_KEY, queueIndex);
     writeStoredJSON(BUILDING_STORAGE_KEY, buildingPlaylist);
-  }, [hydrated, hostMode, targetScore, maxRounds, queue, queueIndex, buildingPlaylist]);
+    writeStoredJSON(HOST_PLAYER_ID_STORAGE_KEY, hostPlayerId);
+    writeStoredJSON(HOST_JOIN_SKIPPED_STORAGE_KEY, hostJoinSkipped);
+    writeStoredJSON(HOST_VIEW_STORAGE_KEY, hostView);
+  }, [
+    hydrated,
+    hostMode,
+    targetScore,
+    maxRounds,
+    queue,
+    queueIndex,
+    buildingPlaylist,
+    hostPlayerId,
+    hostJoinSkipped,
+    hostView,
+  ]);
 
   useEffect(() => {
     if (!room) return;
@@ -533,6 +725,18 @@ export default function HostScreen() {
       unsubAttempts();
     };
   }, [room]);
+
+  // Bascule automatique vers la vue admin dès qu'un buzz survient (le
+  // sien ou celui d'un autre joueur) — pour l'hôte qui joue aussi (voir
+  // hostPlayerId) : il doit reprendre la main pour révéler la réponse et
+  // juger, sans avoir à penser à rebasculer lui-même. Sens inverse (admin
+  // -> buzzer au lancement d'une manche) géré dans handlePlayNextInQueue.
+  useEffect(() => {
+    if (hostPlayerId && round?.status === "buzzed") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setHostView("admin");
+    }
+  }, [hostPlayerId, round?.status]);
 
   // Récupère les erreurs/succès renvoyés par /api/spotify/callback dans
   // l'URL (lecture ponctuelle au montage), puis nettoie l'URL pour ne pas
@@ -1044,6 +1248,13 @@ export default function HostScreen() {
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
     setLaunchingRound(false);
+    // Bascule automatique sur le buzzer dès qu'une manche démarre, pour
+    // l'hôte qui joue aussi (voir hostJoinResolved/hostPlayerId) : couvre
+    // à la fois "Démarrer la partie" (première manche) et "Manche
+    // suivante" (mêmes bouton et handler, voir le commentaire plus haut).
+    // Le sens inverse (buzz -> vue admin) est géré par un effet séparé plus
+    // bas, sur round?.status.
+    if (hostPlayerId) setHostView("buzzer");
   };
 
   const handleReveal = async () => {
@@ -1052,6 +1263,41 @@ export default function HostScreen() {
       await revealRound(round.id);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de révéler la réponse.");
+    }
+  };
+
+  // "Tu joues aussi sur cet écran ?" (voir le bloc affiché juste après le
+  // choix du mode de jeu, uniquement en blindMode, tant que
+  // hostJoinResolved est false) : décision prise une seule fois avant le
+  // lancement de la première manche. Crée la ligne `players` de l'hôte
+  // (is_host=true, voir joinRoomAsHost) — hostView bascule ensuite tout
+  // seul entre admin et buzzer au fil de la partie (voir
+  // handlePlayNextInQueue pour le sens "manche suivante -> buzzer", et
+  // l'effet plus bas pour le sens "quelqu'un buzze -> admin").
+  const handleJoinAsHost = async (name: string) => {
+    if (!room) return;
+    setJoiningAsHost(true);
+    try {
+      const player = await joinRoomAsHost(room.id, name.trim() || "Hôte");
+      setHostPlayerId(player.id);
+      setJoinHostFormOpen(false);
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de te connecter comme joueur sur cet écran.");
+    } finally {
+      setJoiningAsHost(false);
+    }
+  };
+
+  // Équivalent de onBuzz côté /play (voir play/page.tsx), mais pour le
+  // buzz de l'hôte lui-même : round est déjà disponible via
+  // subscribeToRounds (pas besoin d'une deuxième souscription dédiée).
+  const handleHostBuzz = async () => {
+    if (!round || !hostPlayerId) return;
+    setSendingHostBuzz(true);
+    try {
+      await sendBuzz(round.id, hostPlayerId);
+    } finally {
+      setSendingHostBuzz(false);
     }
   };
 
@@ -1150,6 +1396,9 @@ export default function HostScreen() {
     setQueue([]);
     setQueueIndex(0);
     setBuildingPlaylist(true);
+    setHostPlayerId(null);
+    setHostJoinSkipped(false);
+    setHostView("admin");
     try {
       const r = await createRoom();
       writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
@@ -1218,6 +1467,12 @@ export default function HostScreen() {
   const rankedPlayers = withRanks(players);
   const modeChosen = hostMode !== null;
   const blindMode = hostMode === "player";
+  // "Tu joues aussi sur cet écran ?" doit être tranché avant de pouvoir
+  // continuer vers la préparation Spotify/playlist (voir les blocs plus
+  // bas gardés par hostJoinResolved) : pas de sens en mode "Maître du jeu"
+  // (toujours résolu), résolu dès que l'hôte a rejoint OU a explicitement
+  // décliné.
+  const hostJoinResolved = !blindMode || hostPlayerId !== null || hostJoinSkipped;
   // Manche clôturée par expiration du timer (personne n'a buzzé) et pas
   // encore acquittée par l'hôte : buzzed_by_player_id reste null dans ce
   // cas précis (une manche résolue via Bonne/Mauvaise réponse a toujours un
@@ -1260,6 +1515,30 @@ export default function HostScreen() {
       mostContestedCount = count;
       mostContestedRound = r;
     }
+  }
+
+  // Bascule complète de l'écran hôte vers un buzzer, pilotée
+  // automatiquement (voir handlePlayNextInQueue et l'effet de bascule
+  // automatique sur le buzz plus haut, plus aucun contrôle manuel) : un
+  // early return plutôt qu'un rendu conditionnel imbriqué dans le JSX
+  // ci-dessous, qui est déjà volumineux et pas du tout structuré pour ce
+  // cas — tous les hooks/handlers du composant ont déjà tourné à ce stade
+  // (règles des Hooks respectées), ce early return ne fait que remplacer
+  // le JSX produit.
+  if (room && hostPlayerId && hostView === "buzzer") {
+    return (
+      <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-ink">
+        <HostBuzzerView
+          round={round}
+          players={players}
+          hostPlayerId={hostPlayerId}
+          gameOver={gameOver}
+          sending={sendingHostBuzz}
+          onBuzz={handleHostBuzz}
+          onBackToAdmin={() => setHostView("admin")}
+        />
+      </main>
+    );
   }
 
   return (
@@ -1305,6 +1584,7 @@ export default function HostScreen() {
               ))}
             </ul>
           </div>
+
         </>
       ) : (
         // Avant le début de la partie, les scores n'ont aucun sens (tout le
@@ -1673,7 +1953,59 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && (
+        {/* "Tu joues aussi sur cet écran ?" : uniquement en mode "Tout le
+            monde participe" (blindMode), et uniquement avant que la
+            question soit tranchée (hostJoinResolved) — décision prise une
+            seule fois, avant de lancer la première manche (sinon le
+            premier morceau démarrerait avant que l'hôte ait eu la chance
+            de s'inscrire comme joueur). Tous les blocs suivants (connexion
+            Spotify, construction de playlist…) restent masqués tant que ce
+            n'est pas résolu. */}
+        {canStartRound && modeChosen && blindMode && !hostJoinResolved && !isUnresolvedTimeout && (
+          <div className="flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border border-inkBorder rounded-2xl px-6 py-6">
+            <p className="text-lg font-bold text-white text-center flex items-center gap-2">
+              <Gamepad2 className="w-5 h-5 text-sage" /> Tu joues aussi sur cet écran ?
+            </p>
+            <p className="text-sm text-inkMuted text-center">
+              Transforme cet écran en buzzer pour toi entre les manches, sans besoin d’un autre
+              appareil. À décider maintenant : ça ne pourra plus être changé une fois la partie
+              commencée.
+            </p>
+            {!joinHostFormOpen ? (
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setJoinHostFormOpen(true)}
+                  className="flex-1 bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold"
+                >
+                  Oui, je joue
+                </button>
+                <button
+                  onClick={() => setHostJoinSkipped(true)}
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-white transition px-4 py-3 rounded-xl font-bold text-inkMuted"
+                >
+                  Non, je gère juste le jeu
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2 w-full">
+                <input
+                  value={hostNameDraft}
+                  onChange={(e) => setHostNameDraft(e.target.value)}
+                  className="flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-3 py-2 text-white"
+                />
+                <button
+                  onClick={() => handleJoinAsHost(hostNameDraft)}
+                  disabled={joiningAsHost || hostNameDraft.trim().length === 0}
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center gap-2 whitespace-nowrap"
+                >
+                  <UserPlus className="w-4 h-4" /> {joiningAsHost ? "..." : "Confirmer"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && (
           <button
             onClick={() => {
               if (window.confirm("Se déconnecter de Spotify pour connecter un autre compte ?")) {
@@ -1686,11 +2018,11 @@ export default function HostScreen() {
           </button>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "checking" && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "checking" && (
           <p className="text-inkMuted">Vérification de la connexion Spotify…</p>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "disconnected" && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "disconnected" && (
           <button
             onClick={spotifyPlayer.connect}
             className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold"
@@ -1699,11 +2031,11 @@ export default function HostScreen() {
           </button>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (
           <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-6 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
             <Trophy className="w-10 h-10 text-gold" />
             {targetScoreReached ? (
@@ -1815,7 +2147,7 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !gameOver && !buildingPlaylist && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !gameOver && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
             {launchingRound ? (
               <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
@@ -1852,7 +2184,7 @@ export default function HostScreen() {
           </div>
         )}
 
-        {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
           <div className="w-full flex flex-col gap-4 text-left bg-inkSurface border border-inkBorderStrong rounded-2xl p-6 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
             <div className="flex justify-between items-center">
               <span className="text-sm text-inkMuted flex items-center gap-1.5">

@@ -473,6 +473,30 @@ export async function getPlayerSession(
   return { roomId: data.room_id, playerId: data.id };
 }
 
+/**
+ * Fait rejoindre l'hôte lui-même comme joueur (is_host = true), pour le
+ * mode "Je joue aussi sur cet écran" (voir le toggle dans
+ * app/host/page.tsx, visible uniquement en mode "Tout le monde
+ * participe") : contrairement à joinRoomByCode, roomId est déjà connu
+ * (l'hôte est forcément déjà dans sa propre room) donc pas besoin de
+ * chercher par code. is_host=true n'est qu'informatif (voir migration
+ * 0015) : le reste du jeu (buzz, score, classement, jugement) traite cette
+ * ligne exactement comme celle de n'importe quel autre joueur.
+ */
+export async function joinRoomAsHost(roomId: string, displayName: string): Promise<Player> {
+  const { data, error } = await supabase
+    .from("players")
+    .insert({ room_id: roomId, display_name: displayName, device_id: webDeviceId, is_host: true })
+    .select()
+    .single();
+
+  if (error || !data) {
+    throw new Error("Impossible de te connecter comme joueur sur cet écran, réessaie.");
+  }
+
+  return data as Player;
+}
+
 export async function joinRoomByCode(code: string, displayName: string) {
   const { data: room, error: roomError } = await supabase
     .from("rooms")
