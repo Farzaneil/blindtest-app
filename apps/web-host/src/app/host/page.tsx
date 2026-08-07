@@ -1329,23 +1329,39 @@ export default function HostScreen() {
               </button>
             </div>
           </div>
-          <div className="flex items-center justify-between gap-3 text-sm text-inkMuted">
-            <span className="truncate">
-              {players.length === 0
-                ? "En attente de joueurs…"
-                : `${players.length} joueur${players.length > 1 ? "s" : ""} : ${players
-                    .map((p) => p.display_name)
-                    .join(", ")}`}
-            </span>
-            {hostMode && (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                {hostMode === "gamemaster" ? (
-                  <Mic2 className="w-3.5 h-3.5 text-sage" />
-                ) : (
-                  <Headphones className="w-3.5 h-3.5 text-sage" />
-                )}
-                {hostMode === "gamemaster" ? "Maître du jeu" : "Tout le monde participe"}
+          <div className="flex flex-col gap-2 text-sm text-inkMuted">
+            <div className="flex items-center justify-between gap-3">
+              <span>
+                {players.length === 0
+                  ? "En attente de joueurs…"
+                  : `${players.length} joueur${players.length > 1 ? "s" : ""}`}
               </span>
+              {hostMode && (
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  {hostMode === "gamemaster" ? (
+                    <Mic2 className="w-3.5 h-3.5 text-sage" />
+                  ) : (
+                    <Headphones className="w-3.5 h-3.5 text-sage" />
+                  )}
+                  {hostMode === "gamemaster" ? "Maître du jeu" : "Tout le monde participe"}
+                </span>
+              )}
+            </div>
+            {/* Liste des joueurs plutôt qu'une phrase séparée par des
+                virgules : chaque nom reste lisible individuellement même
+                quand il y en a beaucoup, et ça s'enroule naturellement sur
+                plusieurs lignes au lieu de produire une longue chaîne. */}
+            {players.length > 0 && (
+              <ul className="flex flex-wrap gap-1.5">
+                {players.map((p) => (
+                  <li
+                    key={p.id}
+                    className="bg-inkSurface2 border border-inkBorder rounded-lg px-2.5 py-1 text-xs text-white truncate max-w-[160px]"
+                  >
+                    {p.display_name}
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
         </div>
@@ -1397,7 +1413,7 @@ export default function HostScreen() {
                               a.points_awarded > 0 ? "text-sage" : "text-danger";
                             return (
                               <li key={a.id} className={`flex justify-between gap-3 ${colorClass}`}>
-                                <span className="truncate">
+                                <span className="truncate min-w-0 flex-1">
                                   {attemptPlayer?.display_name ?? "Joueur"} — {label}
                                 </span>
                                 <span className="whitespace-nowrap font-bold">
@@ -1568,6 +1584,33 @@ export default function HostScreen() {
           <div className="flex flex-col items-center gap-6">
             <p className="text-2xl font-bold">Comment veux-tu jouer cette partie ?</p>
 
+            <div className="flex flex-col md:flex-row gap-4 w-full">
+              <button
+                onClick={() => setHostMode("gamemaster")}
+                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
+              >
+                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
+                  <Mic2 className="w-5 h-5 text-sage" /> Maître du jeu
+                </p>
+                <p className="text-sm text-inkMuted">
+                  Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
+                  les titres à l’avance.
+                </p>
+              </button>
+              <button
+                onClick={() => setHostMode("player")}
+                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
+              >
+                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
+                  <Headphones className="w-5 h-5 text-sage" /> Tout le monde participe
+                </p>
+                <p className="text-sm text-inkMuted">
+                  Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
+                  révélés seulement pour valider une réponse.
+                </p>
+              </button>
+            </div>
+
             {/* Score cible optionnel : permet de charger une grosse playlist
                 (100+ morceaux) sans que la partie soit interminable, en la
                 terminant dès qu'un joueur atteint ce score plutôt que
@@ -1626,33 +1669,6 @@ export default function HostScreen() {
                 Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce
                 nombre de morceaux a été joué. Cumulable avec le score cible ci-dessus.
               </p>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4 w-full">
-              <button
-                onClick={() => setHostMode("gamemaster")}
-                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
-              >
-                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
-                  <Mic2 className="w-5 h-5 text-sage" /> Maître du jeu
-                </p>
-                <p className="text-sm text-inkMuted">
-                  Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
-                  les titres à l’avance.
-                </p>
-              </button>
-              <button
-                onClick={() => setHostMode("player")}
-                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
-              >
-                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
-                  <Headphones className="w-5 h-5 text-sage" /> Tout le monde participe
-                </p>
-                <p className="text-sm text-inkMuted">
-                  Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
-                  révélés seulement pour valider une réponse.
-                </p>
-              </button>
             </div>
           </div>
         )}
@@ -1837,7 +1853,7 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
-          <div className="flex flex-col gap-4 text-left bg-inkSurface border border-inkBorder rounded-2xl p-6">
+          <div className="w-full flex flex-col gap-4 text-left bg-inkSurface border border-inkBorderStrong rounded-2xl p-6 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
             <div className="flex justify-between items-center">
               <span className="text-sm text-inkMuted flex items-center gap-1.5">
                 Mode :
@@ -1992,7 +2008,7 @@ export default function HostScreen() {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 items-start">
+            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-stretch">
               {/* Panneau de la méthode active */}
               <div className="flex flex-col gap-3 bg-inkSurface2 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
                 {addMethodTab === "search" && (
@@ -2022,7 +2038,7 @@ export default function HostScreen() {
                             key={track.sourceTrackId}
                             className="flex justify-between items-center bg-inkSurface border border-inkBorder rounded-xl px-4 py-3"
                           >
-                            <span className="truncate">
+                            <span className="truncate min-w-0 flex-1">
                               {track.title} — {track.artist}
                             </span>
                             <button
@@ -2066,7 +2082,7 @@ export default function HostScreen() {
                         <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
                           {myPlaylists.map((playlist) => (
                             <li key={playlist.id} className="contents">
-                              <span className="bg-inkSurface rounded-xl px-4 py-3 truncate">
+                              <span className="bg-inkSurface rounded-xl px-4 py-3 truncate min-w-0">
                                 {playlist.name}{" "}
                                 <span className="text-inkMuted">({playlist.trackCount} morceaux)</span>
                               </span>
@@ -2153,8 +2169,15 @@ export default function HostScreen() {
               {/* File d'attente : toujours visible avec le bouton de
                   lancement juste dessous, pour ne jamais avoir à scroller
                   pour démarrer la partie (voir la proposition d'agencement
-                  validée). */}
-              <div className="flex flex-col gap-3 bg-inkSurface border border-sage/40 rounded-2xl p-4">
+                  validée). Même style neutre que le panneau de gauche
+                  (bg-inkSurface2/border-inkBorder) plutôt qu'un contour
+                  sauge sur tout le pourtour : un contour de couleur sur les
+                  4 côtés d'un panneau interne se confondait visuellement
+                  avec la bordure de la carte englobante et donnait
+                  l'impression que la file d'attente "sortait" de la carte
+                  au lieu d'en faire partie. Un simple liseré sauge à
+                  gauche suffit à la signaler comme le panneau important. */}
+              <div className="flex flex-col gap-3 bg-inkSurface2 border border-inkBorder border-l-4 border-l-sage rounded-2xl p-4">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-white">
                     File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
@@ -2181,11 +2204,11 @@ export default function HostScreen() {
                         onDragStart={handleDragStart(i)}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop(i)}
-                        className="flex justify-between items-center gap-3 bg-inkSurface2 rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
+                        className="flex justify-between items-center gap-3 bg-ink rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
                       >
-                        <span className="flex items-center gap-2 min-w-0">
+                        <span className="flex items-center gap-2 min-w-0 flex-1">
                           <GripVertical className="w-4 h-4 text-inkMuted flex-shrink-0" />
-                          <span className="truncate">
+                          <span className="truncate min-w-0 flex-1">
                             {blindMode
                               ? `Morceau ${queueIndex + i + 1}`
                               : `${track.title} — ${track.artist}`}
