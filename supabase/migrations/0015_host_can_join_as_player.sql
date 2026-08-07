@@ -1,0 +1,14 @@
+-- Permet à l'écran hôte de créer sa propre ligne `players` (is_host = true)
+-- quand il active "Je joue aussi sur cet écran" en mode "Tout le monde
+-- participe" (voir joinRoomAsHost dans apps/web-host/src/lib/rooms.ts et le
+-- toggle correspondant dans apps/web-host/src/app/host/page.tsx). Une fois
+-- cette ligne créée, l'hôte est un joueur comme un autre aux yeux du reste
+-- du jeu (buzz, score, classement) : aucune policy ni fonction dédiée n'est
+-- nécessaire au-delà de ce grant.
+--
+-- is_host reste un simple indicateur informatif, comme documenté dans
+-- 0001_init.sql ("is_host = rôle, pas un type de compte à part") : aucune
+-- vérification de privilège ne s'appuie sur cette colonne aujourd'hui, donc
+-- un grant de colonne classique suffit, exactement comme pour
+-- team_id/display_name/device_id (voir 0004_rls_hardening.sql).
+grant insert (is_host) on players to anon, authenticated;
