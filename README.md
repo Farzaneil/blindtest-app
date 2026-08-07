@@ -240,7 +240,8 @@ Points importants, vérifiés en 2026 :
   - Socle de genres fourni par défaut (facile à étendre dans
     `packages/game-logic/src/genrePresets.ts`, une clé = une liste d'artistes, aucun
     autre changement de code nécessaire) : Variétés françaises, Rap français,
-    Disco / Funk, Pop/Rock 2000-2010s, Dance / Électro.
+    Disco / Funk, Pop/Rock, Dance / Électro, Rock, R&B / Soul, Rap US,
+    Reggaeton / Latino.
   - Si la file obtenue est plus courte que demandé (artiste sans résultat pour
     l'époque choisie, etc.), l'app le signale et propose d'élargir l'époque ou de
     repasser sur "Tous les genres".
