@@ -15,7 +15,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5 } from "lucide-react";
 import {
   joinRoomByCode,
@@ -31,7 +31,7 @@ import {
   type Round,
   type RoundAttempt,
 } from "../../lib/rooms";
-import { withRanks, formatOrdinal } from "../../lib/ranking";
+import { withRanks, formatOrdinal, type RankedPlayer } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 
 type Session = { roomId: string; playerId: string };
@@ -173,6 +173,93 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
   );
 }
 
+// Hauteur fixe (en px) de chaque ligne du classement animé ci-dessous :
+// permet de calculer le décalage de l'animation par simple différence
+// d'index (ancien rang - nouveau rang) plutôt que par une vraie mesure DOM
+// (getBoundingClientRect) — suffisant tant que chaque ligne garde la même
+// hauteur (nom tronqué sur une seule ligne, voir truncate plus bas), et
+// beaucoup plus simple puisque ce composant est démonté/remonté à chaque
+// manche (voir AnimatedLeaderboard) : il n'y a donc pas de position DOM
+// "avant" à mesurer, seulement l'ordre précédent transmis en prop.
+const LEADERBOARD_ROW_HEIGHT_PX = 44;
+
+/**
+ * Classement complet, affiché uniquement pendant la fenêtre entre "réponse
+ * révélée" et le lancement de la manche suivante (voir answerRevealed dans
+ * BuzzerView) : remplace le bouton buzz, qui ne sert plus à rien une fois
+ * la manche jugée. Dès que l'hôte lance la manche suivante, ce composant
+ * est démonté et le buzzer réapparaît (voir le rendu conditionnel dans
+ * BuzzerView).
+ *
+ * Anime le changement de position d'un joueur qui en dépasse un autre (ou
+ * se fait dépasser) suite aux points distribués sur CETTE manche : chaque
+ * ligne démarre visuellement à sa position précédente (previousOrder,
+ * capturé juste au lancement de cette manche — voir previousOrderRef dans
+ * BuzzerView) puis glisse vers sa position finale via une transition CSS
+ * déclenchée une frame après le montage (technique "FLIP" simplifiée,
+ * sans mesure DOM réelle — voir LEADERBOARD_ROW_HEIGHT_PX ci-dessus).
+ */
+function AnimatedLeaderboard({
+  players,
+  previousOrder,
+  meId,
+}: {
+  players: RankedPlayer[];
+  previousOrder: string[];
+  meId: string;
+}) {
+  const [settled, setSettled] = useState(false);
+
+  useEffect(() => {
+    // Double requestAnimationFrame : le premier laisse le navigateur peindre
+    // l'état initial (lignes décalées, sans transition), le second bascule
+    // vers l'état final avec la transition active — un seul rAF suffit
+    // presque toujours, mais deux évitent tout risque de saut sans
+    // animation sur un navigateur plus lent à peindre.
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => setSettled(true));
+    });
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+    };
+  }, []);
+
+  return (
+    <ul className="w-full flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
+      {players.map((p, index) => {
+        const oldIndex = previousOrder.indexOf(p.id);
+        const offsetRows = oldIndex === -1 ? 0 : oldIndex - index;
+        return (
+          <li
+            key={p.id}
+            style={{
+              transform: settled ? "translateY(0)" : `translateY(${offsetRows * LEADERBOARD_ROW_HEIGHT_PX}px)`,
+              transition: settled ? "transform 450ms ease" : "none",
+            }}
+            className={`h-11 flex items-center justify-between gap-2 rounded-xl px-4 shrink-0 border ${
+              p.id === meId ? "bg-sage/10 border-sage" : "bg-inkSurface2 border-transparent"
+            }`}
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="text-inkMuted text-sm w-5 shrink-0">{p.rank}</span>
+              <span className="truncate font-medium">{p.display_name}</span>
+              {p.correct_streak_count >= 3 && (
+                <Flame
+                  className="w-3.5 h-3.5 text-amber shrink-0"
+                  aria-label="Bonnes réponses d'affilée"
+                />
+              )}
+            </span>
+            <span className="font-bold text-sage shrink-0">{p.score} pts</span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 function BuzzerView({
   roomId,
   playerId,
@@ -248,6 +335,29 @@ function BuzzerView({
 
   const ranked = withRanks(players);
   const me = ranked.find((p) => p.id === playerId);
+
+  // Classement animé affiché à la révélation de la réponse (voir
+  // AnimatedLeaderboard) : previousOrder mémorise l'ordre du classement tel
+  // qu'il était juste AVANT que les points de la manche en cours ne soient
+  // distribués — capturé une seule fois par manche, au moment où elle passe
+  // à "playing" (donc juste après que les points de la manche PRÉCÉDENTE
+  // ont déjà été appliqués). Un state plutôt qu'une ref : lire ref.current
+  // pendant le rendu (pour le passer en prop à AnimatedLeaderboard plus
+  // bas) n'est pas autorisé par les règles de pureté de React.
+  const [previousOrder, setPreviousOrder] = useState<string[]>([]);
+  const snapshotRoundIdRef = useRef<string | null>(null);
+  const roundIdForSnapshot = round?.id ?? null;
+  const roundStatusForSnapshot = round?.status ?? null;
+  useEffect(() => {
+    if (
+      roundStatusForSnapshot === "playing" &&
+      roundIdForSnapshot &&
+      snapshotRoundIdRef.current !== roundIdForSnapshot
+    ) {
+      setPreviousOrder(ranked.map((p) => p.id));
+      snapshotRoundIdRef.current = roundIdForSnapshot;
+    }
+  }, [roundIdForSnapshot, roundStatusForSnapshot, ranked]);
 
   // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
   // application se fait côté serveur (resolve_buzz_winner) — ceci ne sert
@@ -408,33 +518,94 @@ function BuzzerView({
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
-      {/* Toujours visible : pseudo, score et position au classement, pas
-          seulement entre les manches — pour que le joueur garde un œil sur
-          sa progression même pendant qu'une manche est en cours. */}
-      <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
-        <span className="font-bold truncate flex items-center gap-1.5">
-          {me?.display_name ?? "…"}
-          {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
-              informatif, l'application réelle se fait côté serveur. */}
-          {me && me.correct_streak_count >= 3 && (
-            <span
-              className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
-              title={`${me.correct_streak_count} bonnes réponses d'affilée — ton buzzer est retardé en début de manche`}
-            >
-              <Flame className="w-3.5 h-3.5" /> {me.correct_streak_count}
-            </span>
-          )}
-        </span>
-        <span className="text-sm text-inkMuted whitespace-nowrap">
-          {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
-          <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
-        </span>
-      </div>
+      {/* Bandeau pseudo/score/rang : masqué pendant la fenêtre de révélation
+          (voir answerRevealed), où le classement complet ci-dessous prend
+          le relais et rendrait ce résumé redondant. Visible dans tous les
+          autres cas, y compris avant le tout premier lancement de manche
+          (round === null) et pendant qu'une manche est en cours. */}
+      {!answerRevealed && (
+        <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
+          <span className="font-bold truncate flex items-center gap-1.5">
+            {me?.display_name ?? "…"}
+            {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
+                informatif, l'application réelle se fait côté serveur. */}
+            {me && me.correct_streak_count >= 3 && (
+              <span
+                className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
+                title={`${me.correct_streak_count} bonnes réponses d'affilée — ton buzzer est retardé en début de manche`}
+              >
+                <Flame className="w-3.5 h-3.5" /> {me.correct_streak_count}
+              </span>
+            )}
+          </span>
+          <span className="text-sm text-inkMuted whitespace-nowrap">
+            {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
+            <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
+          </span>
+        </div>
+      )}
 
       {!round ? (
-        <p className="text-xl text-inkMuted text-center animate-pulse">
-          En attente du lancement d’une manche par l’hôte…
-        </p>
+        <div className="w-full flex flex-col items-center gap-4">
+          <p className="text-xl text-inkMuted text-center animate-pulse">
+            En attente du lancement d’une manche par l’hôte…
+          </p>
+          {/* Liste des joueurs déjà inscrits, avant le tout premier
+              lancement (voir le commentaire sur subscribeToCurrentRoundForPlayer
+              dans lib/rooms.ts : round ne redevient jamais null une fois la
+              première manche créée, cette liste ne peut donc apparaître
+              qu'ici, jamais entre deux manches). Pas de classement ici :
+              tout le monde est encore à 0 point, un rang n'aurait pas de sens. */}
+          {players.length > 0 && (
+            <ul className="w-full space-y-2">
+              {players.map((p) => (
+                <li
+                  key={p.id}
+                  className="bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-2.5 text-center truncate"
+                >
+                  {p.display_name}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : answerRevealed ? (
+        <>
+          {round.is_joker && (
+            <p className="text-sm font-bold text-amber flex items-center gap-1.5">
+              <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
+            </p>
+          )}
+          {alreadyBuzzed && (
+            <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
+              {iWon
+                ? "Tu as buzzé en premier !"
+                : round.buzzed_by_player_id === null
+                  ? "Personne n’a buzzé à temps"
+                  : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+            </p>
+          )}
+          <div className="w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
+            <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
+            <p className="text-xl font-bold text-sage font-display">
+              {round.title} — {round.artist}
+            </p>
+            {(currentRoundHadSpeedBonus || currentRoundHadRemontadaBonus) && (
+              <p className="text-xs text-amber mt-2">
+                {[currentRoundHadSpeedBonus && "bonus vitesse", currentRoundHadRemontadaBonus && "bonus remontada"]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            )}
+          </div>
+          {/* Classement complet animé (voir AnimatedLeaderboard) : remplace
+              le bouton buzz pendant toute cette fenêtre de révélation,
+              jusqu'à ce que l'hôte relance une manche — voir le rendu
+              conditionnel ci-dessus (round.status repasse alors à
+              "playing" sur un round.id différent, ce qui redémonte ce
+              composant et fait réapparaître le buzzer). */}
+          <AnimatedLeaderboard players={ranked} previousOrder={previousOrder} meId={playerId} />
+        </>
       ) : (
         <>
           {round.is_joker && (
@@ -503,21 +674,6 @@ function BuzzerView({
             <p className="text-sm text-inkMuted text-center">
               Tu viens de répondre — attends qu’un autre joueur tente sa chance avant de rebuzzer.
             </p>
-          )}
-          {answerRevealed && (
-            <div className="w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
-              <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
-              <p className="text-xl font-bold text-sage font-display">
-                {round.title} — {round.artist}
-              </p>
-              {(currentRoundHadSpeedBonus || currentRoundHadRemontadaBonus) && (
-                <p className="text-xs text-amber mt-2">
-                  {[currentRoundHadSpeedBonus && "bonus vitesse", currentRoundHadRemontadaBonus && "bonus remontada"]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </p>
-              )}
-            </div>
           )}
         </>
       )}
