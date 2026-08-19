@@ -480,6 +480,36 @@ const ERA_OPTIONS: { label: string; range: { from: number; to: number } | null }
 // quota pour les mêmes artistes.
 const ARTIST_SEARCH_CACHE_STORAGE_KEY = "blindtest_artist_search_cache_v1";
 
+// Rafraîchit le token Spotify juste avant un appel API fait "en tâche de
+// fond" (recherche, chargement/import de playlist, lancement de manche...),
+// plutôt que de se fier à spotifyPlayer.accessTokenRef.current directement :
+// ce dernier date du chargement de la page (ou du dernier rafraîchissement
+// interne du Web Playback SDK, qui ne se déclenche que quand LUI en a
+// besoin pour la lecture, pas pour ces appels-ci) et peut avoir expiré
+// depuis (durée de vie ~1h côté Spotify). Sans ce refresh explicite, une
+// session hôte ouverte depuis un moment fait échouer ces appels en 401 (ou
+// parfois en 403 "Restriction violated" sur /player/play, Spotify n'étant
+// pas toujours cohérent sur le code renvoyé pour un token borderline) —
+// pattern déjà en place pour handleGenerateGenrePlaylist, généralisé ici à
+// handleSearch / handleLoadMyPlaylists / handleImportPlaylist / launchRound
+// après le double signalement d'un 401 sur l'import et d'un 403 sur
+// "manche suivante" en local. /api/spotify/token gère déjà le refresh via
+// le refresh_token cookie ; on l'appelle ici pour être sûr d'avoir un token
+// valide avant l'appel réel. Retombe sur `fallback` si le refresh échoue
+// pour une raison réseau (au pire l'appel qui suit échouera comme avant) ;
+// retourne null si la connexion Spotify est carrément perdue (refresh_token
+// absent/invalide côté serveur).
+async function getFreshSpotifyAccessToken(fallback: string | null): Promise<string | null> {
+  try {
+    const res = await fetch("/api/spotify/token");
+    const data = await res.json();
+    if (!data.connected) return null;
+    return data.accessToken as string;
+  } catch {
+    return fallback;
+  }
+}
+
 // Formatage lisible du temps restant avant la fin du coupe-circuit quota
 // Spotify (voir searchQuotaCooldownSeconds / playlistsQuotaCooldownSeconds)
 // — en heures + minutes plutôt qu'en secondes brutes, ce délai se comptant
@@ -612,6 +642,15 @@ export default function HostScreen() {
   // toggle correspondant et éviter un double-clic pendant l'aller-retour
   // réseau, pas un vrai état de chargement bloquant.
   const [savingBonusMalusSetting, setSavingBonusMalusSetting] = useState<string | null>(null);
+  // Garde anti double-clic sur "Révéler la réponse" (voir handleReveal) :
+  // sans ça, un double-clic (ou un simple clic répété par impatience sur
+  // une connexion lente) envoie deux appels reveal_round pour la même
+  // manche — le premier réussit (buzzed -> revealed), le second échoue
+  // puisque le statut n'est déjà plus "buzzed", ce qui remontait le
+  // message d'erreur brut "Manche introuvable ou pas encore buzzée." en
+  // plein écran (voir le rendu `if (error)` plus bas) alors que la manche
+  // avait en réalité déjà été révélée avec succès par le premier clic.
+  const [revealing, setRevealing] = useState(false);
   // null = pas de score cible, la partie dure jusqu'à la fin de la
   // playlist (comportement historique). Sinon, la partie se termine dès
   // qu'un joueur atteint (ou dépasse) ce score, même si la playlist n'est
@@ -1014,7 +1053,12 @@ export default function HostScreen() {
   const handleSearch = async () => {
     if (!spotifyPlayer.accessTokenRef.current || searchQuotaCooldownSeconds > 0) return;
     try {
-      const tracks = await spotify.searchTracks(query, spotifyPlayer.accessTokenRef.current);
+      const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current);
+      if (!accessToken) {
+        setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
+        return;
+      }
+      const tracks = await spotify.searchTracks(query, accessToken);
       setResults(tracks);
       if (quotaLocks.search) clearSpotifyQuotaLock("search").catch(() => {});
     } catch (e: any) {
@@ -1070,7 +1114,13 @@ export default function HostScreen() {
     if (!spotifyPlayer.accessTokenRef.current || playlistsQuotaCooldownSeconds > 0) return;
     setLoadingPlaylists(true);
     try {
-      const playlists = await spotify.listUserPlaylists(spotifyPlayer.accessTokenRef.current);
+      const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current);
+      if (!accessToken) {
+        setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
+        setLoadingPlaylists(false);
+        return;
+      }
+      const playlists = await spotify.listUserPlaylists(accessToken);
       // Tri alphabétique (insensible à la casse/accents) pour retrouver une
       // playlist facilement, plutôt que de dépendre de l'ordre renvoyé par
       // l'API Spotify (généralement : la plus récemment modifiée en premier).
@@ -1091,7 +1141,13 @@ export default function HostScreen() {
     if (!spotifyPlayer.accessTokenRef.current || playlistsQuotaCooldownSeconds > 0) return;
     setImportingPlaylistId(playlistId);
     try {
-      const tracks = await spotify.getPlaylistTracks(playlistId, spotifyPlayer.accessTokenRef.current);
+      const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current);
+      if (!accessToken) {
+        setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
+        setImportingPlaylistId(null);
+        return;
+      }
+      const tracks = await spotify.getPlaylistTracks(playlistId, accessToken);
       // Mélangé pour qu'un hôte qui joue aussi (mode "player") ne puisse pas
       // déduire l'ordre des prochaines manches à partir de sa propre
       // playlist.
@@ -1321,11 +1377,12 @@ export default function HostScreen() {
   const launchRound = async (track: spotify.SpotifyTrack) => {
     if (!room || !spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current) return;
     try {
-      await spotify.playTrackOnHostDevice(
-        track.sourceTrackId,
-        spotifyPlayer.deviceId,
-        spotifyPlayer.accessTokenRef.current
-      );
+      const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current);
+      if (!accessToken) {
+        setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
+        return;
+      }
+      await spotify.playTrackOnHostDevice(track.sourceTrackId, spotifyPlayer.deviceId, accessToken);
       const newRound = await startRoundWithTrack(
         room.id,
         {
@@ -1391,11 +1448,14 @@ export default function HostScreen() {
   };
 
   const handleReveal = async () => {
-    if (!round) return;
+    if (!round || revealing) return;
+    setRevealing(true);
     try {
       await revealRound(round.id);
     } catch (e: any) {
       setError(e?.message ?? "Impossible de révéler la réponse.");
+    } finally {
+      setRevealing(false);
     }
   };
 
@@ -1949,9 +2009,10 @@ export default function HostScreen() {
                 </p>
                 <button
                   onClick={handleReveal}
-                  className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2"
+                  disabled={revealing}
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2"
                 >
-                  <Eye className="w-5 h-5" /> Révéler la réponse
+                  <Eye className="w-5 h-5" /> {revealing ? "..." : "Révéler la réponse"}
                 </button>
               </>
             ) : (
