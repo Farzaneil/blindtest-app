@@ -31,7 +31,7 @@ import {
   type RoundAttempt,
   type Room,
 } from "../../lib/rooms";
-import { withRanks, formatOrdinal } from "../../lib/ranking";
+import { withRanks, formatOrdinal, podiumRowClasses } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
 import {
@@ -53,6 +53,7 @@ import {
   Mic,
   Bell,
   Eye,
+  EyeOff,
   Target,
   Hash,
   Headphones,
@@ -221,7 +222,7 @@ function BonusMalusToggleRow({
   return (
     <div
       title={description}
-      className="flex items-center justify-between gap-3 py-1.5 cursor-default"
+      className="flex items-center justify-between gap-3 bg-inkSurface3 rounded-lg px-3 py-2 cursor-default"
     >
       <span className="flex items-center gap-1.5 text-sm text-inkMuted min-w-0">
         <span className={`shrink-0 ${iconClassName}`}>{icon}</span>
@@ -245,29 +246,6 @@ function BonusMalusToggleRow({
         />
       </button>
     </div>
-  );
-}
-
-// Badge de rang réutilisé partout où un classement est affiché (liste des
-// joueurs pendant la partie, écran de fin) : or/argent/bronze pour le
-// podium (1er/2e/3e), même badge neutre pour tous les joueurs suivants —
-// pas une couleur différente par rang au-delà du podium (voir la maquette
-// direction_visuelle_minimal_premium.html validée).
-function RankBadge({ rank }: { rank: number }) {
-  const style =
-    rank === 1
-      ? "bg-gold text-goldOn border-gold"
-      : rank === 2
-        ? "bg-silver text-silverOn border-silver"
-        : rank === 3
-          ? "bg-bronze text-bronzeOn border-bronze"
-          : "bg-inkSurface2 text-inkMuted border-inkBorder";
-  return (
-    <span
-      className={`inline-flex items-center justify-center w-6 h-6 rounded-md border text-xs font-bold font-display ${style}`}
-    >
-      {rank}
-    </span>
   );
 }
 
@@ -351,7 +329,8 @@ function HostBuzzerView({
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
-      <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
+      <div className="relative w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
+        <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage" />
         <span className="font-bold truncate">{me?.display_name ?? "Toi"}</span>
         <span className="text-sm text-inkMuted whitespace-nowrap">
           {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
@@ -370,9 +349,9 @@ function HostBuzzerView({
       ) : (
         <>
           {round.is_joker && (
-            <p className="text-sm font-bold text-amber flex items-center gap-1.5">
-              <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
-            </p>
+            <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+            </span>
           )}
           {somethingAlreadyFound && (
             <p className="text-sm text-inkMuted text-center">
@@ -385,14 +364,14 @@ function HostBuzzerView({
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
-            className={`w-56 h-56 rounded-full text-3xl font-black border-4 transition ${
+            className={`w-56 h-56 rounded-full text-3xl font-black transition ${
               canBuzz
-                ? "bg-sage border-sage text-ink active:scale-95"
+                ? "bg-sage text-ink active:scale-95 shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
                 : alreadyBuzzed
                   ? iWon
-                    ? "bg-transparent border-sage text-sage"
-                    : "bg-inkSurface2 border-inkBorder text-inkMuted"
-                  : "bg-inkSurface2 border-inkBorder text-inkMuted"
+                    ? "bg-transparent text-sage shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
+                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
+                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
             }`}
           >
             {alreadyBuzzed ? (
@@ -1783,37 +1762,41 @@ export default function HostScreen() {
             </div>
           </div>
 
-          <div className="w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl p-6">
-            <h2 className="text-2xl font-bold mb-4">Joueurs connectés ({players.length})</h2>
+          <div className="relative w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl p-6">
+            <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
+            <h2 className="text-2xl font-bold mb-4 font-display">Joueurs connectés ({players.length})</h2>
             <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {players.length === 0 && <li className="text-inkMuted">En attente de joueurs…</li>}
-              {rankedPlayers.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex justify-between items-center rounded-xl px-4 py-3 text-xl bg-inkSurface2"
-                >
-                  <span className="flex items-center gap-3 min-w-0">
-                    <RankBadge rank={p.rank} />
-                    <span className="truncate">{p.display_name}</span>
-                    {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
-                        informatif ici, l'application réelle se fait côté serveur. */}
-                    {p.correct_streak_count >= 3 && (
-                      <span
-                        className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
-                        title={`${p.correct_streak_count} bonnes réponses d'affilée — buzzer retardé`}
-                      >
-                        <Flame className="w-3.5 h-3.5" /> {p.correct_streak_count}
-                      </span>
-                    )}
-                    {round && isFullyBlockedThisRound(p, round) && (
-                      <span className="text-xs text-danger shrink-0" title="Buzzer bloqué ce tour-ci">
-                        bloqué
-                      </span>
-                    )}
-                  </span>
-                  <span className="font-bold font-display shrink-0">{p.score} pts</span>
-                </li>
-              ))}
+              {rankedPlayers.map((p) => {
+                const plate = podiumRowClasses(p.rank);
+                return (
+                  <li
+                    key={p.id}
+                    className={`flex justify-between items-center rounded-xl px-4 py-3 text-xl ${plate.row}`}
+                  >
+                    <span className={`flex items-center gap-3 min-w-0 ${plate.text}`}>
+                      <span className="font-display font-black w-5 shrink-0 text-center">{p.rank}</span>
+                      <span className="truncate font-medium">{p.display_name}</span>
+                      {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
+                          informatif ici, l'application réelle se fait côté serveur. */}
+                      {p.correct_streak_count >= 3 && (
+                        <span
+                          className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
+                          title={`${p.correct_streak_count} bonnes réponses d'affilée — buzzer retardé`}
+                        >
+                          <Flame className="w-3.5 h-3.5" /> {p.correct_streak_count}
+                        </span>
+                      )}
+                      {round && isFullyBlockedThisRound(p, round) && (
+                        <span className="text-xs text-danger shrink-0" title="Buzzer bloqué ce tour-ci">
+                          bloqué
+                        </span>
+                      )}
+                    </span>
+                    <span className={`font-black font-display shrink-0 ${plate.text}`}>{p.score} pts</span>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
@@ -1823,7 +1806,8 @@ export default function HostScreen() {
         // monde est à 0) : un bandeau compact (code + joueurs + mode) suffit
         // et laisse toute la place à la préparation de la playlist plutôt
         // que d'empiler 2 grandes cartes peu informatives à ce stade.
-        <div className="w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4 flex flex-col gap-2">
+        <div className="relative w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4 flex flex-col gap-2">
+          <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-sage" />
           <div className="flex items-center justify-between gap-3">
             <span className="text-2xl font-bold tracking-widest text-sage font-display">{room.code}</span>
             <div className="flex gap-4">
@@ -1849,7 +1833,7 @@ export default function HostScreen() {
                   : `${players.length} joueur${players.length > 1 ? "s" : ""}`}
               </span>
               {hostMode && (
-                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap bg-inkSurface2 border border-inkBorder rounded-full px-3 py-1 text-xs font-medium">
                   {hostMode === "gamemaster" ? (
                     <Mic2 className="w-3.5 h-3.5 text-sage" />
                   ) : (
@@ -1954,11 +1938,12 @@ export default function HostScreen() {
 
       <div className="w-full max-w-6xl text-center">
         {!canStartRound && round?.status === "playing" && (
-          <div className="bg-inkSurface border border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow">
+          <div className="relative bg-inkSurface border border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow">
+            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-sage" />
             {round.is_joker && (
-              <p className="text-sm font-bold text-amber flex items-center justify-center gap-1.5 mb-2">
-                <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
-              </p>
+              <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full mb-3">
+                <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              </span>
             )}
             <p className="text-2xl font-bold flex items-center justify-center gap-2">
               <Music2 className="w-6 h-6 text-sage" /> Manche en cours — en attente d’un buzz…
@@ -1981,11 +1966,12 @@ export default function HostScreen() {
           </div>
         )}
         {!canStartRound && round?.status === "buzzed" && (
-          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-sage" />
             {round.is_joker && (
-              <p className="text-sm font-bold text-amber flex items-center gap-1.5">
-                <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
-              </p>
+              <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+                <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              </span>
             )}
             <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
@@ -2023,11 +2009,12 @@ export default function HostScreen() {
           </div>
         )}
         {!canStartRound && round?.status === "revealed" && (
-          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-sage" />
             {round.is_joker && (
-              <p className="text-sm font-bold text-amber flex items-center gap-1.5">
-                <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
-              </p>
+              <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+                <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              </span>
             )}
             <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
@@ -2121,8 +2108,9 @@ export default function HostScreen() {
             <div className="flex flex-col md:flex-row gap-4 w-full">
               <button
                 onClick={() => setHostMode("gamemaster")}
-                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
+                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
               >
+                <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-sage" />
                 <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
                   <Mic2 className="w-5 h-5 text-sage" /> Maître du jeu
                 </p>
@@ -2133,10 +2121,11 @@ export default function HostScreen() {
               </button>
               <button
                 onClick={() => setHostMode("player")}
-                className="flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
+                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-info rounded-2xl px-6 py-5 text-left"
               >
+                <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-info" />
                 <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
-                  <Headphones className="w-5 h-5 text-sage" /> Tout le monde participe
+                  <Headphones className="w-5 h-5 text-info" /> Tout le monde participe
                 </p>
                 <p className="text-sm text-inkMuted">
                   Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
@@ -2151,7 +2140,8 @@ export default function HostScreen() {
                 d'attendre la fin de la file d'attente. Vide = comportement
                 historique (jusqu'à la fin de la playlist). Réglable aussi
                 plus tard depuis le panneau playlist (voir plus bas). */}
-            <div className="w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-5 py-4 flex flex-col gap-2">
+            <div className="relative w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-5 py-4 flex flex-col gap-2">
+              <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-info" />
               <label htmlFor="target-score" className="text-sm font-bold text-inkMuted flex items-center gap-1.5">
                 <Target className="w-4 h-4" /> Score à atteindre pour gagner (optionnel)
               </label>
@@ -2216,7 +2206,8 @@ export default function HostScreen() {
             Spotify, construction de playlist…) restent masqués tant que ce
             n'est pas résolu. */}
         {canStartRound && modeChosen && blindMode && !hostJoinResolved && !isUnresolvedTimeout && (
-          <div className="flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border border-inkBorder rounded-2xl px-6 py-6">
+          <div className="relative flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border border-inkBorder rounded-2xl px-6 py-6">
+            <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-sage" />
             <p className="text-lg font-bold text-white text-center flex items-center gap-2">
               <Gamepad2 className="w-5 h-5 text-sage" /> Tu joues aussi sur cet écran ?
             </p>
@@ -2290,7 +2281,8 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-6 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+          <div className="relative flex flex-col items-center gap-6 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-gold" />
             <Trophy className="w-10 h-10 text-gold" />
             {targetScoreReached ? (
               <p className="text-2xl font-bold text-white text-center font-display">
@@ -2364,18 +2356,21 @@ export default function HostScreen() {
             )}
 
             <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
-              {rankedPlayers.map((p) => (
-                <li
-                  key={p.id}
-                  className="flex justify-between items-center rounded-xl px-4 py-3 bg-inkSurface2"
-                >
-                  <span className="flex items-center gap-3">
-                    <RankBadge rank={p.rank} />
-                    {p.display_name}
-                  </span>
-                  <span className="font-bold font-display">{p.score} pts</span>
-                </li>
-              ))}
+              {rankedPlayers.map((p) => {
+                const plate = podiumRowClasses(p.rank);
+                return (
+                  <li
+                    key={p.id}
+                    className={`flex justify-between items-center rounded-xl px-4 py-3 ${plate.row}`}
+                  >
+                    <span className={`flex items-center gap-3 ${plate.text}`}>
+                      <span className="font-display font-black w-5 text-center">{p.rank}</span>
+                      <span className="font-medium">{p.display_name}</span>
+                    </span>
+                    <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
+                  </li>
+                );
+              })}
             </ul>
             <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
               <button
@@ -2439,16 +2434,17 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
-          <div className="w-full flex flex-col gap-4 text-left bg-inkSurface border border-inkBorderStrong rounded-2xl p-6 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
+          <div className="relative w-full flex flex-col gap-7 text-left bg-inkSurface2 border border-inkBorder rounded-2xl p-7 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
+            <span className="absolute top-0 left-7 right-7 h-1 rounded-b-md bg-sage" />
             <div className="flex justify-between items-center">
               <span className="text-sm text-inkMuted flex items-center gap-1.5">
                 Mode :
                 {hostMode === "gamemaster" ? (
-                  <span className="inline-flex items-center gap-1 text-white font-medium">
+                  <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
                     <Mic2 className="w-3.5 h-3.5 text-sage" /> Maître du jeu
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 text-white font-medium">
+                  <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
                     <Headphones className="w-3.5 h-3.5 text-sage" /> Tout le monde participe
                   </span>
                 )}
@@ -2461,129 +2457,144 @@ export default function HostScreen() {
               </button>
             </div>
 
-            {/* Réglage du score cible toujours accessible ici, sans avoir à
-                repasser par "Changer de mode" (voir targetScore plus haut). */}
-            <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="target-score-inline" className="text-inkMuted whitespace-nowrap flex items-center gap-1.5">
-                <Target className="w-4 h-4" /> Score cible :
-              </label>
-              <input
-                id="target-score-inline"
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={targetScore ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    setTargetScore(null);
-                    return;
-                  }
-                  const parsed = Number.parseInt(raw, 10);
-                  setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                }}
-                placeholder="Illimité"
-                className="w-28 bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-lg px-3 py-1"
-              />
-              <span className="text-inkMuted">pts</span>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <label htmlFor="max-rounds-inline" className="text-inkMuted whitespace-nowrap flex items-center gap-1.5">
-                <Hash className="w-4 h-4" /> Morceaux max :
-              </label>
-              <input
-                id="max-rounds-inline"
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={maxRounds ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    setMaxRounds(null);
-                    return;
-                  }
-                  const parsed = Number.parseInt(raw, 10);
-                  setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                }}
-                placeholder="Toute la playlist"
-                className="w-28 bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-lg px-3 py-1"
-              />
+            {/* Score cible et morceaux max fusionnés en une seule ligne
+                compacte (au lieu de 2 blocs empilés avec leur propre texte
+                d'aide) : les 2 réglages restent modifiables à tout moment
+                sans repasser par "Changer de mode" (voir targetScore plus
+                haut), mais prennent beaucoup moins de place verticale. */}
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
+                Réglages de partie
+              </p>
+              <div className="flex flex-wrap gap-3 text-sm">
+                <label
+                  htmlFor="target-score-inline"
+                  title="Laisse vide pour jouer jusqu'à la fin de la playlist. Sinon, la partie se termine dès qu'un joueur atteint ce score."
+                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5"
+                >
+                  <Target className="w-4 h-4 text-inkMuted shrink-0" />
+                  <span className="text-inkMuted whitespace-nowrap">Score cible</span>
+                  <input
+                    id="target-score-inline"
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={targetScore ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        setTargetScore(null);
+                        return;
+                      }
+                      const parsed = Number.parseInt(raw, 10);
+                      setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                    }}
+                    placeholder="Illimité"
+                    className="w-20 bg-transparent border-0 focus:ring-0 text-white font-medium p-0"
+                  />
+                  <span className="text-inkMuted">pts</span>
+                </label>
+                <label
+                  htmlFor="max-rounds-inline"
+                  title="Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce nombre de morceaux a été joué. Cumulable avec le score cible."
+                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5"
+                >
+                  <Hash className="w-4 h-4 text-inkMuted shrink-0" />
+                  <span className="text-inkMuted whitespace-nowrap">Morceaux max</span>
+                  <input
+                    id="max-rounds-inline"
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    value={maxRounds ?? ""}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === "") {
+                        setMaxRounds(null);
+                        return;
+                      }
+                      const parsed = Number.parseInt(raw, 10);
+                      setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                    }}
+                    placeholder="Toute la playlist"
+                    className="w-28 bg-transparent border-0 focus:ring-0 text-white font-medium p-0"
+                  />
+                </label>
+              </div>
             </div>
 
             {/* Réglages bonus/malus (voir migration 0018) : comme le score
                 cible et les morceaux max ci-dessus, modifiables à tout
                 moment en cours de partie — un changement s'applique dès la
                 prochaine manche jugée (voire dès le prochain tirage pour le
-                joker). Regroupés en 2 sous-sections pour rester lisible même
-                à 5 réglages. */}
+                joker). Grille à 2 colonnes (bonus | malus) plutôt qu'une
+                liste empilée : ça tient sur moins de hauteur pour les 5
+                réglages, le détail de chacun restant accessible au survol
+                (voir le title sur BonusMalusToggleRow). */}
             {room && (
-              <div className="flex flex-col gap-3 text-sm bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
-                    Bonus
-                  </span>
-                  <BonusMalusToggleRow
-                    label="Manche joker"
-                    description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
-                    icon={<Dice5 className="w-4 h-4" />}
-                    iconClassName="text-amber"
-                    enabled={room.bonus_joker_enabled}
-                    saving={savingBonusMalusSetting === "bonus_joker_enabled"}
-                    onToggle={() => handleToggleBonusMalusSetting("bonus_joker_enabled")}
-                  />
-                  <BonusMalusToggleRow
-                    label="Bonus vitesse"
-                    description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 2 secondes."
-                    icon={<Zap className="w-4 h-4" />}
-                    iconClassName="text-sage"
-                    enabled={room.bonus_speed_enabled}
-                    saving={savingBonusMalusSetting === "bonus_speed_enabled"}
-                    onToggle={() => handleToggleBonusMalusSetting("bonus_speed_enabled")}
-                  />
-                  <BonusMalusToggleRow
-                    label="Bonus remontada"
-                    description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement, avec plus de 5 points d'écart avec l'avant-dernier."
-                    icon={<TrendingUp className="w-4 h-4" />}
-                    iconClassName="text-sage"
-                    enabled={room.bonus_remontada_enabled}
-                    saving={savingBonusMalusSetting === "bonus_remontada_enabled"}
-                    onToggle={() => handleToggleBonusMalusSetting("bonus_remontada_enabled")}
-                  />
-                </div>
-                <div className="flex flex-col gap-1 pt-1 border-t border-inkBorder">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
-                    Malus
-                  </span>
-                  <BonusMalusToggleRow
-                    label="Malus série"
-                    description="3 bonnes réponses d'affilée par la même personne : son buzzer est retardé de 5s, puis 10s, puis 15s au tour suivant, tant que personne d'autre n'a répondu juste."
-                    icon={<Flame className="w-4 h-4" />}
-                    iconClassName="text-amber"
-                    enabled={room.malus_streak_lockout_enabled}
-                    saving={savingBonusMalusSetting === "malus_streak_lockout_enabled"}
-                    onToggle={() => handleToggleBonusMalusSetting("malus_streak_lockout_enabled")}
-                  />
-                  <BonusMalusToggleRow
-                    label="Malus buzzer bloqué"
-                    description="3 premiers-buzz ratés d'affilée par la même personne : son buzzer est complètement bloqué à la manche suivante."
-                    icon={<XCircle className="w-4 h-4" />}
-                    iconClassName="text-danger"
-                    enabled={room.malus_streak_block_enabled}
-                    saving={savingBonusMalusSetting === "malus_streak_block_enabled"}
-                    onToggle={() => handleToggleBonusMalusSetting("malus_streak_block_enabled")}
-                  />
+              <div className="flex flex-col gap-3 text-sm pt-1 border-t border-inkBorder/60">
+                <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
+                  Bonus &amp; malus
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                  <div className="flex flex-col gap-2">
+                    <BonusMalusToggleRow
+                      label="Manche joker"
+                      description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
+                      icon={<Dice5 className="w-4 h-4" />}
+                      iconClassName="text-amber"
+                      enabled={room.bonus_joker_enabled}
+                      saving={savingBonusMalusSetting === "bonus_joker_enabled"}
+                      onToggle={() => handleToggleBonusMalusSetting("bonus_joker_enabled")}
+                    />
+                    <BonusMalusToggleRow
+                      label="Bonus vitesse"
+                      description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 2 secondes."
+                      icon={<Zap className="w-4 h-4" />}
+                      iconClassName="text-sage"
+                      enabled={room.bonus_speed_enabled}
+                      saving={savingBonusMalusSetting === "bonus_speed_enabled"}
+                      onToggle={() => handleToggleBonusMalusSetting("bonus_speed_enabled")}
+                    />
+                    <BonusMalusToggleRow
+                      label="Bonus remontada"
+                      description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement, avec plus de 5 points d'écart avec l'avant-dernier."
+                      icon={<TrendingUp className="w-4 h-4" />}
+                      iconClassName="text-sage"
+                      enabled={room.bonus_remontada_enabled}
+                      saving={savingBonusMalusSetting === "bonus_remontada_enabled"}
+                      onToggle={() => handleToggleBonusMalusSetting("bonus_remontada_enabled")}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <BonusMalusToggleRow
+                      label="Malus série"
+                      description="3 bonnes réponses d'affilée par la même personne : son buzzer est retardé de 5s, puis 10s, puis 15s au tour suivant, tant que personne d'autre n'a répondu juste."
+                      icon={<Flame className="w-4 h-4" />}
+                      iconClassName="text-amber"
+                      enabled={room.malus_streak_lockout_enabled}
+                      saving={savingBonusMalusSetting === "malus_streak_lockout_enabled"}
+                      onToggle={() => handleToggleBonusMalusSetting("malus_streak_lockout_enabled")}
+                    />
+                    <BonusMalusToggleRow
+                      label="Malus buzzer bloqué"
+                      description="3 premiers-buzz ratés d'affilée par la même personne : son buzzer est complètement bloqué à la manche suivante."
+                      icon={<XCircle className="w-4 h-4" />}
+                      iconClassName="text-danger"
+                      enabled={room.malus_streak_block_enabled}
+                      saving={savingBonusMalusSetting === "malus_streak_block_enabled"}
+                      onToggle={() => handleToggleBonusMalusSetting("malus_streak_block_enabled")}
+                    />
+                    {blindMode && (
+                      <p className="text-xs text-inkMuted px-1 pt-1 flex items-start gap-1.5">
+                        <EyeOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                        Les morceaux ajoutés restent masqués — préfère importer une playlist
+                        entière pour être surpris toi aussi.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            )}
-
-            {blindMode && (
-              <p className="text-sm text-inkMuted bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
-                Les morceaux ajoutés à la file restent masqués. Pour être surpris toi aussi,
-                préfère importer une playlist entière plutôt que la recherche manuelle (chercher
-                un titre te le révèle forcément).
-              </p>
             )}
 
             {/* Coupe-circuit quota Spotify (verrou PARTAGÉ via Supabase, voir
@@ -2624,7 +2635,7 @@ export default function HostScreen() {
                 côté, voir la colonne de droite ci-dessous. Chaque onglet a
                 sa propre couleur d'identité (sauge / bleu "info" / ambre),
                 reprise du mockup validé. */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-1 border-t border-inkBorder/60">
               <button
                 type="button"
                 onClick={() => setAddMethodTab("search")}
@@ -2662,7 +2673,7 @@ export default function HostScreen() {
 
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-stretch">
               {/* Panneau de la méthode active */}
-              <div className="flex flex-col gap-3 bg-inkSurface2 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
+              <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
                 {addMethodTab === "search" && (
                   <>
                     <p className="text-sm text-inkMuted">Ajoute un morceau précis à la file, un par un.</p>
@@ -2829,7 +2840,7 @@ export default function HostScreen() {
                   l'impression que la file d'attente "sortait" de la carte
                   au lieu d'en faire partie. Un simple liseré sauge à
                   gauche suffit à la signaler comme le panneau important. */}
-              <div className="flex flex-col gap-3 bg-inkSurface2 border border-inkBorder border-l-4 border-l-sage rounded-2xl p-4">
+              <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder border-l-4 border-l-sage rounded-2xl p-4">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-white">
                     File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
