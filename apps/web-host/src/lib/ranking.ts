@@ -31,3 +31,19 @@ export function withRanks(players: Player[]): RankedPlayer[] {
 export function formatOrdinal(rank: number): string {
   return rank === 1 ? "1er" : `${rank}e`;
 }
+
+/**
+ * Classes Tailwind pour une ligne de classement "plaquette" (voir maquette
+ * DA v3, validée sur /host et /play avant dev) : les 3 premières places
+ * colorent toute la ligne en fond plein or/argent/bronze plutôt qu'un
+ * simple badge de rang neutre sur fond neutre — bien plus lisible d'un
+ * coup d'œil. Partagé entre host/page.tsx et play/page.tsx pour que les
+ * deux écrans rendent le classement de façon identique (même logique que
+ * withRanks ci-dessus).
+ */
+export function podiumRowClasses(rank: number): { row: string; text: string } {
+  if (rank === 1) return { row: "bg-gold", text: "text-goldOn" };
+  if (rank === 2) return { row: "bg-silver", text: "text-silverOn" };
+  if (rank === 3) return { row: "bg-bronze", text: "text-bronzeOn" };
+  return { row: "bg-inkSurface2", text: "text-white" };
+}

@@ -31,7 +31,7 @@ import {
   type Round,
   type RoundAttempt,
 } from "../../lib/rooms";
-import { withRanks, formatOrdinal, type RankedPlayer } from "../../lib/ranking";
+import { withRanks, formatOrdinal, podiumRowClasses, type RankedPlayer } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 
 type Session = { roomId: string; playerId: string };
@@ -231,6 +231,19 @@ function AnimatedLeaderboard({
       {players.map((p, index) => {
         const oldIndex = previousOrder.indexOf(p.id);
         const offsetRows = oldIndex === -1 ? 0 : oldIndex - index;
+        const isMe = p.id === meId;
+        const plate = podiumRowClasses(p.rank);
+        // Podium (rang <= 3) : plaquette en fond plein or/argent/bronze,
+        // prioritaire sur la mise en avant "toi" (voir host/page.tsx pour
+        // la même règle). Au-delà du podium, "toi" garde son bordereau
+        // sauge distinctif sur la ligne neutre.
+        const rowClass =
+          p.rank <= 3
+            ? `${plate.row} border-transparent`
+            : isMe
+              ? "bg-sage/10 border-sage"
+              : "bg-inkSurface2 border-transparent";
+        const textClass = p.rank <= 3 ? plate.text : "text-white";
         return (
           <li
             key={p.id}
@@ -238,12 +251,10 @@ function AnimatedLeaderboard({
               transform: settled ? "translateY(0)" : `translateY(${offsetRows * LEADERBOARD_ROW_HEIGHT_PX}px)`,
               transition: settled ? "transform 450ms ease" : "none",
             }}
-            className={`h-11 flex items-center justify-between gap-2 rounded-xl px-4 shrink-0 border ${
-              p.id === meId ? "bg-sage/10 border-sage" : "bg-inkSurface2 border-transparent"
-            }`}
+            className={`h-11 flex items-center justify-between gap-2 rounded-xl px-4 shrink-0 border ${rowClass}`}
           >
-            <span className="flex items-center gap-2 min-w-0">
-              <span className="text-inkMuted text-sm w-5 shrink-0">{p.rank}</span>
+            <span className={`flex items-center gap-2 min-w-0 ${textClass}`}>
+              <span className="font-display font-black text-sm w-5 shrink-0 text-center">{p.rank}</span>
               <span className="truncate font-medium">{p.display_name}</span>
               {p.correct_streak_count >= 3 && (
                 <Flame
@@ -252,7 +263,7 @@ function AnimatedLeaderboard({
                 />
               )}
             </span>
-            <span className="font-bold text-sage shrink-0">{p.score} pts</span>
+            <span className={`font-black font-display shrink-0 ${textClass}`}>{p.score} pts</span>
           </li>
         );
       })}
@@ -433,7 +444,8 @@ function BuzzerView({
 
   if (roomStatus === "finished") {
     return (
-      <div className="flex flex-col items-center gap-6 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+      <div className="relative flex flex-col items-center gap-6 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+        <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
         <Trophy className="w-10 h-10 text-gold" />
         <p className="text-2xl font-bold text-white text-center font-display">Partie terminée !</p>
 
@@ -491,14 +503,17 @@ function BuzzerView({
         )}
 
         <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
-          {ranked.map((p) => (
-            <li key={p.id} className="flex justify-between rounded-xl px-4 py-3 bg-inkSurface2">
-              <span>
-                {p.rank}. {p.display_name}
-              </span>
-              <span className="font-bold">{p.score} pts</span>
-            </li>
-          ))}
+          {ranked.map((p) => {
+            const plate = podiumRowClasses(p.rank);
+            return (
+              <li key={p.id} className={`flex justify-between rounded-xl px-4 py-3 ${plate.row}`}>
+                <span className={`flex items-center gap-2 ${plate.text}`}>
+                  <span className="font-display font-black">{p.rank}.</span> {p.display_name}
+                </span>
+                <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
+              </li>
+            );
+          })}
         </ul>
 
         <div className="flex gap-4">
@@ -524,7 +539,8 @@ function BuzzerView({
           autres cas, y compris avant le tout premier lancement de manche
           (round === null) et pendant qu'une manche est en cours. */}
       {!answerRevealed && (
-        <div className="w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
+        <div className="relative w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
+          <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage" />
           <span className="font-bold truncate flex items-center gap-1.5">
             {me?.display_name ?? "…"}
             {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
@@ -572,9 +588,9 @@ function BuzzerView({
       ) : answerRevealed ? (
         <>
           {round.is_joker && (
-            <p className="text-sm font-bold text-amber flex items-center gap-1.5">
-              <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
-            </p>
+            <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+            </span>
           )}
           {alreadyBuzzed && (
             <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
@@ -585,7 +601,8 @@ function BuzzerView({
                   : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
             </p>
           )}
-          <div className="w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
+          <div className="relative w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
+            <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
             <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
             <p className="text-xl font-bold text-sage font-display">
               {round.title} — {round.artist}
@@ -609,9 +626,9 @@ function BuzzerView({
       ) : (
         <>
           {round.is_joker && (
-            <p className="text-sm font-bold text-amber flex items-center gap-1.5">
-              <Dice5 className="w-4 h-4" /> Manche joker — points doublés !
-            </p>
+            <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+            </span>
           )}
           {somethingAlreadyFound && (
             <p className="text-sm text-inkMuted text-center">
@@ -624,14 +641,14 @@ function BuzzerView({
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
-            className={`w-56 h-56 rounded-full text-3xl font-black border-4 transition ${
+            className={`w-56 h-56 rounded-full text-3xl font-black transition ${
               canBuzz
-                ? "bg-sage border-sage text-ink active:scale-95"
+                ? "bg-sage text-ink active:scale-95 shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
                 : alreadyBuzzed
                   ? iWon
-                    ? "bg-transparent border-sage text-sage"
-                    : "bg-inkSurface2 border-inkBorder text-inkMuted"
-                  : "bg-inkSurface2 border-inkBorder text-inkMuted"
+                    ? "bg-transparent text-sage shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
+                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
+                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
             }`}
           >
             {alreadyBuzzed ? (
