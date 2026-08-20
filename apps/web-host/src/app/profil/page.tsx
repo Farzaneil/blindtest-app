@@ -18,6 +18,7 @@ import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerProfileData } from "../../lib/usePlayerProfileData";
 import { usePlayerBadges } from "../../lib/usePlayerBadges";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
+import { usePlayerLeaderboard } from "../../lib/usePlayerLeaderboard";
 import { BADGE_DEFINITIONS, type BadgeCategory, nextThreshold, levelForXp, xpIntoCurrentLevel, XP_PER_LEVEL } from "../../lib/badges";
 import {
   COSMETIC_DEFINITIONS,
@@ -47,8 +48,12 @@ import {
  *     player_cosmetics (migration 0022), alimentée par
  *     award_cosmetic_unlocks() dans le même flux de fin de partie, et la
  *     route api/player-account/equip-cosmetic pour changer de skin équipé.
- *   - Classement reste en état "Bientôt" : il dépend d'un système pas
- *     encore construit (classement entre joueurs — phase 5 du cadrage).
+ *   - Classement tourne désormais lui aussi sur des données réelles
+ *     (phase 5) : voir get_player_leaderboard() (migration 0023). Comme
+ *     précisé dans le cadrage (section 5.4) et la maquette validée, ce
+ *     n'est pas un classement 100% global : sans système d'amis, il
+ *     rassemble les comptes avec qui le joueur a déjà partagé au moins une
+ *     partie, trié par XP total.
  */
 
 type TabKey = "reglages" | "stats" | "badges" | "historique" | "classement";
@@ -137,7 +142,7 @@ export default function ProfilPage() {
                   />
                 </div>
                 <p className="text-[10px] text-inkMuted mt-1">
-                  {xpIntoCurrentLevel(account.xp)} / {XP_PER_LEVEL} XP · Cosmétiques du buzzer bientôt disponibles
+                  {xpIntoCurrentLevel(account.xp)} / {XP_PER_LEVEL} XP
                 </p>
               </div>
             </div>
@@ -176,7 +181,7 @@ export default function ProfilPage() {
         {tab === "stats" && <StatsPanel accountId={account.id} />}
         {tab === "badges" && <BadgesPanel accountId={account.id} />}
         {tab === "historique" && <HistoriquePanel accountId={account.id} />}
-        {tab === "classement" && <ClassementPanel />}
+        {tab === "classement" && <ClassementPanel accountId={account.id} />}
       </div>
     </main>
   );
@@ -562,10 +567,66 @@ function HistoriquePanel({ accountId }: { accountId: string }) {
   );
 }
 
-function ClassementPanel() {
+const PODIUM_ROW_STYLE: Record<number, string> = {
+  1: "bg-gold text-goldOn",
+  2: "bg-silver text-silverOn",
+  3: "bg-bronze text-bronzeOn",
+};
+
+function ClassementPanel({ accountId }: { accountId: string }) {
+  const { loading, error, entries } = usePlayerLeaderboard(accountId);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-11 rounded-xl bg-inkSurface3 animate-pulse" />
+        ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return <p className="text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{error}</p>;
+  }
+
   return (
-    <ComingSoonNote>
-      Le classement entre joueurs arrive dans une prochaine mise à jour, avec le système de niveaux.
-    </ComingSoonNote>
+    <div className="flex flex-col gap-3">
+      <p className="text-xs text-inkMuted bg-inkSurface3 rounded-lg px-3 py-2">
+        Pas encore de système d&rsquo;amis : ce classement rassemble pour l&rsquo;instant tous les comptes avec qui tu
+        as déjà partagé au moins une partie. Une liste d&rsquo;amis explicite (ajouter/retirer qui tu veux) pourra
+        remplacer ce fonctionnement plus tard.
+      </p>
+
+      {entries.length <= 1 ? (
+        <p className="text-xs text-inkMuted bg-inkSurface3 rounded-lg px-3 py-2">
+          Tu n&rsquo;as encore croisé aucun autre compte connecté en partie — les joueurs que tu rencontres
+          apparaîtront ici après une partie jouée ensemble.
+        </p>
+      ) : (
+        entries.map((entry, i) => {
+          const rank = i + 1;
+          const podiumClass = PODIUM_ROW_STYLE[rank];
+          return (
+            <div
+              key={entry.accountId}
+              className={
+                "rounded-xl flex items-center justify-between pl-4 pr-5 py-2.5 " +
+                (podiumClass ?? "bg-inkSurface3 text-white")
+              }
+            >
+              <span className="flex items-center gap-3 min-w-0">
+                <span className="font-display font-black w-4 shrink-0">{rank}</span>
+                <span className="font-display font-bold truncate">
+                  {entry.pseudo}
+                  {entry.accountId === accountId ? " (toi)" : ""}
+                </span>
+              </span>
+              <span className="font-display font-black text-sm whitespace-nowrap">Niveau {levelForXp(entry.xp)}</span>
+            </div>
+          );
+        })
+      )}
+    </div>
   );
 }
