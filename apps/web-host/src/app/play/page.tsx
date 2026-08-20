@@ -36,6 +36,8 @@ import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { useNewlyUnlockedBadges } from "../../lib/useNewlyUnlockedBadges";
 import { BADGE_BY_KEY } from "../../lib/badges";
+import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
+import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY } from "../../lib/cosmetics";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 
 type Session = { roomId: string; playerId: string };
@@ -305,6 +307,12 @@ function BuzzerView({
   // undefined) ne voit simplement jamais cette notification.
   const { account } = usePlayerAccount();
   const newlyUnlockedBadges = useNewlyUnlockedBadges(account?.id, roomStatus === "finished");
+  // Skin de buzzer équipé (voir usePlayerCosmetics, migration 0022) : un
+  // joueur invité (accountId undefined) garde le rendu par défaut (Sage),
+  // identique à ce qui existait avant la phase 4 — aucun changement visuel
+  // pour qui ne s'est jamais connecté.
+  const { equippedKey } = usePlayerCosmetics(account?.id ?? "");
+  const equippedCosmetic = COSMETIC_BY_KEY[account ? equippedKey : DEFAULT_COSMETIC_KEY] ?? COSMETIC_BY_KEY[DEFAULT_COSMETIC_KEY];
   // Historique + tentatives : uniquement nécessaires pour calculer les
   // statistiques de l'écran de fin de partie (buzzeur le plus rapide,
   // manche la plus disputée) — mêmes données et même calcul que côté hôte,
@@ -680,32 +688,55 @@ function BuzzerView({
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
-            className={`w-56 h-56 rounded-full text-3xl font-black transition ${
+            className={`relative overflow-hidden w-56 h-56 rounded-full text-3xl font-black transition ${
               canBuzz
-                ? "bg-sage text-ink active:scale-95 shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
+                ? "active:scale-95"
                 : alreadyBuzzed
                   ? iWon
-                    ? "bg-transparent text-sage shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
+                    ? "bg-transparent"
                     : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
                   : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
             }`}
+            /* Skin de buzzer équipé (voir usePlayerCosmetics, migration
+               0022) : appliqué uniquement quand CE buzzer représente
+               vraiment "le mien" (prêt à buzzer, ou je viens de gagner) —
+               les états bloqué/perdu restent volontairement neutres (gris),
+               ce ne sont pas des moments de mise en avant du skin. */
+            style={
+              canBuzz
+                ? {
+                    background: equippedCosmetic.swatch,
+                    color: equippedCosmetic.textOn === "dark" ? "#0A0A0C" : "#FFFFFF",
+                    boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}`,
+                  }
+                : alreadyBuzzed && iWon
+                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}` }
+                  : undefined
+            }
           >
-            {alreadyBuzzed ? (
-              iWon ? (
-                <span className="inline-flex flex-col items-center gap-1">
-                  <CheckCircle2 className="w-9 h-9" />
-                  BUZZÉ !
-                </span>
-              ) : (
-                "BUZZÉ"
-              )
-            ) : fullyBlocked ? (
-              "BLOQUÉ"
-            ) : isLockedOut ? (
-              `${lockoutRemainingSeconds}s`
-            ) : (
-              "BUZZ"
+            {(canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.icon && (
+              <span className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                {equippedCosmetic.icon({ size: 140 })}
+              </span>
             )}
+            <span className="relative">
+              {alreadyBuzzed ? (
+                iWon ? (
+                  <span className="inline-flex flex-col items-center gap-1">
+                    <CheckCircle2 className="w-9 h-9" />
+                    BUZZÉ !
+                  </span>
+                ) : (
+                  "BUZZÉ"
+                )
+              ) : fullyBlocked ? (
+                "BLOQUÉ"
+              ) : isLockedOut ? (
+                `${lockoutRemainingSeconds}s`
+              ) : (
+                "BUZZ"
+              )}
+            </span>
           </button>
           {alreadyBuzzed && (
             <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>

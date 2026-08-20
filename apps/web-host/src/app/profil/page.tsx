@@ -17,12 +17,18 @@ import {
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerProfileData } from "../../lib/usePlayerProfileData";
 import { usePlayerBadges } from "../../lib/usePlayerBadges";
+import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { BADGE_DEFINITIONS, type BadgeCategory, nextThreshold, levelForXp, xpIntoCurrentLevel, XP_PER_LEVEL } from "../../lib/badges";
+import {
+  COSMETIC_DEFINITIONS,
+  COSMETIC_CATEGORY_LABEL,
+  type CosmeticCategory,
+} from "../../lib/cosmetics";
 
 /**
  * Espace joueur /profil — visuel repris de la maquette validée
  * (maquette_comptes_espace_joueur.html, section 2 : 5 onglets Réglages/
- * Stats/Badges/Historique/Classement). Phases 2 et 3 du plan (voir
+ * Stats/Badges/Historique/Classement). Phases 2 à 4 du plan (voir
  * cadrage_comptes_recompenses_rgpd.md, section 7) :
  *
  *   - Réglages (pseudo + suppression de compte) et Stats/Historique
@@ -31,18 +37,18 @@ import { BADGE_DEFINITIONS, type BadgeCategory, nextThreshold, levelForXp, xpInt
  *     calculent depuis players/rounds/round_attempts, qui existent depuis le
  *     tout début du projet (migrations 0001/0008) — voir
  *     usePlayerProfileData.
- *   - Badges et le pill "Niveau X" + barre d'XP du header tournent
- *     désormais eux aussi sur des données réelles (phase 3) : voir
- *     player_badge_progress (migration 0021) et player_accounts.xp,
- *     alimentés par award_game_rewards() en fin de partie (voir
+ *   - Badges et le pill "Niveau X" + barre d'XP du header tournent sur des
+ *     données réelles depuis la phase 3 : voir player_badge_progress
+ *     (migration 0021) et player_accounts.xp, alimentés par
+ *     award_game_rewards() en fin de partie (voir
  *     lib/rooms.ts:awardGameRewards, appelé depuis app/host/page.tsx).
+ *   - Le "Skin du buzzer" (catégories Uni/Nature/Cosmique/Slay) tourne
+ *     désormais lui aussi sur des données réelles (phase 4) : voir
+ *     player_cosmetics (migration 0022), alimentée par
+ *     award_cosmetic_unlocks() dans le même flux de fin de partie, et la
+ *     route api/player-account/equip-cosmetic pour changer de skin équipé.
  *   - Classement reste en état "Bientôt" : il dépend d'un système pas
  *     encore construit (classement entre joueurs — phase 5 du cadrage).
- *   - Le "Skin du buzzer" de la maquette (catégories Uni/Nature/Cosmique/
- *     Slay) reste pour la même raison affiché verrouillé dans Réglages :
- *     les déblocages de cosmétiques à partir des badges/niveaux sont la
- *     phase 4 du cadrage, pas encore construite — avoir des badges/XP réels
- *     ne suffit pas encore à savoir QUEL skin chaque palier débloque.
  */
 
 type TabKey = "reglages" | "stats" | "badges" | "historique" | "classement";
@@ -55,7 +61,14 @@ const TABS: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: "classement", label: "Classement", icon: Trophy },
 ];
 
-const SKIN_CATEGORIES = ["Uni", "Nature", "Cosmique", "Slay"];
+const SKIN_CATEGORIES: CosmeticCategory[] = ["uni", "nature", "cosmique", "slay"];
+
+const SKIN_CATEGORY_HINT: Record<CosmeticCategory, string> = {
+  uni: "Toutes les couleurs de base sont disponibles dès le départ, sans condition. Seules les 3 teintes « palier » se débloquent en cours de route.",
+  nature: "Toute la catégorie reste verrouillée avant le Niveau 5 ; une fois ce cap passé, chaque motif se débloque ensuite individuellement au palier or du badge auquel il est lié.",
+  cosmique: "Toute la catégorie reste verrouillée avant le Niveau 5 ; ensuite, chaque motif se débloque au fur et à mesure de ses propres conditions (niveau plus élevé ou badge rare).",
+  slay: "Débloqués tous ensemble dès le Niveau 5, comme Nature et Cosmique.",
+};
 
 function ComingSoonNote({ children }: { children: React.ReactNode }) {
   return (
@@ -157,7 +170,9 @@ export default function ProfilPage() {
           ))}
         </div>
 
-        {tab === "reglages" && <ReglagesPanel accountId={account.id} pseudo={account.pseudo} onPseudoSaved={refreshAccount} />}
+        {tab === "reglages" && (
+          <ReglagesPanel accountId={account.id} pseudo={account.pseudo} xp={account.xp} onPseudoSaved={refreshAccount} />
+        )}
         {tab === "stats" && <StatsPanel accountId={account.id} />}
         {tab === "badges" && <BadgesPanel accountId={account.id} />}
         {tab === "historique" && <HistoriquePanel accountId={account.id} />}
@@ -170,10 +185,12 @@ export default function ProfilPage() {
 function ReglagesPanel({
   accountId,
   pseudo,
+  xp,
   onPseudoSaved,
 }: {
   accountId: string;
   pseudo: string;
+  xp: number;
   onPseudoSaved: () => void;
 }) {
   const router = useRouter();
@@ -183,6 +200,30 @@ function ReglagesPanel({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { unlockedKeys, equippedKey, loading: cosmeticsLoading, refresh: refreshCosmetics } = usePlayerCosmetics(accountId);
+  const [skinCategory, setSkinCategory] = useState<CosmeticCategory>("uni");
+  const [equipping, setEquipping] = useState<string | null>(null);
+  const [equipError, setEquipError] = useState<string | null>(null);
+  const level = levelForXp(xp);
+
+  const equipCosmetic = async (key: string) => {
+    setEquipping(key);
+    setEquipError(null);
+    try {
+      const res = await fetch("/api/player-account/equip-cosmetic", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cosmeticKey: key }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Échec de l'équipement.");
+      refreshCosmetics();
+    } catch (e: any) {
+      setEquipError(e?.message ?? "Échec de l'équipement.");
+    } finally {
+      setEquipping(null);
+    }
+  };
 
   const savePseudo = async () => {
     const trimmed = pseudoInput.trim();
@@ -249,22 +290,70 @@ function ReglagesPanel({
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">Skin du buzzer</p>
+          <p className="text-[11px] text-inkMuted flex items-center gap-1">
+            <Lock className="w-2.5 h-2.5" /> = verrouillé, survole pour savoir comment débloquer
+          </p>
         </div>
+
         <div className="flex gap-1.5 sm:gap-2">
           {SKIN_CATEGORIES.map((cat) => (
             <button
               key={cat}
-              disabled
-              className="relative flex-1 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 rounded-xl border border-inkBorder text-inkMuted bg-inkSurface3 cursor-not-allowed"
+              onClick={() => setSkinCategory(cat)}
+              className={
+                "flex-1 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 rounded-xl border transition " +
+                (skinCategory === cat
+                  ? "border-sage text-sage bg-sage/10"
+                  : "border-inkBorder text-inkMuted hover:border-inkBorderStrong")
+              }
             >
-              {cat}
+              {COSMETIC_CATEGORY_LABEL[cat]}
             </button>
           ))}
         </div>
-        <ComingSoonNote>
-          Les skins de buzzer se débloquent avec les badges et les niveaux, qui arrivent dans une prochaine mise à
-          jour — pas encore de sélection possible pour l&rsquo;instant.
-        </ComingSoonNote>
+
+        <div className="bg-inkSurface3 rounded-xl px-4 py-4 flex flex-col gap-3">
+          <p className="text-xs text-inkMuted">{SKIN_CATEGORY_HINT[skinCategory]}</p>
+
+          {cosmeticsLoading ? (
+            <div className="flex flex-wrap gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="w-11 h-11 rounded-full bg-inkSurface2 animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {COSMETIC_DEFINITIONS.filter((c) => c.category === skinCategory).map((c) => {
+                const unlocked = c.unlock.type === "always" || unlockedKeys.has(c.key);
+                const isEquipped = equippedKey === c.key;
+                return (
+                  <button
+                    key={c.key}
+                    disabled={!unlocked || equipping === c.key}
+                    onClick={() => equipCosmetic(c.key)}
+                    title={unlocked ? `${c.label} — ${isEquipped ? "équipé" : "cliquer pour équiper"}` : `${c.label} — ${c.unlockHint}`}
+                    className="relative w-11 h-11 rounded-full flex items-center justify-center overflow-hidden shrink-0 transition disabled:cursor-not-allowed"
+                    style={{
+                      background: unlocked ? c.swatch : undefined,
+                      boxShadow: isEquipped ? `0 0 0 3px #303039, 0 0 0 5px ${c.accentColor}` : undefined,
+                    }}
+                  >
+                    {!unlocked && (
+                      <span className="absolute inset-0 rounded-full bg-inkSurface2 border-2 border-dashed border-inkBorderStrong flex items-center justify-center">
+                        <Lock className="w-4 h-4 text-inkMuted" />
+                      </span>
+                    )}
+                    {unlocked && c.icon && c.icon({ size: 22 })}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {equipError && <p className="text-xs text-danger">{equipError}</p>}
+        {level < 5 && skinCategory !== "uni" && (
+          <p className="text-[11px] text-inkMuted">Niveau actuel : {level} — encore {5 - level} niveau(x) avant de débloquer cette catégorie.</p>
+        )}
       </div>
 
       <div className="pt-3 border-t border-inkBorder/60 flex flex-col gap-2 items-start">

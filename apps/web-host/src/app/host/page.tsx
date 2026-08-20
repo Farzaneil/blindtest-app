@@ -46,6 +46,9 @@ import {
 } from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
+import { usePlayerAccount } from "../../lib/usePlayerAccount";
+import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
+import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY, type CosmeticDefinition } from "../../lib/cosmetics";
 import {
   ArrowLeft,
   RefreshCw,
@@ -273,6 +276,7 @@ function HostBuzzerView({
   sending,
   onBuzz,
   onBackToAdmin,
+  equippedCosmetic,
 }: {
   round: Round | null;
   players: Player[];
@@ -281,6 +285,7 @@ function HostBuzzerView({
   sending: boolean;
   onBuzz: () => void;
   onBackToAdmin: () => void;
+  equippedCosmetic: CosmeticDefinition;
 }) {
   const alreadyBuzzed =
     round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
@@ -368,16 +373,38 @@ function HostBuzzerView({
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
-            className={`w-56 h-56 rounded-full text-3xl font-black transition ${
+            className={`relative overflow-hidden w-56 h-56 rounded-full text-3xl font-black transition ${
               canBuzz
-                ? "bg-sage text-ink active:scale-95 shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
+                ? "active:scale-95"
                 : alreadyBuzzed
                   ? iWon
-                    ? "bg-transparent text-sage shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3ECF7E]"
+                    ? "bg-transparent"
                     : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
                   : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
             }`}
+            /* Skin de buzzer équipé (voir usePlayerCosmetics, migration
+               0022) — même traitement que BuzzerView (app/play/page.tsx) :
+               ce composant est un quasi-duplicata volontaire (voir le
+               commentaire en tête de HostBuzzerView), donc reproduit ici à
+               l'identique plutôt que factorisé. */
+            style={
+              canBuzz
+                ? {
+                    background: equippedCosmetic.swatch,
+                    color: equippedCosmetic.textOn === "dark" ? "#0A0A0C" : "#FFFFFF",
+                    boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}`,
+                  }
+                : alreadyBuzzed && iWon
+                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}` }
+                  : undefined
+            }
           >
+            {(canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.icon && (
+              <span className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                {equippedCosmetic.icon({ size: 140 })}
+              </span>
+            )}
+            <span className="relative">
             {alreadyBuzzed ? (
               iWon ? (
                 <span className="inline-flex flex-col items-center gap-1">
@@ -394,6 +421,7 @@ function HostBuzzerView({
             ) : (
               "BUZZ"
             )}
+            </span>
           </button>
           {alreadyBuzzed && (
             <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
@@ -587,6 +615,15 @@ function recordSharedQuotaLockIfNeeded(
  */
 export default function HostScreen() {
   useForceLoopbackHost();
+
+  // Skin de buzzer équipé (voir usePlayerCosmetics, migration 0022) : pour
+  // l'hôte qui joue aussi (voir HostBuzzerView plus haut) — même logique
+  // que côté /play (BuzzerView), un hôte non connecté à un compte joueur
+  // garde le rendu par défaut (Sage), inchangé.
+  const { account: hostPlayerAccount } = usePlayerAccount();
+  const { equippedKey: hostEquippedKey } = usePlayerCosmetics(hostPlayerAccount?.id ?? "");
+  const hostEquippedCosmetic =
+    COSMETIC_BY_KEY[hostPlayerAccount ? hostEquippedKey : DEFAULT_COSMETIC_KEY] ?? COSMETIC_BY_KEY[DEFAULT_COSMETIC_KEY];
 
   const [room, setRoom] = useState<Room | null>(null);
   // Passe à true une fois qu'on sait si on a repris une partie existante
@@ -1752,6 +1789,7 @@ export default function HostScreen() {
           sending={sendingHostBuzz}
           onBuzz={handleHostBuzz}
           onBackToAdmin={() => setHostView("admin")}
+          equippedCosmetic={hostEquippedCosmetic}
         />
       </main>
     );
