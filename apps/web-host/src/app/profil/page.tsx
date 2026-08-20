@@ -16,29 +16,33 @@ import {
 } from "lucide-react";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerProfileData } from "../../lib/usePlayerProfileData";
+import { usePlayerBadges } from "../../lib/usePlayerBadges";
+import { BADGE_DEFINITIONS, type BadgeCategory, nextThreshold, levelForXp, xpIntoCurrentLevel, XP_PER_LEVEL } from "../../lib/badges";
 
 /**
  * Espace joueur /profil — visuel repris de la maquette validée
  * (maquette_comptes_espace_joueur.html, section 2 : 5 onglets Réglages/
- * Stats/Badges/Historique/Classement). Phase 2 du plan (voir
+ * Stats/Badges/Historique/Classement). Phases 2 et 3 du plan (voir
  * cadrage_comptes_recompenses_rgpd.md, section 7) :
  *
  *   - Réglages (pseudo + suppression de compte) et Stats/Historique
- *     tournent sur des données RÉELLES : le pseudo existe déjà sur
- *     player_accounts (migration 0020), les stats/l'historique se calculent
- *     depuis players/rounds/round_attempts, qui existent depuis le tout
- *     début du projet (migrations 0001/0008) — voir usePlayerProfileData.
- *   - Badges et Classement restent en état "Bientôt" : ils dépendent de
- *     systèmes pas encore construits (badges à paliers, XP/niveaux —
- *     phases 3 et 5 du cadrage), pas juste d'un écran à coder.
+ *     tournent sur des données RÉELLES depuis la phase 2 : le pseudo existe
+ *     déjà sur player_accounts (migration 0020), les stats/l'historique se
+ *     calculent depuis players/rounds/round_attempts, qui existent depuis le
+ *     tout début du projet (migrations 0001/0008) — voir
+ *     usePlayerProfileData.
+ *   - Badges et le pill "Niveau X" + barre d'XP du header tournent
+ *     désormais eux aussi sur des données réelles (phase 3) : voir
+ *     player_badge_progress (migration 0021) et player_accounts.xp,
+ *     alimentés par award_game_rewards() en fin de partie (voir
+ *     lib/rooms.ts:awardGameRewards, appelé depuis app/host/page.tsx).
+ *   - Classement reste en état "Bientôt" : il dépend d'un système pas
+ *     encore construit (classement entre joueurs — phase 5 du cadrage).
  *   - Le "Skin du buzzer" de la maquette (catégories Uni/Nature/Cosmique/
- *     Slay) est pour la même raison affiché verrouillé dans Réglages : les
- *     déblocages sont liés aux badges/niveaux, donc à la même dépendance
- *     que Badges/Classement. Idem pour le pill "Niveau X" + barre d'XP du
- *     header de la maquette : xp existe déjà en base mais vaut toujours 0
- *     aujourd'hui (rien ne l'incrémente encore) et il n'existe aucune
- *     formule de niveau — l'afficher tel quel aurait été trompeur, donc on
- *     l'omet plutôt que de l'inventer.
+ *     Slay) reste pour la même raison affiché verrouillé dans Réglages :
+ *     les déblocages de cosmétiques à partir des badges/niveaux sont la
+ *     phase 4 du cadrage, pas encore construite — avoir des badges/XP réels
+ *     ne suffit pas encore à savoir QUEL skin chaque palier débloque.
  */
 
 type TabKey = "reglages" | "stats" | "badges" | "historique" | "classement";
@@ -106,8 +110,23 @@ export default function ProfilPage() {
               )}
             </div>
             <div className="min-w-0">
-              <p className="font-display font-bold text-lg truncate text-white">{account.pseudo}</p>
-              <p className="text-xs text-inkMuted mt-0.5">Niveaux, XP et cosmétiques du buzzer arrivent bientôt.</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-display font-bold text-lg truncate text-white">{account.pseudo}</p>
+                <span className="text-[11px] font-bold text-sage bg-sage/10 border border-sage/30 rounded-full px-2 py-0.5 whitespace-nowrap">
+                  Niveau {levelForXp(account.xp)}
+                </span>
+              </div>
+              <div className="mt-1.5 max-w-[10rem]">
+                <div className="h-1.5 rounded-full bg-inkSurface3 overflow-hidden">
+                  <div
+                    className="h-full bg-sage rounded-full"
+                    style={{ width: `${(xpIntoCurrentLevel(account.xp) / XP_PER_LEVEL) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-inkMuted mt-1">
+                  {xpIntoCurrentLevel(account.xp)} / {XP_PER_LEVEL} XP · Cosmétiques du buzzer bientôt disponibles
+                </p>
+              </div>
             </div>
           </div>
           <button
@@ -140,7 +159,7 @@ export default function ProfilPage() {
 
         {tab === "reglages" && <ReglagesPanel accountId={account.id} pseudo={account.pseudo} onPseudoSaved={refreshAccount} />}
         {tab === "stats" && <StatsPanel accountId={account.id} />}
-        {tab === "badges" && <BadgesPanel />}
+        {tab === "badges" && <BadgesPanel accountId={account.id} />}
         {tab === "historique" && <HistoriquePanel accountId={account.id} />}
         {tab === "classement" && <ClassementPanel />}
       </div>
@@ -323,23 +342,88 @@ function StatsPanel({ accountId }: { accountId: string }) {
   );
 }
 
-function BadgesPanel() {
-  return (
-    <div className="flex flex-col gap-5">
-      <ComingSoonNote>
-        Les badges à paliers (bronze / argent / or) arrivent dans une prochaine mise à jour, une fois le système de
-        progression en place.
-      </ComingSoonNote>
+const BADGE_CATEGORIES: BadgeCategory[] = ["Performance en jeu", "Assiduité", "Social", "Côté hôte"];
+
+const TIER_COLOR: Record<string, string> = {
+  or: "text-gold",
+  argent: "text-silver",
+  bronze: "text-bronze",
+  none: "text-inkMuted",
+};
+
+const TIER_BORDER: Record<string, string> = {
+  or: "border-gold",
+  argent: "border-silver",
+  bronze: "border-bronze",
+  none: "border-dashed border-inkBorderStrong",
+};
+
+const TIER_LABEL: Record<string, string> = {
+  or: "Or",
+  argent: "Argent",
+  bronze: "Bronze",
+  none: "Verrouillé",
+};
+
+function BadgesPanel({ accountId }: { accountId: string }) {
+  const { loading, error, progressByKey } = usePlayerBadges(accountId);
+
+  if (loading) {
+    return (
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-5 gap-y-6">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col items-center gap-2 text-center opacity-50">
-            <div className="w-16 h-16 rounded-full bg-inkSurface3 border-2 border-dashed border-inkBorderStrong flex items-center justify-center">
-              <Lock className="w-5 h-5 text-inkMuted" />
-            </div>
-            <p className="text-xs font-bold text-inkMuted">Bientôt</p>
-          </div>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="h-24 rounded-xl bg-inkSurface3 animate-pulse" />
         ))}
       </div>
+    );
+  }
+
+  if (error) {
+    return <p className="text-xs text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{error}</p>;
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <ComingSoonNote>
+        Les badges se débloquent en fin de partie (voir Réglages pour la connexion Spotify) — reviens ici après avoir
+        joué pour voir ta progression grimper.
+      </ComingSoonNote>
+      {BADGE_CATEGORIES.map((category) => {
+        const defs = BADGE_DEFINITIONS.filter((d) => d.category === category);
+        return (
+          <div key={category} className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">{category}</p>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-5 gap-y-6">
+              {defs.map((def) => {
+                const row = progressByKey[def.key];
+                const progress = row?.progress ?? 0;
+                const tier = row?.tier ?? "none";
+                const next = nextThreshold(def, progress);
+                return (
+                  <div
+                    key={def.key}
+                    className={"flex flex-col items-center gap-1.5 text-center " + (tier === "none" ? "opacity-50" : "")}
+                    title={def.description}
+                  >
+                    <div className={"w-16 h-16 rounded-full bg-inkSurface3 border-2 flex items-center justify-center " + TIER_BORDER[tier]}>
+                      {tier === "none" ? (
+                        <Lock className="w-5 h-5 text-inkMuted" />
+                      ) : (
+                        <Award className={"w-6 h-6 " + TIER_COLOR[tier]} />
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-white">{def.label}</p>
+                    <p className={"text-[11px] font-semibold " + TIER_COLOR[tier]}>{TIER_LABEL[tier]}</p>
+                    <p className="text-[10px] text-inkMuted">
+                      {next !== null ? `${progress} / ${next}` : `${progress} (max)`}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

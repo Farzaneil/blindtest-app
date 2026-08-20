@@ -249,6 +249,52 @@ export async function resetRoomScores(roomId: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Calcule et attribue badges + XP à tous les comptes présents dans la room
+ * (voir award_game_rewards, supabase/migrations/0021_badges_xp.sql) — à
+ * appeler juste après finishRoom, depuis le même effet (voir app/host/
+ * page.tsx). Passe par une fonction SECURITY DEFINER pour la même raison que
+ * resetRoomScores/resolveRoundAttempt : player_accounts.xp et les tables de
+ * badges ne sont pas ouvertes en écriture à la clé anon.
+ *
+ * Volontairement fire-and-forget côté appelant (voir host/page.tsx) : un
+ * échec ne doit jamais empêcher l'écran de fin de partie de s'afficher.
+ */
+export async function awardGameRewards(roomId: string): Promise<void> {
+  const { error } = await supabase.rpc("award_game_rewards", { p_room_id: roomId });
+  if (error) throw error;
+}
+
+/**
+ * Enregistre qu'un genre a été exploré (playlist générée par genre) dans
+ * cette room — alimente le badge "Éclectique" (voir migration 0021).
+ * Fire-and-forget par design (voir handleGenerateGenrePlaylist dans
+ * app/host/page.tsx) : ne doit jamais bloquer ni faire échouer la
+ * génération de playlist elle-même si l'insert rate pour une raison
+ * quelconque (déconnexion, RLS, etc.).
+ */
+export async function recordGenreUsed(roomId: string, genre: string): Promise<void> {
+  const { error } = await supabase.from("room_genres_used").upsert(
+    { room_id: roomId, genre },
+    { onConflict: "room_id,genre", ignoreDuplicates: true }
+  );
+  if (error) throw error;
+}
+
+/**
+ * Enregistre qu'une playlist Spotify a été importée dans cette room —
+ * alimente le badge "Curateur" (voir migration 0021). Fire-and-forget par
+ * design, comme recordGenreUsed ci-dessus (voir handleImportPlaylist dans
+ * app/host/page.tsx).
+ */
+export async function recordPlaylistImport(roomId: string, playlistId: string): Promise<void> {
+  const { error } = await supabase.from("room_playlist_imports").upsert(
+    { room_id: roomId, playlist_id: playlistId },
+    { onConflict: "room_id,playlist_id", ignoreDuplicates: true }
+  );
+  if (error) throw error;
+}
+
 export function subscribeToPlayers(roomId: string, onChange: (players: Player[]) => void) {
   const fetchAndEmit = async () => {
     const { data } = await supabase

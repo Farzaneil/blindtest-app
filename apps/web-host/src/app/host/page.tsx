@@ -26,6 +26,9 @@ import {
   joinRoomAsHost,
   sendBuzz,
   updateRoomBonusMalusSettings,
+  awardGameRewards,
+  recordGenreUsed,
+  recordPlaylistImport,
   type Player,
   type Round,
   type RoundAttempt,
@@ -966,6 +969,13 @@ export default function HostScreen() {
     if (over && !finishedRoomRef.current) {
       finishedRoomRef.current = true;
       finishRoom(room.id).catch(() => {});
+      // Badges/XP (voir migration 0021) : recalculés à chaque vraie fin de
+      // partie, y compris si l'hôte reprend puis termine à nouveau (voir le
+      // commentaire d'award_game_rewards — idempotent par construction,
+      // sauf pour le score final qui n'est ajouté qu'une fois grâce à
+      // rooms.rewards_awarded_at). Fire-and-forget : ne doit jamais bloquer
+      // ni retarder l'écran de fin de partie.
+      awardGameRewards(room.id).catch(() => {});
     } else if (!over && finishedRoomRef.current) {
       finishedRoomRef.current = false;
     }
@@ -1132,6 +1142,9 @@ export default function HostScreen() {
       // déduire l'ordre des prochaines manches à partir de sa propre
       // playlist.
       setQueue((q) => [...q, ...shuffle(tracks)]);
+      // Badge "Curateur" (voir migration 0021) : fire-and-forget, ne doit
+      // jamais faire échouer l'import lui-même.
+      if (room) recordPlaylistImport(room.id, playlistId).catch(() => {});
       if (quotaLocks.playlists) clearSpotifyQuotaLock("playlists").catch(() => {});
     } catch (e: any) {
       setError(e?.message ?? "Impossible d’importer cette playlist.");
@@ -1321,6 +1334,12 @@ export default function HostScreen() {
 
     if (picked.length > 0) {
       setQueue((q) => [...q, ...picked]);
+      // Badge "Éclectique" (voir migration 0021) : ALL_GENRES_KEY n'est pas
+      // un genre précis, on ne l'enregistre volontairement pas ici.
+      // Fire-and-forget, ne doit jamais faire échouer la génération.
+      if (room && genreChoice !== ALL_GENRES_KEY) {
+        recordGenreUsed(room.id, genreChoice).catch(() => {});
+      }
     }
     let error: string | undefined;
     if (picked.length === 0 && errorCount > 0) {
