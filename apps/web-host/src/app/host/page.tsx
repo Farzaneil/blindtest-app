@@ -42,6 +42,7 @@ import {
   type SpotifyQuotaLocks,
 } from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
+import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import {
   ArrowLeft,
   RefreshCw,
@@ -1739,6 +1740,7 @@ export default function HostScreen() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-ink">
+      <PlayerAccountCorner />
       {gameStarted ? (
         <>
           <div className="text-center bg-inkSurface border border-inkBorder rounded-2xl px-10 py-6">
@@ -2268,12 +2270,22 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "disconnected" && (
-          <button
-            onClick={spotifyPlayer.connect}
-            className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold"
-          >
-            Se connecter à Spotify pour préparer une playlist
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            <button
+              onClick={spotifyPlayer.connect}
+              className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold"
+            >
+              Se connecter à Spotify pour préparer une playlist
+            </button>
+            {/* Distincte du "Compte joueur" (voir PlayerAccountCorner, coin
+                supérieur droit) : ici on connecte Spotify pour lancer la
+                musique (Web Playback SDK, nécessite Premium), pas pour
+                identifier l'hôte en tant que joueur — retour utilisateur
+                direct, les deux étaient confondues quand l'hôte joue aussi. */}
+            <p className="text-xs text-inkMuted text-center max-w-xs">
+              Connexion technique pour lancer la musique — différente du &laquo; Compte joueur &raquo; en haut à droite.
+            </p>
+          </div>
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (

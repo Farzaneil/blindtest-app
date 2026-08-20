@@ -33,6 +33,8 @@ import {
 } from "../../lib/rooms";
 import { withRanks, formatOrdinal, podiumRowClasses, type RankedPlayer } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
+import { usePlayerAccount } from "../../lib/usePlayerAccount";
+import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 
 type Session = { roomId: string; playerId: string };
 
@@ -124,6 +126,10 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Compte joueur connecté (voir usePlayerAccount) : si présent, on lie
+  // account_id dès l'insertion dans `players` (voir joinRoomByCode) —
+  // aucun impact sur le mode invité si non connecté (accountId undefined).
+  const { account } = usePlayerAccount();
 
   const canSubmit = code.trim().length > 0 && name.trim().length > 0 && !loading;
 
@@ -131,7 +137,7 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
     setError(null);
     setLoading(true);
     try {
-      const { room, player } = await joinRoomByCode(code.trim(), name.trim());
+      const { room, player } = await joinRoomByCode(code.trim(), name.trim(), account?.id);
       onJoined({ roomId: room.id, playerId: player.id });
     } catch (e: any) {
       setError(e?.message ?? "Une erreur est survenue.");
@@ -142,6 +148,7 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
 
   return (
     <div className="relative flex flex-col items-center gap-4 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+      <PlayerAccountCorner />
       <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-info" />
       <h1 className="text-3xl font-bold mb-2 font-display text-white">Rejoindre une partie</h1>
       <input

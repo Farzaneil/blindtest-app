@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Mic2, Smartphone, BookOpen, Info } from "lucide-react";
+import { PlayerAccountCorner } from "./_components/PlayerAccountCorner";
 
 /**
  * Page d'accueil neutre : jusqu'ici "/" était directement l'écran hôte, ce
@@ -23,7 +24,8 @@ import { Mic2, Smartphone, BookOpen, Info } from "lucide-react";
  */
 export default function HomePage() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-8 p-6 text-center bg-ink">
+    <main className="relative flex flex-col items-center justify-center min-h-screen gap-8 p-6 text-center bg-ink">
+      <PlayerAccountCorner />
       <div>
         <p className="text-4xl md:text-5xl font-black tracking-wide font-display">BLINDTEST</p>
         <p className="text-inkMuted mt-2">Le blind-test entre potes, sans DJ dédié.</p>

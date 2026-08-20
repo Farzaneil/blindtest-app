@@ -52,6 +52,12 @@ module.exports = {
         infoOn: "#0A1526",
         amber: "#D6A15A",
         amberOn: "#2B1B08",
+        // Couleurs de marque des providers de connexion joueur (écran
+        // /connexion) — Spotify utilise déjà "sage" pour son bouton actif ;
+        // celles-ci ne servent qu'aux boutons désactivés "Bientôt".
+        deezer: "#B34A9E",
+        appleMusic: "#D6497A",
+        ytMusic: "#C8503F",
       },
       boxShadow: {
         glowAccent: "0 0 32px rgba(29, 185, 84, 0.45)",

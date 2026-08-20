@@ -25,6 +25,10 @@ export type Player = {
   is_host: boolean;
   score: number;
   connected: boolean;
+  // Renseigné si ce joueur est connecté à un compte (voir migration 0020
+  // et lib/usePlayerAccount.ts) ; null pour un joueur invité, comportement
+  // inchangé sinon.
+  account_id: string | null;
   // Bonus/malus (voir migration 0017) : nombre de bonnes réponses
   // d'affilée pour CE joueur — il n'y en a jamais qu'un seul avec un
   // compteur > 0 dans toute la room à un instant donné (resolve_round_
@@ -596,10 +600,20 @@ export async function getPlayerSession(
  * 0015) : le reste du jeu (buzz, score, classement, jugement) traite cette
  * ligne exactement comme celle de n'importe quel autre joueur.
  */
-export async function joinRoomAsHost(roomId: string, displayName: string): Promise<Player> {
+export async function joinRoomAsHost(
+  roomId: string,
+  displayName: string,
+  accountId?: string | null
+): Promise<Player> {
   const { data, error } = await supabase
     .from("players")
-    .insert({ room_id: roomId, display_name: displayName, device_id: webDeviceId, is_host: true })
+    .insert({
+      room_id: roomId,
+      display_name: displayName,
+      device_id: webDeviceId,
+      is_host: true,
+      ...(accountId ? { account_id: accountId } : {}),
+    })
     .select()
     .single();
 
@@ -610,7 +624,7 @@ export async function joinRoomAsHost(roomId: string, displayName: string): Promi
   return data as Player;
 }
 
-export async function joinRoomByCode(code: string, displayName: string) {
+export async function joinRoomByCode(code: string, displayName: string, accountId?: string | null) {
   const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("id, code, status")
@@ -623,7 +637,12 @@ export async function joinRoomByCode(code: string, displayName: string) {
 
   const { data: player, error: playerError } = await supabase
     .from("players")
-    .insert({ room_id: room.id, display_name: displayName, device_id: webDeviceId })
+    .insert({
+      room_id: room.id,
+      display_name: displayName,
+      device_id: webDeviceId,
+      ...(accountId ? { account_id: accountId } : {}),
+    })
     .select()
     .single();
 
