@@ -2,6 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -19,8 +20,25 @@ import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
  * invité") est repris tel quel du point d'entrée qui a mené ici (voir
  * PlayerAccountCorner) et repropagé jusqu'au callback OAuth via un cookie
  * côté serveur (voir api/player-auth/login).
+ *
+ * Le contenu réel est dans ConnexionForm, séparé du composant exporté par
+ * défaut et enveloppé dans <Suspense> : useSearchParams() dans un composant
+ * client DOIT être sous une frontière Suspense, sinon `next build` échoue
+ * avec "useSearchParams() should be wrapped in a suspense boundary" au
+ * moment de générer les pages — même avec `dynamic = "force-dynamic"` sur
+ * la page, qui ne dispense pas de cette règle. Repéré au premier `next
+ * build` réel de ce fichier (jusqu'ici seulement testé via `npm run dev`,
+ * qui ne fait pas cette vérification).
  */
 export default function ConnexionPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConnexionForm />
+    </Suspense>
+  );
+}
+
+function ConnexionForm() {
   // Même garde-fou que /host (voir useForceLoopbackHost) : les cookies
   // PKCE posés ici (voir api/player-auth/login) doivent être relisibles au
   // retour du callback Spotify, qui n'existe qu'en 127.0.0.1 (policy
