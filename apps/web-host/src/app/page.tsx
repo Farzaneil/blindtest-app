@@ -28,7 +28,7 @@ export default function HomePage() {
       <PlayerAccountCorner />
       <div>
         <p className="text-4xl md:text-5xl font-black tracking-wide font-display">BLINDTEST</p>
-        <p className="text-inkMuted mt-2">Le blind-test entre potes, sans DJ dédié.</p>
+        <p className="text-inkMuted mt-2">Le blind-test entre potes, sans prise de tête.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-lg">
