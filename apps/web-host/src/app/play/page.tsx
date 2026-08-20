@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5 } from "lucide-react";
+import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5, Award } from "lucide-react";
 import {
   joinRoomByCode,
   getPlayerSession,
@@ -34,6 +34,8 @@ import {
 import { withRanks, formatOrdinal, podiumRowClasses, type RankedPlayer } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
+import { useNewlyUnlockedBadges } from "../../lib/useNewlyUnlockedBadges";
+import { BADGE_BY_KEY } from "../../lib/badges";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 
 type Session = { roomId: string; playerId: string };
@@ -297,6 +299,12 @@ function BuzzerView({
   // quoi rien ne prévient un joueur que la partie est terminée puisque
   // `rounds` ne change plus une fois la dernière manche jugée.
   const [roomStatus, setRoomStatus] = useState<"lobby" | "in_progress" | "finished" | null>(null);
+  // Compte joueur connecté (voir usePlayerAccount) : uniquement pour savoir
+  // à qui notifier un badge tout juste débloqué (voir
+  // useNewlyUnlockedBadges ci-dessous) — un joueur invité (accountId
+  // undefined) ne voit simplement jamais cette notification.
+  const { account } = usePlayerAccount();
+  const newlyUnlockedBadges = useNewlyUnlockedBadges(account?.id, roomStatus === "finished");
   // Historique + tentatives : uniquement nécessaires pour calculer les
   // statistiques de l'écran de fin de partie (buzzeur le plus rapide,
   // manche la plus disputée) — mêmes données et même calcul que côté hôte,
@@ -456,6 +464,29 @@ function BuzzerView({
         <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
         <Trophy className="w-10 h-10 text-gold" />
         <p className="text-2xl font-bold text-white text-center font-display">Partie terminée !</p>
+
+        {newlyUnlockedBadges.length > 0 && (
+          <div className="w-full flex flex-col gap-2">
+            {newlyUnlockedBadges.map((u) => {
+              const def = BADGE_BY_KEY[u.badgeKey];
+              if (!def) return null;
+              const tierLabel = u.tier === "or" ? "Or" : u.tier === "argent" ? "Argent" : "Bronze";
+              const tierColor = u.tier === "or" ? "text-gold" : u.tier === "argent" ? "text-silver" : "text-bronze";
+              return (
+                <div
+                  key={`${u.badgeKey}:${u.tier}`}
+                  className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3"
+                >
+                  <Award className={`w-6 h-6 shrink-0 ${tierColor}`} />
+                  <p className="text-sm text-left">
+                    <span className="font-bold text-white">Badge débloqué : {def.label}</span>{" "}
+                    <span className={`font-semibold ${tierColor}`}>({tierLabel})</span>
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {ranked.length > 0 && (
           <div className="flex items-end justify-center gap-3">
