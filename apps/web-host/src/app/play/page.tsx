@@ -141,7 +141,8 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
   };
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+    <div className="relative flex flex-col items-center gap-4 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+      <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-info" />
       <h1 className="text-3xl font-bold mb-2 font-display text-white">Rejoindre une partie</h1>
       <input
         value={code}
