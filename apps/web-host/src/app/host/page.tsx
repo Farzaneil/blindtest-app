@@ -1745,7 +1745,7 @@ export default function HostScreen() {
             <p className="text-sm uppercase tracking-[0.3em] text-inkMuted mb-1">
               Rejoignez la partie avec le code
             </p>
-            <p className="text-6xl font-bold tracking-widest text-sage font-display">{room.code}</p>
+            <p className="text-4xl sm:text-6xl font-bold tracking-widest text-sage font-display">{room.code}</p>
             <div className="flex justify-center gap-4 mt-3">
               <Link
                 href="/"
@@ -1961,7 +1961,7 @@ export default function HostScreen() {
               </p>
             )}
             {timeLeft !== null && (
-              <p className="text-5xl font-bold mt-4 text-sage tabular-nums font-display">{timeLeft}s</p>
+              <p className="text-4xl sm:text-5xl font-bold mt-4 text-sage tabular-nums font-display">{timeLeft}s</p>
             )}
           </div>
         )}
@@ -2161,7 +2161,7 @@ export default function HostScreen() {
                   setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Illimité (jusqu'à la fin de la playlist)"
-                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm"
+                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
               />
               <p className="text-xs text-inkMuted">
                 Laisse vide pour jouer jusqu’à la fin de la playlist. Sinon, la partie se termine
@@ -2187,7 +2187,7 @@ export default function HostScreen() {
                   setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Toute la playlist"
-                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm"
+                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
               />
               <p className="text-xs text-inkMuted">
                 Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce
@@ -2232,16 +2232,16 @@ export default function HostScreen() {
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2 w-full">
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
                 <input
                   value={hostNameDraft}
                   onChange={(e) => setHostNameDraft(e.target.value)}
-                  className="flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-3 py-2 text-white"
+                  className="min-w-0 flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-3 py-2 text-white"
                 />
                 <button
                   onClick={() => handleJoinAsHost(hostNameDraft)}
                   disabled={joiningAsHost || hostNameDraft.trim().length === 0}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center gap-2 whitespace-nowrap"
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap"
                 >
                   <UserPlus className="w-4 h-4" /> {joiningAsHost ? "..." : "Confirmer"}
                 </button>
@@ -2490,7 +2490,7 @@ export default function HostScreen() {
                       setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Illimité"
-                    className="w-20 bg-transparent border-0 focus:ring-0 text-white font-medium p-0"
+                    className="w-16 bg-inkSurface border border-inkBorderStrong focus:border-sage outline-none transition rounded-lg px-2 py-1 text-white font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                   <span className="text-inkMuted">pts</span>
                 </label>
@@ -2517,7 +2517,7 @@ export default function HostScreen() {
                       setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Toute la playlist"
-                    className="w-28 bg-transparent border-0 focus:ring-0 text-white font-medium p-0"
+                    className="w-32 bg-inkSurface border border-inkBorderStrong focus:border-sage outline-none transition rounded-lg px-2 py-1 text-white font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                 </label>
               </div>
@@ -2635,39 +2635,39 @@ export default function HostScreen() {
                 côté, voir la colonne de droite ci-dessous. Chaque onglet a
                 sa propre couleur d'identité (sauge / bleu "info" / ambre),
                 reprise du mockup validé. */}
-            <div className="flex gap-2 pt-1 border-t border-inkBorder/60">
+            <div className="flex gap-1.5 sm:gap-2 pt-1 border-t border-inkBorder/60">
               <button
                 type="button"
                 onClick={() => setAddMethodTab("search")}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2.5 rounded-xl border transition ${
+                className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition ${
                   addMethodTab === "search"
                     ? "border-sage text-sage bg-sage/10"
                     : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
                 }`}
               >
-                <Search className="w-4 h-4" /> Recherche
+                <Search className="w-4 h-4 shrink-0" /> Recherche
               </button>
               <button
                 type="button"
                 onClick={() => setAddMethodTab("import")}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2.5 rounded-xl border transition ${
+                className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition ${
                   addMethodTab === "import"
                     ? "border-info text-info bg-info/10"
                     : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
                 }`}
               >
-                <ListMusic className="w-4 h-4" /> Import Spotify
+                <ListMusic className="w-4 h-4 shrink-0" /> Import<span className="hidden sm:inline">&nbsp;Spotify</span>
               </button>
               <button
                 type="button"
                 onClick={() => setAddMethodTab("genre")}
-                className={`flex-1 flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2.5 rounded-xl border transition ${
+                className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition ${
                   addMethodTab === "genre"
                     ? "border-amber text-amber bg-amber/10"
                     : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
                 }`}
               >
-                <Dice5 className="w-4 h-4" /> Par genre
+                <Dice5 className="w-4 h-4 shrink-0" /> Par genre
               </button>
             </div>
 
@@ -2800,7 +2800,7 @@ export default function HostScreen() {
                         max={40}
                         value={genreCount}
                         onChange={(e) => setGenreCount(Number(e.target.value))}
-                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3"
+                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3 appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                       />
                     </div>
                     <button
@@ -2840,7 +2840,8 @@ export default function HostScreen() {
                   l'impression que la file d'attente "sortait" de la carte
                   au lieu d'en faire partie. Un simple liseré sauge à
                   gauche suffit à la signaler comme le panneau important. */}
-              <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder border-l-4 border-l-sage rounded-2xl p-4">
+              <div className="relative flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4">
+                <span className="absolute top-0 left-4 right-4 h-1 rounded-b-md bg-gold" />
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-white">
                     File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}

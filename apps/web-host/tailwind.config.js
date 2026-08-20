@@ -37,6 +37,7 @@ module.exports = {
         ink: "#0A0A0C",
         inkSurface: "#1C1C23",
         inkSurface2: "#27272F",
+        inkSurface3: "#303039",
         inkBorder: "#3A3A45",
         inkBorderStrong: "#4D4D5A",
         inkMuted: "#8B8B96",
