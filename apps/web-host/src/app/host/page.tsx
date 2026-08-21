@@ -1503,11 +1503,17 @@ export default function HostScreen() {
   // seul entre admin et buzzer au fil de la partie (voir
   // handlePlayNextInQueue pour le sens "manche suivante -> buzzer", et
   // l'effet plus bas pour le sens "quelqu'un buzze -> admin").
+  // Si l'hôte a un compte joueur connecté (hostPlayerAccount, déjà utilisé
+  // pour les cosmétiques du buzzer), on rattache directement account_id ici
+  // — joinRoomAsHost l'accepte déjà en 3e argument (voir lib/rooms.ts),
+  // seul cet appel ne le lui donnait pas jusqu'ici. Conséquence : un hôte
+  // connecté qui joue voit désormais cette partie compter dans son XP/ses
+  // badges, comme n'importe quel autre joueur connecté.
   const handleJoinAsHost = async (name: string) => {
     if (!room) return;
     setJoiningAsHost(true);
     try {
-      const player = await joinRoomAsHost(room.id, name.trim() || "Hôte");
+      const player = await joinRoomAsHost(room.id, name.trim() || "Hôte", hostPlayerAccount?.id ?? null);
       setHostPlayerId(player.id);
       setJoinHostFormOpen(false);
     } catch (e: any) {
@@ -2275,7 +2281,27 @@ export default function HostScreen() {
               appareil. À décider maintenant : ça ne pourra plus être changé une fois la partie
               commencée.
             </p>
-            {!joinHostFormOpen ? (
+            {hostPlayerAccount ? (
+              // Hôte connecté (Compte joueur déjà utilisé pour les
+              // cosmétiques) : pseudo déjà connu, inutile de le redemander
+              // — un seul clic inscrit directement l'hôte avec son pseudo
+              // ET son account_id (voir handleJoinAsHost).
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => handleJoinAsHost(hostPlayerAccount.pseudo)}
+                  disabled={joiningAsHost}
+                  className="flex-1 bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-3 rounded-xl font-bold"
+                >
+                  {joiningAsHost ? "..." : `Oui, je joue (en tant que ${hostPlayerAccount.pseudo})`}
+                </button>
+                <button
+                  onClick={() => setHostJoinSkipped(true)}
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-white transition px-4 py-3 rounded-xl font-bold text-inkMuted"
+                >
+                  Non, je gère juste le jeu
+                </button>
+              </div>
+            ) : !joinHostFormOpen ? (
               <div className="flex gap-3 w-full">
                 <button
                   onClick={() => setJoinHostFormOpen(true)}

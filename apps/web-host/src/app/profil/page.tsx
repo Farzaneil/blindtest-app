@@ -149,7 +149,16 @@ export default function ProfilPage() {
           </div>
           <button
             onClick={async () => {
-              await fetch("/api/player-auth/logout?next=" + encodeURIComponent("/"), { method: "POST" });
+              // Route en JSON, pas en redirection (voir logout/route.ts) —
+              // c'est cette page qui navigue elle-même après coup.
+              // try/catch : un aléa réseau ne doit jamais planter le clic
+              // (voir bug remonté : TypeError: Failed to fetch non
+              // rattrapé, qui empêchait ce router.push de s'exécuter).
+              try {
+                await fetch("/api/player-auth/logout", { method: "POST" });
+              } catch (e) {
+                console.error("[profil] déconnexion échouée", e);
+              }
               router.push("/");
             }}
             className="text-xs text-inkMuted hover:text-white underline transition whitespace-nowrap shrink-0 mt-1"

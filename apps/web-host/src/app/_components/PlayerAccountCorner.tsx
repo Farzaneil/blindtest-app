@@ -75,7 +75,16 @@ export function PlayerAccountCorner() {
       </Link>
       <button
         onClick={async () => {
-          await fetch(`/api/player-auth/logout?next=${encodeURIComponent(pathname || "/")}`, { method: "POST" });
+          // Route en JSON, pas en redirection (voir logout/route.ts) — le
+          // paramètre `next` ne servait plus qu'à une redirection jamais
+          // suivie par cette page (on reste sur place, refresh() suffit).
+          // try/catch : un aléa réseau ne doit jamais planter le clic
+          // (voir bug remonté : TypeError: Failed to fetch non rattrapé).
+          try {
+            await fetch("/api/player-auth/logout", { method: "POST" });
+          } catch (e) {
+            console.error("[PlayerAccountCorner] déconnexion échouée", e);
+          }
           refresh();
         }}
         className="text-[11px] text-inkMuted hover:text-danger underline transition"

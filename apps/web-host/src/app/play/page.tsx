@@ -133,15 +133,19 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
   // Compte joueur connecté (voir usePlayerAccount) : si présent, on lie
   // account_id dès l'insertion dans `players` (voir joinRoomByCode) —
   // aucun impact sur le mode invité si non connecté (accountId undefined).
+  // Connecté = plus besoin de retaper un pseudo : on utilise directement
+  // celui du compte (déjà affiché en permanence par PlayerAccountCorner),
+  // seul le code de la partie reste à saisir.
   const { account } = usePlayerAccount();
 
-  const canSubmit = code.trim().length > 0 && name.trim().length > 0 && !loading;
+  const effectiveName = account ? account.pseudo : name;
+  const canSubmit = code.trim().length > 0 && effectiveName.trim().length > 0 && !loading;
 
   const onSubmit = async () => {
     setError(null);
     setLoading(true);
     try {
-      const { room, player } = await joinRoomByCode(code.trim(), name.trim(), account?.id);
+      const { room, player } = await joinRoomByCode(code.trim(), effectiveName.trim(), account?.id);
       onJoined({ roomId: room.id, playerId: player.id });
     } catch (e: any) {
       setError(e?.message ?? "Une erreur est survenue.");
@@ -161,12 +165,18 @@ function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
         placeholder="Code de la partie"
         className="w-full text-center text-xl uppercase bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
       />
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Ton pseudo"
-        className="w-full text-center text-xl bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
-      />
+      {account ? (
+        <p className="text-sm text-inkMuted">
+          Tu rejoins en tant que <span className="font-semibold text-white">{account.pseudo}</span>
+        </p>
+      ) : (
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Ton pseudo"
+          className="w-full text-center text-xl bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
+        />
+      )}
       {error && <p className="text-danger text-center">{error}</p>}
       <button
         onClick={onSubmit}

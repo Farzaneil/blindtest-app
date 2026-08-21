@@ -42,7 +42,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { error } = await supabaseAdmin.from("player_accounts").update({ pseudo }).eq("id", accountId);
+  // pseudo_customized: true (migration 0024) : empêche une future
+  // reconnexion Spotify (voir api/player-auth/callback) d'écraser ce choix
+  // avec le pseudo Spotify d'origine.
+  const { error } = await supabaseAdmin
+    .from("player_accounts")
+    .update({ pseudo, pseudo_customized: true })
+    .eq("id", accountId);
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   }
