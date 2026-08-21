@@ -2372,7 +2372,29 @@ export default function HostScreen() {
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (
-          <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
+          <div className="flex flex-col items-center gap-3">
+            <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
+            {/* Bug remonté : cet écran restait parfois bloqué ici
+                indéfiniment (veille de l'ordinateur, coupure réseau
+                passagère...), seul un rechargement complet de la page en
+                sortait. spotifyPlayer.stuckTooLong (voir useSpotifyPlayer.ts)
+                s'arme après 12s sans succès : on propose alors de réessayer
+                sans quitter la page, plutôt que de laisser l'hôte deviner
+                qu'il doit recharger. */}
+            {spotifyPlayer.stuckTooLong && (
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-inkMuted/70 text-center max-w-xs">
+                  Ça prend plus longtemps que prévu.
+                </p>
+                <button
+                  onClick={spotifyPlayer.reconnect}
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Réessayer
+                </button>
+              </div>
+            )}
+          </div>
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
