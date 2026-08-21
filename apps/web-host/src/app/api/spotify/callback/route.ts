@@ -6,6 +6,7 @@ import {
   COOKIE_ACCESS_TOKEN,
   COOKIE_REFRESH_TOKEN,
   COOKIE_EXPIRES_AT,
+  COOKIE_NEXT,
 } from "../../../../lib/spotifyAuth";
 
 export async function GET(request: NextRequest) {
@@ -13,9 +14,17 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const error = searchParams.get("error");
+  // Écran d'origine (voir COOKIE_NEXT/login/route.ts) : sans ça, cette
+  // route renvoyait toujours sur "/" quel que soit le point de départ réel
+  // (typiquement /host en pleine partie) — bug remonté lors de l'audit
+  // navigation. "/" reste le repli si le cookie a expiré/est absent.
+  const next = request.cookies.get(COOKIE_NEXT)?.value || "/";
 
-  const redirectWithError = (message: string) =>
-    NextResponse.redirect(`${origin}/?error=${encodeURIComponent(message)}`);
+  const redirectWithError = (message: string) => {
+    const response = NextResponse.redirect(`${origin}${next}?error=${encodeURIComponent(message)}`);
+    response.cookies.delete(COOKIE_NEXT);
+    return response;
+  };
 
   if (error) return redirectWithError(error);
   if (!code || !state) return redirectWithError("missing_code_or_state");
@@ -25,7 +34,7 @@ export async function GET(request: NextRequest) {
 
   if (!expectedState) {
     return redirectWithError(
-      "Cookie state manquant — le navigateur ne l'a pas envoyé (relance la connexion depuis /spotify-test)."
+      "Cookie state manquant — le navigateur ne l'a pas envoyé (relance la connexion Spotify depuis le début)."
     );
   }
   if (state !== expectedState) {
@@ -37,7 +46,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const tokens = await exchangeCodeForTokens(code, verifier);
-    const response = NextResponse.redirect(`${origin}/?connected=1`);
+    const response = NextResponse.redirect(`${origin}${next}?connected=1`);
+    response.cookies.delete(COOKIE_NEXT);
 
     const baseCookieOptions = {
       httpOnly: true,
