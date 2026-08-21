@@ -362,6 +362,9 @@ function ReglagesPanel({
       </div>
 
       <div className="pt-3 border-t border-inkBorder/60 flex flex-col gap-2 items-start">
+        <Link href="/confidentialite" className="text-xs text-inkMuted/70 hover:text-sage transition underline">
+          Voir quelles données sont stockées et pourquoi
+        </Link>
         {!confirmingDelete ? (
           <button
             onClick={() => setConfirmingDelete(true)}

@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import { Inter, Space_Grotesk } from "next/font/google";
+import { CookieConsentBanner } from "./_components/CookieConsentBanner";
 
 // Auto-hébergées par next/font (pas de <link> vers Google Fonts, pas de
 // FOUC) : Inter pour le texte courant, Space Grotesk pour les titres/scores
@@ -24,7 +25,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <body className="bg-dark text-white min-h-screen font-sans">{children}</body>
+      <body className="bg-dark text-white min-h-screen font-sans">
+        {children}
+        <CookieConsentBanner />
+      </body>
     </html>
   );
 }

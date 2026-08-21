@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mic2, Smartphone, BookOpen, Info } from "lucide-react";
+import { Mic2, Smartphone, BookOpen, Info, ShieldCheck } from "lucide-react";
 import { PlayerAccountCorner } from "./_components/PlayerAccountCorner";
 
 /**
@@ -64,6 +64,12 @@ export default function HomePage() {
           className="bg-inkSurface2 border border-inkBorder hover:border-sage transition rounded-full px-4 py-2 text-sm font-medium inline-flex items-center gap-1.5"
         >
           <Info className="w-3.5 h-3.5" /> À propos
+        </Link>
+        <Link
+          href="/confidentialite"
+          className="bg-inkSurface2 border border-inkBorder hover:border-sage transition rounded-full px-4 py-2 text-sm font-medium inline-flex items-center gap-1.5"
+        >
+          <ShieldCheck className="w-3.5 h-3.5" /> Confidentialité
         </Link>
       </div>
     </main>
