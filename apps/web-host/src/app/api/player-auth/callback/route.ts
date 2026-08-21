@@ -74,9 +74,25 @@ export async function GET(request: NextRequest) {
     if (existingProvider) {
       accountId = existingProvider.account_id;
 
+      // pseudo_customized (migration 0024) : si le joueur a choisi un
+      // pseudo différent depuis /profil, on ne le réécrase plus avec le
+      // pseudo Spotify d'origine à chaque reconnexion (bug remonté : le
+      // pseudo personnalisé revenait au pseudo Spotify après déconnexion/
+      // reconnexion). L'avatar continue d'être resynchronisé à chaque
+      // connexion : rien ne permet de le personnaliser autrement pour
+      // l'instant, donc pas de raison de le figer.
+      const { data: existingAccount, error: existingAccountError } = await supabaseAdmin
+        .from("player_accounts")
+        .select("pseudo_customized")
+        .eq("id", accountId)
+        .single();
+      if (existingAccountError) {
+        throw new Error(`Lecture de player_accounts échouée : ${existingAccountError.message}`);
+      }
+
       const { error: updateAccountError } = await supabaseAdmin
         .from("player_accounts")
-        .update({ pseudo, avatar_url: avatarUrl })
+        .update(existingAccount.pseudo_customized ? { avatar_url: avatarUrl } : { pseudo, avatar_url: avatarUrl })
         .eq("id", accountId);
       if (updateAccountError) {
         throw new Error(`Mise à jour de player_accounts échouée : ${updateAccountError.message}`);
