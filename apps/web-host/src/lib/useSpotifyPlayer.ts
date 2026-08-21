@@ -191,8 +191,12 @@ export function useSpotifyPlayer() {
     };
   }, [clearStuckTimer, loadWebPlaybackSdk, setConnectingState]);
 
+  // `next` (page courante, typiquement /host en pleine partie) transmis à
+  // login/route.ts pour que le callback OAuth y ramène directement l'hôte
+  // au lieu de le renvoyer systématiquement sur "/" (bug remonté lors de
+  // l'audit navigation — voir COOKIE_NEXT dans spotifyAuth.ts).
   const connect = () => {
-    window.location.href = "/api/spotify/login";
+    window.location.href = `/api/spotify/login?next=${encodeURIComponent(window.location.pathname)}`;
   };
 
   // Déconnexion explicite : coupe le device Web Playback SDK côté navigateur,

@@ -34,6 +34,14 @@ export const COOKIE_STATE = "spotify_oauth_state";
 export const COOKIE_ACCESS_TOKEN = "spotify_access_token";
 export const COOKIE_REFRESH_TOKEN = "spotify_refresh_token";
 export const COOKIE_EXPIRES_AT = "spotify_expires_at";
+// "next" (la page où revenir une fois la connexion Spotify hôte terminée)
+// stocké le temps de l'aller-retour OAuth — même principe que
+// COOKIE_PLAYER_NEXT côté playerAuth.ts. Corrige un bug remonté lors de
+// l'audit navigation : le callback renvoyait systématiquement sur "/" quel
+// que soit l'écran d'origine (typiquement /host en pleine partie), forçant
+// un clic supplémentaire pour y revenir et masquant tout message d'erreur
+// (la page d'accueil ne lit aucun de ces query params).
+export const COOKIE_NEXT = "spotify_oauth_next";
 
 function base64url(input: Buffer): string {
   return input.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");

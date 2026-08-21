@@ -5,8 +5,9 @@
 // figer au moment du build.
 export const dynamic = "force-dynamic";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { spotify } from "@blindtest/api-clients";
 import { GENRE_PRESETS, ALL_GENRES_KEY, getArtistPool } from "@blindtest/game-logic";
 import {
@@ -613,7 +614,21 @@ function recordSharedQuotaLockIfNeeded(
  * buzzé — moment où il faut de toute façon les afficher pour juger la
  * réponse).
  */
+// Composant réellement exporté par défaut : useSearchParams() dans un
+// composant client DOIT être sous une frontière Suspense, sinon `next
+// build` échoue avec "useSearchParams() should be wrapped in a suspense
+// boundary" au moment de générer les pages — même avec `dynamic =
+// "force-dynamic"` sur la page (voir /connexion, qui a le même
+// commentaire — déjà rencontré une fois sur ce projet).
 export default function HostScreen() {
+  return (
+    <Suspense fallback={null}>
+      <HostScreenInner />
+    </Suspense>
+  );
+}
+
+function HostScreenInner() {
   useForceLoopbackHost();
 
   // Skin de buzzer équipé (voir usePlayerCosmetics, migration 0022) : pour
@@ -639,6 +654,20 @@ export default function HostScreen() {
   const [roundAttempts, setRoundAttempts] = useState<RoundAttempt[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Surface un échec de connexion Spotify renvoyé en query param par
+  // api/spotify/callback (voir COOKIE_NEXT dans spotifyAuth.ts) : avant le
+  // correctif de l'audit navigation, cette route renvoyait toujours sur
+  // "/" (qui ne lit ce paramètre nulle part), donc une erreur OAuth
+  // disparaissait silencieusement. Le setError passe par .then() (jamais
+  // synchrone dans le corps de l'effet), même règle qu'ailleurs dans ce
+  // fichier/le projet (voir usePlayerCosmetics.ts).
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const urlError = searchParams.get("error");
+    if (urlError) {
+      Promise.resolve().then(() => setError(urlError));
+    }
+  }, [searchParams]);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
   // Les 3 méthodes d'ajout de morceaux (recherche / import Spotify /
