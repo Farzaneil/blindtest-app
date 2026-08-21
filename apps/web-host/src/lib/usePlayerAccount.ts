@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 export type PlayerAccount = {
   id: string;
@@ -9,34 +9,82 @@ export type PlayerAccount = {
   xp: number;
 };
 
+type Snapshot = { account: PlayerAccount | null; loading: boolean };
+
 /**
  * État de connexion joueur côté client, lu depuis /api/player-auth/me (qui
- * lit lui-même le cookie de session — voir playerAuth.ts). `refresh` est
- * exposé pour que ConnexionPage/PlayerAccountCorner puissent forcer une
- * relecture juste après un retour de callback OAuth (?player_connected=1),
- * sans attendre un remount du composant.
+ * lit lui-même le cookie de session — voir playerAuth.ts).
+ *
+ * Store module-level partagé entre TOUTES les instances de ce hook dans
+ * l'appli (via useSyncExternalStore), plutôt qu'un simple useState local à
+ * chaque composant. Corrige un bug remonté : sur /play et /host, deux
+ * composants appellent chacun usePlayerAccount() sur la même page
+ * (PlayerAccountCorner + JoinView/HostScreen) — avec un useState local,
+ * appeler refresh() depuis PlayerAccountCorner (bouton Déconnexion) ne
+ * mettait à jour QUE son propre état, laissant JoinView croire que le
+ * compte était toujours connecté (pseudo resté affiché/cache après
+ * déconnexion). Un store partagé garantit qu'un refresh() déclenché
+ * n'importe où se répercute instantanément sur tous les composants montés.
+ *
+ * inFlightFetch dédoublonne aussi les appels réseau : deux composants
+ * montés en même temps ne déclenchent qu'une seule requête /me au lieu de
+ * deux.
  */
-export function usePlayerAccount() {
-  const [account, setAccount] = useState<PlayerAccount | null>(null);
-  const [loading, setLoading] = useState(true);
+let snapshot: Snapshot = { account: null, loading: true };
+let hasLoadedOnce = false;
+let inFlightFetch: Promise<void> | null = null;
+const listeners = new Set<() => void>();
 
-  // Ne remet volontairement PAS loading à true en tête de fonction (même
-  // pour un refresh() manuel après déconnexion) : la règle eslint react-
-  // hooks interdit un setState synchrone en tête d'effet (voir l'appel
-  // refresh() ci-dessous), et loading démarre de toute façon à true —
-  // seul un bref flash "pas encore chargé" serait perdu sur un refresh()
-  // manuel, sans conséquence réelle ici.
-  const refresh = useCallback(() => {
-    fetch("/api/player-auth/me")
-      .then((r) => r.json())
-      .then((data) => setAccount(data.connected ? data.account : null))
-      .catch(() => setAccount(null))
-      .finally(() => setLoading(false));
-  }, []);
+const SERVER_SNAPSHOT: Snapshot = { account: null, loading: true };
+
+function setSnapshot(next: Snapshot) {
+  snapshot = next;
+  listeners.forEach((listener) => listener());
+}
+
+function fetchAccount(): Promise<void> {
+  if (inFlightFetch) return inFlightFetch;
+  inFlightFetch = fetch("/api/player-auth/me")
+    .then((r) => r.json())
+    .then((data) => setSnapshot({ account: data.connected ? data.account : null, loading: false }))
+    .catch(() => setSnapshot({ account: null, loading: false }))
+    .finally(() => {
+      hasLoadedOnce = true;
+      inFlightFetch = null;
+    });
+  return inFlightFetch;
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function getSnapshot() {
+  return snapshot;
+}
+
+function getServerSnapshot() {
+  return SERVER_SNAPSHOT;
+}
+
+export function usePlayerAccount() {
+  const { account, loading } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (!hasLoadedOnce && !inFlightFetch) {
+      fetchAccount();
+    }
+  }, []);
+
+  // Forcé (ConnexionPage après retour de callback OAuth, PlayerAccountCorner
+  // après déconnexion) : relance toujours une requête fraîche, même si une
+  // précédente a déjà abouti — voir le commentaire au-dessus du store.
+  const refresh = useCallback(() => {
+    fetchAccount();
+  }, []);
 
   return { account, loading, refresh };
 }
