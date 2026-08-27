@@ -9,7 +9,6 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { spotify } from "@blindtest/api-clients";
-import { GENRE_PRESETS, ALL_GENRES_KEY, getArtistPool } from "@blindtest/game-logic";
 import {
   createRoom,
   getRoomById,
@@ -28,7 +27,6 @@ import {
   sendBuzz,
   updateRoomBonusMalusSettings,
   awardGameRewards,
-  recordGenreUsed,
   recordPlaylistImport,
   type Player,
   type Round,
@@ -71,8 +69,6 @@ import {
   Zap,
   Flame,
   Play,
-  Search,
-  ListMusic,
   Dice5,
   AlertTriangle,
   Check,
@@ -469,29 +465,6 @@ function HostBuzzerView({
   );
 }
 
-// Options d'époque pour la génération de playlist par genre (voir
-// handleGenerateGenrePlaylist) : décennies larges plutôt qu'un input libre —
-// plus rapide à choisir pour l'hôte, et évite une plage d'années mal
-// formée. "Toutes années" ne filtre pas du tout par year: côté Spotify.
-const ERA_OPTIONS: { label: string; range: { from: number; to: number } | null }[] = [
-  { label: "Toutes années", range: null },
-  { label: "Années 70", range: { from: 1970, to: 1979 } },
-  { label: "Années 80", range: { from: 1980, to: 1989 } },
-  { label: "Années 90", range: { from: 1990, to: 1999 } },
-  { label: "Années 2000", range: { from: 2000, to: 2009 } },
-  { label: "Années 2010", range: { from: 2010, to: 2019 } },
-  { label: "Années 2020", range: { from: 2020, to: 2029 } },
-];
-
-// Clé localStorage pour persister artistSearchCache (voir plus bas) entre
-// deux chargements de la page /host — le quota Spotify Developer Mode est
-// désormais compté par compte développeur (pas juste par app) et ne se
-// débloque pas rapidement une fois dépassé (pas de fenêtre glissante de 30s
-// comme le rate-limit classique) : un simple F5 pendant les tests ne doit
-// pas effacer ce qu'on a déjà réussi à récupérer, sous peine de re-brûler du
-// quota pour les mêmes artistes.
-const ARTIST_SEARCH_CACHE_STORAGE_KEY = "blindtest_artist_search_cache_v1";
-
 // Rafraîchit le token Spotify juste avant un appel API fait "en tâche de
 // fond" (recherche, chargement/import de playlist, lancement de manche...),
 // plutôt que de se fier à spotifyPlayer.accessTokenRef.current directement :
@@ -502,8 +475,7 @@ const ARTIST_SEARCH_CACHE_STORAGE_KEY = "blindtest_artist_search_cache_v1";
 // session hôte ouverte depuis un moment fait échouer ces appels en 401 (ou
 // parfois en 403 "Restriction violated" sur /player/play, Spotify n'étant
 // pas toujours cohérent sur le code renvoyé pour un token borderline) —
-// pattern déjà en place pour handleGenerateGenrePlaylist, généralisé ici à
-// handleSearch / handleLoadMyPlaylists / handleImportPlaylist / launchRound
+// utilisé par handleLoadMyPlaylists / handleImportPlaylist / launchRound
 // après le double signalement d'un 401 sur l'import et d'un 403 sur
 // "manche suivante" en local. /api/spotify/token gère déjà le refresh via
 // le refresh_token cookie ; on l'appelle ici pour être sûr d'avoir un token
@@ -523,9 +495,8 @@ async function getFreshSpotifyAccessToken(fallback: string | null): Promise<stri
 }
 
 // Formatage lisible du temps restant avant la fin du coupe-circuit quota
-// Spotify (voir searchQuotaCooldownSeconds / playlistsQuotaCooldownSeconds)
-// — en heures + minutes plutôt qu'en secondes brutes, ce délai se comptant
-// potentiellement en heures.
+// Spotify (voir playlistsQuotaCooldownSeconds) — en heures + minutes plutôt
+// qu'en secondes brutes, ce délai se comptant potentiellement en heures.
 function formatCooldownDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.max(1, Math.ceil((totalSeconds % 3600) / 60));
@@ -562,13 +533,19 @@ function computeSharedQuotaBackoffMs(previousHits: number): number {
  * Pose (ou prolonge avec backoff) le verrou PARTAGÉ (voir
  * spotifyQuotaLock.ts) uniquement si l'erreur capturée est un 429
  * QUOTA_EXCEEDED confirmé (pas n'importe quelle erreur réseau) — appelé
- * depuis les catch de handleSearch / handleLoadMyPlaylists /
- * handleImportPlaylist / handleGenerateGenrePlaylist, avec le nombre de
- * coups consécutifs déjà connus (quotaLocks[category]?.consecutiveHits) en
- * paramètre puisque cette fonction, hors du composant, n'a pas accès à
- * l'état React. Le "await" est volontairement absent côté appelant
- * (fire-and-forget) : un échec de l'écriture Supabase ne doit pas empêcher
- * d'afficher l'erreur Spotify elle-même à l'hôte.
+ * depuis les catch de handleLoadMyPlaylists / handleImportPlaylist, avec le
+ * nombre de coups consécutifs déjà connus
+ * (quotaLocks[category]?.consecutiveHits) en paramètre puisque cette
+ * fonction, hors du composant, n'a pas accès à l'état React. Le "await" est
+ * volontairement absent côté appelant (fire-and-forget) : un échec de
+ * l'écriture Supabase ne doit pas empêcher d'afficher l'erreur Spotify
+ * elle-même à l'hôte.
+ *
+ * `category` reste une union à deux valeurs (voir spotifyQuotaLock.ts) même
+ * si seule "playlists" est encore posée depuis cette page : "search" reste
+ * un type valide pour ne pas casser un verrou déjà en base posé avant le
+ * retrait de la recherche manuelle / génération par genre (voir le
+ * commentaire sur ce retrait plus haut dans le fichier).
  */
 function recordSharedQuotaLockIfNeeded(
   category: "search" | "playlists",
@@ -668,15 +645,6 @@ function HostScreenInner() {
       Promise.resolve().then(() => setError(urlError));
     }
   }, [searchParams]);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<spotify.SpotifyTrack[]>([]);
-  // Les 3 méthodes d'ajout de morceaux (recherche / import Spotify /
-  // génération par genre) partagent le même panneau plutôt que d'être
-  // empilées verticalement : ça libère la place pour garder la file
-  // d'attente visible en permanence à côté (voir le layout deux colonnes
-  // plus bas). Chaque onglet a sa propre couleur d'identité (sauge / bleu
-  // "info" / ambre) reprise du mockup validé.
-  const [addMethodTab, setAddMethodTab] = useState<"search" | "import" | "genre">("search");
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
   // Voir le commentaire sur HOST_PLAYER_ID_STORAGE_KEY plus haut.
   const [hostPlayerId, setHostPlayerId] = useState<string | null>(null);
@@ -739,26 +707,6 @@ function HostScreenInner() {
   const [loadingPlaylists, setLoadingPlaylists] = useState(false);
   const [importingPlaylistId, setImportingPlaylistId] = useState<string | null>(null);
 
-  // Génération de playlist par genre + époque + nombre : à partir de
-  // listes d'artistes curées à la main (voir @blindtest/game-logic,
-  // genrePresets.ts) plutôt que du filtre genre: de Spotify — trop
-  // imprécis pour des catégories larges (variétés, disco...) et sans tri
-  // par popularité possible depuis février 2026 (voir commentaire sur
-  // searchArtistTracks dans packages/api-clients/src/spotify.ts). L'hôte
-  // ne voit jamais la liste de morceaux se construire au fur et à mesure
-  // (contrairement à une recherche manuelle ou un import direct) : il
-  // choisit juste 3 paramètres et la playlist apparaît déjà faite, ce qui
-  // garde la surprise même pour lui s'il joue aussi.
-  const [genreChoice, setGenreChoice] = useState<string>(ALL_GENRES_KEY);
-  const [eraChoice, setEraChoice] = useState(0); // index dans ERA_OPTIONS
-  const [genreCount, setGenreCount] = useState(15);
-  const [generatingGenrePlaylist, setGeneratingGenrePlaylist] = useState(false);
-  const [genrePlaylistTried, setGenrePlaylistTried] = useState(0);
-  const [genrePlaylistResult, setGenrePlaylistResult] = useState<{
-    foundCount: number;
-    requestedCount: number;
-    error?: string;
-  } | null>(null);
   // Verrou PARTAGÉ (Supabase, voir spotifyQuotaLock.ts) plutôt qu'un simple
   // état local : un coupe-circuit purement local (localStorage) ne protège
   // que CE navigateur — si l'hôte ouvre /host depuis un autre appareil ou
@@ -767,21 +715,15 @@ function HostScreenInner() {
   // retente un appel qui échoue à nouveau. quotaLocks est synchronisé en
   // direct via Realtime (voir l'effet plus bas) ; quotaNowTick force un
   // recalcul du temps restant toutes les 30s même sans nouvel événement.
+  // Seule la catégorie "playlists" est encore posée depuis cette page — voir
+  // le commentaire sur le retrait de la recherche manuelle / génération par
+  // genre plus haut dans le fichier ; la catégorie "search" reste définie
+  // dans spotifyQuotaLock.ts (dette technique, pas encore nettoyée).
   const [quotaLocks, setQuotaLocks] = useState<SpotifyQuotaLocks>({});
   const [quotaNowTick, setQuotaNowTick] = useState(() => Date.now());
-  const searchQuotaCooldownSeconds = secondsUntil(quotaLocks.search?.blockedUntil, quotaNowTick);
   const playlistsQuotaCooldownSeconds = secondsUntil(quotaLocks.playlists?.blockedUntil, quotaNowTick);
 
   const spotifyPlayer = useSpotifyPlayer();
-  // Cache des recherches par artiste + époque, gardé pour toute la durée de
-  // la session hôte (pas juste un appel à handleGenerateGenrePlaylist) : la
-  // limite de requêtes Spotify (voir searchTracks/SpotifySearchError dans
-  // @blindtest/api-clients) est un quota Developer Mode assez strict, et
-  // pendant une soirée l'hôte régénère souvent plusieurs fois avec les mêmes
-  // paramètres (ou des paramètres proches) pour piocher un mix différent —
-  // sans cache, chaque clic re-interroge Spotify pour les mêmes artistes.
-  // Clé : "artiste::plage d'années" (ou "artiste::all" si aucune époque).
-  const artistSearchCache = useRef<Map<string, spotify.SpotifyTrack[]>>(new Map());
   const pausedForRoundId = useRef<string | null>(null);
   const timedOutRoundId = useRef<string | null>(null);
   const autoRevealedRoundKey = useRef<string | null>(null);
@@ -794,25 +736,6 @@ function HostScreenInner() {
   // rendus) — remis à false dès que la partie n'est plus en état épuisé
   // (nouvelle partie, ou reprise via "+ Ajouter d'autres morceaux").
   const finishedRoomRef = useRef(false);
-
-  // Recharge le cache de recherches par artiste (voir artistSearchCache
-  // ci-dessus) depuis localStorage au montage : survit à un F5, ce qui
-  // compte quand le quota Spotify (compté par compte développeur, pas par
-  // app, depuis la mise à jour de juillet 2026) ne se débloque pas vite —
-  // pas la peine de re-payer en quota pour des artistes déjà interrogés lors
-  // d'un chargement précédent de la page.
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(ARTIST_SEARCH_CACHE_STORAGE_KEY);
-      if (raw) {
-        const entries = JSON.parse(raw) as [string, spotify.SpotifyTrack[]][];
-        artistSearchCache.current = new Map(entries);
-      }
-    } catch {
-      // Cache corrompu ou localStorage indisponible : on repart d'un cache
-      // vide, ce n'est qu'une optimisation, pas une dépendance bloquante.
-    }
-  }, []);
 
   // Charge le verrou partagé au montage, puis reste synchronisé en direct
   // via Realtime (voir spotifyQuotaLock.ts) : si UNE AUTRE session (autre
@@ -1106,27 +1029,6 @@ function HostScreenInner() {
     spotifyPlayer.accessTokenRef,
   ]);
 
-  const handleSearch = async () => {
-    if (!spotifyPlayer.accessTokenRef.current || searchQuotaCooldownSeconds > 0) return;
-    try {
-      const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current);
-      if (!accessToken) {
-        setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
-        return;
-      }
-      const tracks = await spotify.searchTracks(query, accessToken);
-      setResults(tracks);
-      if (quotaLocks.search) clearSpotifyQuotaLock("search").catch(() => {});
-    } catch (e: any) {
-      setError(e?.message ?? "Recherche Spotify échouée.");
-      recordSharedQuotaLockIfNeeded("search", e, quotaLocks.search?.consecutiveHits ?? 0);
-    }
-  };
-
-  const handleAddToQueue = (track: spotify.SpotifyTrack) => {
-    setQueue((q) => [...q, track]);
-  };
-
   const handleRemoveFromQueue = (upcomingIndex: number) => {
     const realIndex = queueIndex + upcomingIndex;
     setQueue((q) => q.filter((_, i) => i !== realIndex));
@@ -1218,225 +1120,6 @@ function HostScreenInner() {
     } finally {
       setImportingPlaylistId(null);
     }
-  };
-
-  /**
-   * Génère une playlist "à l'aveugle" à partir d'un genre + une époque +
-   * un nombre de morceaux souhaité — voir le commentaire sur genreChoice
-   * plus haut pour le pourquoi de cette approche (artistes curés plutôt
-   * que le filtre genre: de Spotify). Pioche des artistes au hasard dans
-   * le pool du genre choisi, récupère jusqu'à 3 de leurs morceaux par
-   * artiste (filtrés par année si une époque est choisie), puis retient
-   * `genreCount` morceaux au hasard parmi tout ce qui a été trouvé —
-   * s'arrête dès qu'on a assez d'ARTISTES DIFFÉRENTS plutôt que d'interroger
-   * tout le pool, pour ne pas multiplier les appels Spotify inutilement.
-   *
-   * La sélection finale se fait en 2 passes plutôt qu'un tirage uniforme sur
-   * tous les morceaux candidats : chaque artiste peut fournir jusqu'à 3
-   * morceaux candidats, donc un tirage uniforme pioche mécaniquement le même
-   * artiste 2-3 fois assez souvent (surtout avec peu d'artistes/morceaux
-   * demandés) — statistiquement logique, mais bizarre à l'usage pour un
-   * blind-test. On priorise donc 1 morceau par artiste, et on ne complète
-   * avec des doublons d'artiste qu'en dernier recours si le pool ne fournit
-   * pas assez d'artistes distincts pour atteindre le nombre demandé.
-   */
-  const handleGenerateGenrePlaylist = async () => {
-    if (!spotifyPlayer.accessTokenRef.current || searchQuotaCooldownSeconds > 0) return;
-    const yearRange = ERA_OPTIONS[eraChoice].range;
-    const pool = shuffle(getArtistPool(genreChoice));
-    const wanted = Math.max(1, genreCount);
-
-    setGeneratingGenrePlaylist(true);
-    setGenrePlaylistResult(null);
-    setGenrePlaylistTried(0);
-
-    // Le token en mémoire (accessTokenRef) date du chargement de la page et
-    // peut avoir expiré depuis (durée de vie ~1h côté Spotify) : le Web
-    // Playback SDK ne le rafraîchit que quand LUI en a besoin pour la
-    // lecture, pas pour ces appels à l'API Search faits en arrière-plan. Sans
-    // ce refresh explicite, une session hôte ouverte depuis un moment fait
-    // échouer TOUTES les recherches (401) en silence (voir le catch
-    // ci-dessous) — ça ressemble à "il ne trouve plus rien", même en
-    // recréant une partie, puisque recréer une partie ne touche jamais à la
-    // session Spotify du navigateur. /api/spotify/token gère déjà le refresh
-    // via le refresh_token cookie ; on l'appelle ici pour être sûr d'avoir un
-    // token valide avant de lancer la série de recherches.
-    let accessToken = spotifyPlayer.accessTokenRef.current;
-    try {
-      const tokenRes = await fetch("/api/spotify/token");
-      const tokenData = await tokenRes.json();
-      if (!tokenData.connected) {
-        setGenrePlaylistResult({
-          foundCount: 0,
-          requestedCount: wanted,
-          error: "Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.",
-        });
-        setGeneratingGenrePlaylist(false);
-        return;
-      }
-      // On ne réécrit pas spotifyPlayer.accessTokenRef.current ici : c'est
-      // une valeur issue du hook useSpotifyPlayer, et ESLint (règle
-      // react-hooks/immutability, react-compiler) interdit de la muter
-      // depuis l'extérieur du hook. On garde le token frais dans une
-      // variable locale, ce qui suffit pour toute la durée de cette
-      // génération (quelques dizaines de secondes max).
-      accessToken = tokenData.accessToken;
-    } catch {
-      // Si le refresh échoue (réseau...), on retente avec le token qu'on
-      // avait déjà — au pire les recherches échoueront individuellement
-      // plus bas et seront comptées dans errorCount.
-    }
-
-    const candidates: { track: spotify.SpotifyTrack; artistName: string }[] = [];
-    const seenTrackIds = new Set<string>();
-    const contributingArtists = new Set<string>();
-    let errorCount = 0;
-    let sawRateLimit = false;
-    let sawAuthError = false;
-    let sawQuotaExceeded = false;
-    let retryAfterSeconds: number | null = null;
-    const eraCacheKey = yearRange ? `${yearRange.from}-${yearRange.to}` : "all";
-
-    for (const artistName of pool) {
-      // Marge x2 : laisse de la place au tirage aléatoire final sans être
-      // bloqué par des morceaux déjà vus ou des artistes sans résultat pour
-      // l'année choisie.
-      if (contributingArtists.size >= wanted * 2) break;
-      // Dès qu'on a tapé un 429, tous les artistes suivants échoueront aussi
-      // (même fenêtre de quota) : on arrête plutôt que de brûler encore plus
-      // de quota pour rien et allonger l'attente avant que ça se débloque.
-      if (sawRateLimit) break;
-
-      const cacheKey = `${artistName}::${eraCacheKey}`;
-      const cached = artistSearchCache.current.get(cacheKey);
-
-      if (cached) {
-        // Déjà interrogé pendant cette session hôte (une régénération
-        // précédente avec le même genre/époque, par exemple) : pas besoin de
-        // re-solliciter Spotify, ça ne consomme aucun quota.
-        for (const track of shuffle(cached).slice(0, 3)) {
-          if (!seenTrackIds.has(track.sourceTrackId)) {
-            seenTrackIds.add(track.sourceTrackId);
-            candidates.push({ track, artistName });
-            contributingArtists.add(artistName);
-          }
-        }
-        setGenrePlaylistTried((n) => n + 1);
-        continue;
-      }
-
-      try {
-        const tracks = await spotify.searchArtistTracks(artistName, yearRange, accessToken);
-        artistSearchCache.current.set(cacheKey, tracks);
-        for (const track of shuffle(tracks).slice(0, 3)) {
-          if (!seenTrackIds.has(track.sourceTrackId)) {
-            seenTrackIds.add(track.sourceTrackId);
-            candidates.push({ track, artistName });
-            contributingArtists.add(artistName);
-          }
-        }
-      } catch (e) {
-        // On continue avec l'artiste suivant, mais on compte l'échec pour
-        // pouvoir distinguer "aucun résultat pertinent" d'une vraie panne
-        // dans le message final. SpotifySearchError porte le code HTTP et,
-        // pour un 429, le Retry-After renvoyé par Spotify — on ne le
-        // met PAS en cache (échec transitoire, pas un "pas de morceaux").
-        errorCount += 1;
-        if (e instanceof spotify.SpotifySearchError) {
-          if (e.status === 429) {
-            sawRateLimit = true;
-            retryAfterSeconds = e.retryAfterSeconds;
-            if (e.reason === "QUOTA_EXCEEDED") sawQuotaExceeded = true;
-          }
-          if (e.status === 401) sawAuthError = true;
-        }
-      }
-      setGenrePlaylistTried((n) => n + 1);
-      // Petite pause entre deux recherches (seulement pour les vrais appels
-      // réseau, pas les hits de cache ci-dessus) : une génération enchaîne
-      // des dizaines de requêtes Spotify à la suite, et les envoyer en
-      // rafale sans aucune pause est ce qui déclenche le 429 en premier
-      // lieu, même en usage normal.
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    }
-
-    // Sauvegarde le cache mis à jour (nouveaux artistes interrogés pendant
-    // cette génération) en une seule écriture localStorage groupée, plutôt
-    // qu'à chaque itération de la boucle ci-dessus — inutile d'écrire sur
-    // disque des dizaines de fois pour une seule génération.
-    try {
-      window.localStorage.setItem(
-        ARTIST_SEARCH_CACHE_STORAGE_KEY,
-        JSON.stringify(Array.from(artistSearchCache.current.entries()))
-      );
-    } catch {
-      // Quota localStorage dépassé ou navigateur en mode privé : tant pis,
-      // le cache reste utile pour le reste de cette session en mémoire.
-    }
-
-    const shuffledCandidates = shuffle(candidates);
-    const picked: spotify.SpotifyTrack[] = [];
-    const pickedIds = new Set<string>();
-    const usedArtists = new Set<string>();
-
-    // Passe 1 : au plus 1 morceau par artiste.
-    for (const c of shuffledCandidates) {
-      if (picked.length >= wanted) break;
-      if (usedArtists.has(c.artistName)) continue;
-      usedArtists.add(c.artistName);
-      pickedIds.add(c.track.sourceTrackId);
-      picked.push(c.track);
-    }
-    // Passe 2 (dernier recours) : complète avec des doublons d'artiste si le
-    // pool n'avait pas assez d'artistes distincts pour atteindre `wanted`.
-    if (picked.length < wanted) {
-      for (const c of shuffledCandidates) {
-        if (picked.length >= wanted) break;
-        if (pickedIds.has(c.track.sourceTrackId)) continue;
-        pickedIds.add(c.track.sourceTrackId);
-        picked.push(c.track);
-      }
-    }
-
-    if (picked.length > 0) {
-      setQueue((q) => [...q, ...picked]);
-      // Badge "Éclectique" (voir migration 0021) : ALL_GENRES_KEY n'est pas
-      // un genre précis, on ne l'enregistre volontairement pas ici.
-      // Fire-and-forget, ne doit jamais faire échouer la génération.
-      if (room && genreChoice !== ALL_GENRES_KEY) {
-        recordGenreUsed(room.id, genreChoice).catch(() => {});
-      }
-    }
-    let error: string | undefined;
-    if (picked.length === 0 && errorCount > 0) {
-      if (sawRateLimit) {
-        error = retryAfterSeconds
-          ? `Spotify a temporairement bloqué les recherches (trop de requêtes d'un coup) — réessaie dans ${retryAfterSeconds} secondes.`
-          : "Spotify a temporairement bloqué les recherches (trop de requêtes d'un coup) — attends une minute avant de réessayer, ou demande moins de morceaux.";
-      } else if (sawAuthError) {
-        error = "Connexion Spotify expirée — recharge la page (F5) pour te reconnecter, puis réessaie.";
-      } else {
-        error = "Erreur de connexion à Spotify pendant la recherche — réessaie dans quelques instants.";
-      }
-    }
-    setGenrePlaylistResult({ foundCount: picked.length, requestedCount: wanted, error });
-    if (sawQuotaExceeded) {
-      const durationMs = computeSharedQuotaBackoffMs(quotaLocks.search?.consecutiveHits ?? 0);
-      setSpotifyQuotaLock(
-        "search",
-        new Date(Date.now() + durationMs).toISOString(),
-        (quotaLocks.search?.consecutiveHits ?? 0) + 1
-      ).catch(() => {
-        // Pas grave : le coupe-circuit local continue de protéger cette session.
-      });
-    } else if (candidates.length > 0 && quotaLocks.search) {
-      // Au moins une recherche a réussi pendant cette génération sans
-      // qu'aucun 429 QUOTA_EXCEEDED ne soit survenu : le quota semble bien
-      // débloqué, on efface le verrou plutôt que de laisser une escalade
-      // passée traîner inutilement.
-      clearSpotifyQuotaLock("search").catch(() => {});
-    }
-    setGeneratingGenrePlaylist(false);
   };
 
   const launchRound = async (track: spotify.SpotifyTrack) => {
@@ -2746,232 +2429,79 @@ function HostScreenInner() {
             {/* Coupe-circuit quota Spotify (verrou PARTAGÉ via Supabase, voir
                 spotifyQuotaLock.ts) : un bandeau visible plutôt que de
                 laisser l'hôte cliquer sur les boutons Spotify ci-dessous
-                pour découvrir l'erreur à chaque fois. Les deux catégories
-                sont indépendantes (voir le commentaire sur quotaLocks plus
-                haut), donc affichées séparément : un quota dépassé sur
-                l'une n'implique pas que l'autre le soit aussi. */}
-            {(searchQuotaCooldownSeconds > 0 || playlistsQuotaCooldownSeconds > 0) && (
+                pour découvrir l'erreur à chaque fois. Seule la catégorie
+                "playlists" est encore posée depuis cette page (voir le
+                commentaire sur quotaLocks plus haut) — la recherche
+                manuelle et la génération par genre ont été retirées, seul
+                l'import de playlist Spotify reste comme méthode d'ajout de
+                morceaux. */}
+            {playlistsQuotaCooldownSeconds > 0 && (
               <div className="flex flex-col gap-2 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
-                {searchQuotaCooldownSeconds > 0 && (
-                  <p className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>
-                      Spotify a atteint son quota de recherche — recherche manuelle et génération
-                      par genre en pause. Nouvelle tentative possible dans environ{" "}
-                      {formatCooldownDuration(searchQuotaCooldownSeconds)}.
-                    </span>
-                  </p>
-                )}
-                {playlistsQuotaCooldownSeconds > 0 && (
-                  <p className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                    <span>
-                      Spotify a atteint son quota pour les playlists — chargement et import en
-                      pause. Nouvelle tentative possible dans environ{" "}
-                      {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
-                    </span>
-                  </p>
-                )}
+                <p className="flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <span>
+                    Spotify a atteint son quota pour les playlists — chargement et import en
+                    pause. Nouvelle tentative possible dans environ{" "}
+                    {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
+                  </span>
+                </p>
               </div>
             )}
 
-            {/* Les 3 méthodes d'ajout partagent un même panneau à onglets
-                (plutôt que d'être empilées verticalement) : ça libère la
-                place pour garder la file d'attente toujours visible à
-                côté, voir la colonne de droite ci-dessous. Chaque onglet a
-                sa propre couleur d'identité (sauge / bleu "info" / ambre),
-                reprise du mockup validé. */}
-            <div className="flex gap-1.5 sm:gap-2 pt-1 border-t border-inkBorder/60">
-              <button
-                type="button"
-                onClick={() => setAddMethodTab("search")}
-                className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition ${
-                  addMethodTab === "search"
-                    ? "border-sage text-sage bg-sage/10"
-                    : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
-                }`}
-              >
-                <Search className="w-4 h-4 shrink-0" /> Recherche
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddMethodTab("import")}
-                className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition ${
-                  addMethodTab === "import"
-                    ? "border-info text-info bg-info/10"
-                    : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
-                }`}
-              >
-                <ListMusic className="w-4 h-4 shrink-0" /> Import<span className="hidden sm:inline">&nbsp;Spotify</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddMethodTab("genre")}
-                className={`flex-1 flex items-center justify-center gap-1 sm:gap-1.5 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition ${
-                  addMethodTab === "genre"
-                    ? "border-amber text-amber bg-amber/10"
-                    : "border-inkBorder text-inkMuted hover:border-inkBorderStrong"
-                }`}
-              >
-                <Dice5 className="w-4 h-4 shrink-0" /> Par genre
-              </button>
-            </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-stretch">
-              {/* Panneau de la méthode active */}
+              {/* Import de playlist Spotify : seule méthode d'ajout de
+                  morceaux conservée (recherche manuelle et génération par
+                  genre retirées — la recherche manuelle et la génération
+                  aléatoire multipliaient les appels à l'API Search Spotify,
+                  au quota Developer Mode strict, pour un usage jugé
+                  secondaire face à l'import direct d'une playlist déjà
+                  prête). Note : le badge "Éclectique" (voir lib/badges.ts et
+                  migration 0021), qui suivait l'exploration de genres via
+                  la génération, ne peut donc plus progresser pour de
+                  nouvelles parties — sa définition et la progression déjà
+                  acquise par les joueurs restent inchangées. */}
               <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
-                {addMethodTab === "search" && (
-                  <>
-                    <p className="text-sm text-inkMuted">Ajoute un morceau précis à la file, un par un.</p>
-                    <div className="flex gap-2">
-                      <input
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                        placeholder="Titre, artiste…"
-                        disabled={searchQuotaCooldownSeconds > 0}
-                        className="flex-1 min-w-0 bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3 disabled:opacity-60"
-                      />
-                      <button
-                        onClick={handleSearch}
-                        disabled={searchQuotaCooldownSeconds > 0}
-                        className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold whitespace-nowrap"
-                      >
-                        Chercher
-                      </button>
-                    </div>
-                    {results.length > 0 && (
-                      <ul className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
-                        {results.map((track) => (
-                          <li
-                            key={track.sourceTrackId}
-                            className="flex justify-between items-center bg-inkSurface border border-inkBorder rounded-xl px-4 py-3"
-                          >
-                            <span className="truncate min-w-0 flex-1">
-                              {track.title} — {track.artist}
-                            </span>
-                            <button
-                              onClick={() => handleAddToQueue(track)}
-                              className="bg-sage text-ink hover:bg-sage/90 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
-                            >
-                              + Ajouter
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </>
+                <p className="text-sm text-inkMuted">
+                  Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
+                </p>
+                <button
+                  onClick={handleLoadMyPlaylists}
+                  disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-info disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
+                >
+                  {myPlaylists !== null
+                    ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Check className="w-4 h-4" /> Playlists chargées
+                      </span>
+                    )
+                    : loadingPlaylists
+                      ? "Chargement…"
+                      : "Charger mes playlists Spotify"}
+                </button>
+                {myPlaylists !== null && myPlaylists.length === 0 && (
+                  <p className="text-sm text-inkMuted">Aucune playlist trouvée sur ton compte Spotify.</p>
                 )}
-
-                {addMethodTab === "import" && (
-                  <>
-                    <p className="text-sm text-inkMuted">
-                      Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
-                    </p>
-                    <button
-                      onClick={handleLoadMyPlaylists}
-                      disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
-                      className="bg-inkSurface2 border border-inkBorderStrong hover:border-info disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
-                    >
-                      {myPlaylists !== null
-                        ? (
-                          <span className="inline-flex items-center gap-2">
-                            <Check className="w-4 h-4" /> Playlists chargées
+                {myPlaylists !== null && myPlaylists.length > 0 && (
+                  <div className="max-h-72 overflow-y-auto pr-1">
+                    <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
+                      {myPlaylists.map((playlist) => (
+                        <li key={playlist.id} className="contents">
+                          <span className="bg-inkSurface rounded-xl px-4 py-3 truncate min-w-0">
+                            {playlist.name}{" "}
+                            <span className="text-inkMuted">({playlist.trackCount} morceaux)</span>
                           </span>
-                        )
-                        : loadingPlaylists
-                          ? "Chargement…"
-                          : "Charger mes playlists Spotify"}
-                    </button>
-                    {myPlaylists !== null && myPlaylists.length === 0 && (
-                      <p className="text-sm text-inkMuted">Aucune playlist trouvée sur ton compte Spotify.</p>
-                    )}
-                    {myPlaylists !== null && myPlaylists.length > 0 && (
-                      <div className="max-h-72 overflow-y-auto pr-1">
-                        <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
-                          {myPlaylists.map((playlist) => (
-                            <li key={playlist.id} className="contents">
-                              <span className="bg-inkSurface rounded-xl px-4 py-3 truncate min-w-0">
-                                {playlist.name}{" "}
-                                <span className="text-inkMuted">({playlist.trackCount} morceaux)</span>
-                              </span>
-                              <button
-                                onClick={() => handleImportPlaylist(playlist.id)}
-                                disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
-                                className="bg-inkSurface border border-inkBorderStrong hover:border-info disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
-                              >
-                                {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {addMethodTab === "genre" && (
-                  <>
-                    <p className="text-sm text-inkMuted">
-                      Choisis un genre, une époque et un nombre de morceaux : la playlist se
-                      construit toute seule, tu ne sais pas d’avance ce qui va tomber.
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <select
-                        value={genreChoice}
-                        onChange={(e) => setGenreChoice(e.target.value)}
-                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3"
-                      >
-                        <option value={ALL_GENRES_KEY}>{ALL_GENRES_KEY}</option>
-                        {Object.keys(GENRE_PRESETS).map((genre) => (
-                          <option key={genre} value={genre}>
-                            {genre}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={eraChoice}
-                        onChange={(e) => setEraChoice(Number(e.target.value))}
-                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3"
-                      >
-                        {ERA_OPTIONS.map((era, i) => (
-                          <option key={era.label} value={i}>
-                            {era.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        min={1}
-                        max={40}
-                        value={genreCount}
-                        onChange={(e) => setGenreCount(Number(e.target.value))}
-                        className="bg-inkSurface2 border-2 border-inkBorder focus:border-amber outline-none transition rounded-xl px-3 py-3 appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
-                      />
-                    </div>
-                    <button
-                      onClick={handleGenerateGenrePlaylist}
-                      disabled={generatingGenrePlaylist || searchQuotaCooldownSeconds > 0}
-                      className="bg-amber text-amberOn hover:bg-amber/90 disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
-                    >
-                      {generatingGenrePlaylist ? (
-                        `Recherche… (${genrePlaylistTried} artiste(s) exploré(s))`
-                      ) : (
-                        <span className="inline-flex items-center gap-2">
-                          <Dice5 className="w-4 h-4" /> Générer la playlist
-                        </span>
-                      )}
-                    </button>
-                    {genrePlaylistResult !== null && (
-                      <p className={`text-sm ${genrePlaylistResult.error ? "text-danger" : "text-inkMuted"}`}>
-                        {genrePlaylistResult.error
-                          ? genrePlaylistResult.error
-                          : genrePlaylistResult.foundCount >= genrePlaylistResult.requestedCount
-                            ? `${genrePlaylistResult.foundCount} morceau(x) ajouté(s).`
-                            : `${genrePlaylistResult.foundCount} morceau(x) trouvé(s) sur ${genrePlaylistResult.requestedCount} demandé(s) — essaie une époque plus large ou "${ALL_GENRES_KEY}" si tu en veux plus.`}
-                      </p>
-                    )}
-                  </>
+                          <button
+                            onClick={() => handleImportPlaylist(playlist.id)}
+                            disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
+                            className="bg-inkSurface border border-inkBorderStrong hover:border-info disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
+                          >
+                            {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
 
