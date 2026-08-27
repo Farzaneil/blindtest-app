@@ -1,4 +1,24 @@
 import { GENRE_PRESETS } from "@blindtest/game-logic";
+import {
+  Music2,
+  CheckCircle2,
+  Zap,
+  Flame,
+  TrendingUp,
+  Dice5,
+  Bell,
+  Ear,
+  Timer,
+  Shield,
+  Infinity as InfinityIcon,
+  Trophy,
+  CalendarCheck,
+  Users,
+  Crown,
+  ListMusic,
+  Palette,
+  type LucideIcon,
+} from "lucide-react";
 
 /**
  * Définitions des badges (libellés, catégories, seuils) — phase 3 du plan
@@ -14,6 +34,12 @@ import { GENRE_PRESETS } from "@blindtest/game-logic";
  * voir packages/game-logic/src/genrePresets.ts) ; en revanche il EST dupliqué
  * en dur (5) côté SQL, faute de pouvoir partager ce calcul avec Postgres —
  * voir le commentaire dans la migration.
+ *
+ * `icon` : une icône lucide-react par badge, choisie en lien avec sa
+ * définition (voir chaque commentaire ci-dessous) plutôt qu'une icône
+ * unique partagée par tous — affichée dans le cercle de progression sur
+ * /profil (voir BadgesPanel dans app/profil/page.tsx). Purement visuel, ne
+ * touche à aucune donnée persistée.
  */
 
 export type BadgeTier = "none" | "bronze" | "argent" | "or";
@@ -26,6 +52,7 @@ export type BadgeDefinition = {
   category: BadgeCategory;
   description: string;
   thresholds: { bronze: number; argent: number; or: number };
+  icon: LucideIcon;
 };
 
 const GENRE_COUNT = Object.keys(GENRE_PRESETS).length;
@@ -38,6 +65,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Bonnes réponses cumulées",
     thresholds: { bronze: 50, argent: 250, or: 1000 },
+    icon: Music2,
   },
   {
     key: "sans_faute",
@@ -45,6 +73,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Parties à 100% de réussite",
     thresholds: { bronze: 1, argent: 5, or: 20 },
+    icon: CheckCircle2,
   },
   {
     key: "eclair",
@@ -52,6 +81,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Bonus vitesse déclenchés",
     thresholds: { bronze: 10, argent: 50, or: 200 },
+    icon: Zap,
   },
   {
     key: "sur_une_lancee",
@@ -59,6 +89,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Streaks de 3 bonnes réponses atteints",
     thresholds: { bronze: 1, argent: 10, or: 50 },
+    icon: Flame,
   },
   {
     key: "comeback",
@@ -66,6 +97,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Bonus remontada réussis",
     thresholds: { bronze: 1, argent: 10, or: 30 },
+    icon: TrendingUp,
   },
   {
     key: "chanceux",
@@ -73,6 +105,10 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Manches joker gagnées",
     thresholds: { bronze: 5, argent: 20, or: 50 },
+    // Même icône que le toggle "Manche joker" côté hôte (voir host/page.tsx)
+    // — cohérence visuelle entre le réglage qui déclenche ces manches et le
+    // badge qui en suit les victoires.
+    icon: Dice5,
   },
   {
     key: "reflexes",
@@ -80,6 +116,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Premier à buzzer, peu importe le résultat",
     thresholds: { bronze: 20, argent: 100, or: 400 },
+    icon: Bell,
   },
   {
     key: "bonne_oreille",
@@ -87,6 +124,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Réponses partielles cumulées",
     thresholds: { bronze: 20, argent: 100, or: 400 },
+    icon: Ear,
   },
   {
     key: "sang_froid",
@@ -94,6 +132,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Bonnes réponses dans la dernière seconde",
     thresholds: { bronze: 5, argent: 25, or: 100 },
+    icon: Timer,
   },
   {
     key: "invincible",
@@ -101,6 +140,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Performance en jeu",
     description: "Record de victoires consécutives",
     thresholds: { bronze: 2, argent: 5, or: 10 },
+    icon: Shield,
   },
   // --- Assiduité -------------------------------------------------------------
   {
@@ -109,6 +149,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Assiduité",
     description: "Parties jouées",
     thresholds: { bronze: 10, argent: 50, or: 200 },
+    icon: InfinityIcon,
   },
   {
     key: "champion",
@@ -116,6 +157,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Assiduité",
     description: "Parties terminées à la 1ère place",
     thresholds: { bronze: 1, argent: 10, or: 50 },
+    icon: Trophy,
   },
   {
     key: "fidele",
@@ -123,6 +165,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Assiduité",
     description: "Mois calendaires distincts joués",
     thresholds: { bronze: 3, argent: 6, or: 12 },
+    icon: CalendarCheck,
   },
   // --- Social ------------------------------------------------------------
   {
@@ -131,6 +174,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Social",
     description: "Comptes distincts rencontrés",
     thresholds: { bronze: 5, argent: 20, or: 50 },
+    icon: Users,
   },
   // --- Côté hôte ---------------------------------------------------------
   {
@@ -139,6 +183,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Côté hôte",
     description: "Parties organisées en tant qu'hôte",
     thresholds: { bronze: 1, argent: 10, or: 50 },
+    icon: Crown,
   },
   {
     key: "curateur",
@@ -146,6 +191,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Côté hôte",
     description: "Playlists Spotify importées",
     thresholds: { bronze: 5, argent: 20, or: 100 },
+    icon: ListMusic,
   },
   {
     key: "eclectique",
@@ -153,6 +199,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     category: "Côté hôte",
     description: "Genres distincts explorés",
     thresholds: { bronze: 3, argent: 6, or: GENRE_COUNT },
+    icon: Palette,
   },
 ];
 

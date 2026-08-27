@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5, Award } from "lucide-react";
+import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5 } from "lucide-react";
 import {
   joinRoomByCode,
   getPlayerSession,
@@ -495,7 +495,7 @@ function BuzzerView({
                   key={`${u.badgeKey}:${u.tier}`}
                   className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3"
                 >
-                  <Award className={`w-6 h-6 shrink-0 ${tierColor}`} />
+                  <def.icon className={`w-6 h-6 shrink-0 ${tierColor}`} />
                   <p className="text-sm text-left">
                     <span className="font-bold text-white">Badge débloqué : {def.label}</span>{" "}
                     <span className={`font-semibold ${tierColor}`}>({tierLabel})</span>
