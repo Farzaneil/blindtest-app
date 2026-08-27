@@ -515,7 +515,7 @@ function BadgesPanel({ accountId }: { accountId: string }) {
                       {tier === "none" ? (
                         <Lock className="w-5 h-5 text-inkMuted" />
                       ) : (
-                        <Award className={"w-6 h-6 " + TIER_COLOR[tier]} />
+                        <def.icon className={"w-6 h-6 " + TIER_COLOR[tier]} />
                       )}
                     </div>
                     <p className="text-xs font-bold text-white">{def.label}</p>
