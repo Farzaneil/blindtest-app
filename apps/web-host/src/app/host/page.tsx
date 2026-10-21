@@ -944,19 +944,32 @@ function HostScreenInner() {
   // jouée. Le ref évite de renvoyer la même mise à jour à chaque render tant
   // que l'écran de fin de partie reste affiché, et se réinitialise dès que
   // la partie n'est plus dans cet état (nouvelle partie, ou reprise).
+  //
+  // Même calcul que gameOver plus bas (après les early returns, donc
+  // inutilisable dans un hook) : dupliqué ici en amont pour pouvoir être lu
+  // par cet effet et par celui de reprise de la musique ci-dessous.
+  const canStartRoundNow = !round || round.status === "scored";
+  const isGameOverNow =
+    !!room &&
+    canStartRoundNow &&
+    queueIndex > 0 &&
+    (queue.slice(queueIndex).length === 0 ||
+      (targetScore !== null && players.some((p) => p.score >= targetScore)) ||
+      (maxRounds !== null && queueIndex >= maxRounds));
+
   useEffect(() => {
     if (!room) return;
-    const canStart = !round || round.status === "scored";
-    const exhausted = canStart && queueIndex > 0 && queue.slice(queueIndex).length === 0;
-    const scoreTargetHit =
-      canStart &&
-      queueIndex > 0 &&
-      targetScore !== null &&
-      players.some((p) => p.score >= targetScore);
-    const roundsLimitHit = canStart && maxRounds !== null && queueIndex >= maxRounds && queueIndex > 0;
-    const over = exhausted || scoreTargetHit || roundsLimitHit;
+    const over = isGameOverNow;
     if (over && !finishedRoomRef.current) {
       finishedRoomRef.current = true;
+      // Fin de partie : la musique ne continue pas en fond sur l'écran de
+      // fin (contrairement aux manches intermédiaires, où elle reprend
+      // pendant l'affichage des scores jusqu'à la manche suivante — voir
+      // l'effet de reprise ci-dessous). Couvre aussi la dernière manche
+      // terminée par expiration du timer, qui ne coupe plus le son à 0.
+      if (spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+        spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {});
+      }
       finishRoom(room.id).catch(() => {});
       // Badges/XP (voir migration 0021) : recalculés à chaque vraie fin de
       // partie, y compris si l'hôte reprend puis termine à nouveau (voir le
@@ -968,12 +981,51 @@ function HostScreenInner() {
     } else if (!over && finishedRoomRef.current) {
       finishedRoomRef.current = false;
     }
-  }, [room, round, queueIndex, queue, targetScore, maxRounds, players]);
+  }, [room, isGameOverNow, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+
+  // Reprise de la musique après un buzz, là où il l'avait coupée :
+  // - mode "Maître du jeu" : dès que la manche est clôturée (passage
+  //   "buzzed"/"revealed" -> "scored"). Pas au passage à "revealed", qui y
+  //   est automatique dès le buzz (voir l'auto-révélation plus haut).
+  // - mode "Tout le monde participe" : dès le clic sur "Révéler la
+  //   réponse" (passage "buzzed" -> "revealed"), la réponse étant alors
+  //   affichée pour tout le monde — pas besoin d'attendre le jugement.
+  // C'est l'hôte qui l'arrête en lançant la manche suivante
+  // (playTrackOnHostDevice remplace la lecture en cours). Pas de reprise
+  // en fin de partie (voir isGameOverNow) ; en "Tout le monde participe",
+  // la musique relancée à la révélation de la dernière manche est coupée
+  // par l'effet de fin de partie dès le jugement.
+  //
+  // Basé sur la TRANSITION de statut observée dans cet onglet (ref du
+  // statut précédent) plutôt que sur le simple état "scored" : un refresh
+  // de la page sur une manche déjà clôturée ne doit pas relancer de musique
+  // sur un lecteur Spotify fraîchement recréé. La reprise partielle du mode
+  // "Maître du jeu" (retour à "playing") reste gérée dans handleJudge.
+  const prevRoundStatusRef = useRef<{ id: string; status: string } | null>(null);
+  useEffect(() => {
+    const prev = prevRoundStatusRef.current;
+    prevRoundStatusRef.current = round ? { id: round.id, status: round.status } : null;
+    if (!round || !prev || prev.id !== round.id) return;
+    const everyonePlays = hostMode === "player";
+    const revealedInEveryonePlays =
+      everyonePlays && prev.status === "buzzed" && round.status === "revealed";
+    // En "Tout le monde participe", un passage "revealed" -> "scored" ne
+    // relance rien : la musique tourne déjà depuis la révélation.
+    const closedAfterBuzz =
+      round.status === "scored" &&
+      (prev.status === "buzzed" || (!everyonePlays && prev.status === "revealed"));
+    if (!revealedInEveryonePlays && !closedAfterBuzz) return;
+    if (isGameOverNow) return;
+    if (!spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current) return;
+    spotify.resumePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch((e: any) => {
+      setError(e?.message ?? "Impossible de relancer le morceau côté Spotify.");
+    });
+  }, [round, hostMode, isGameOverNow, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
 
   // Timer visuel de la manche en cours : calculé à partir de round.started_at
   // (horodatage serveur) plutôt qu'un simple compteur local, pour rester
   // exact même après un refresh de la page en plein milieu d'une manche. À
-  // 0, coupe le son (même geste que sur un buzz) et clôture la manche sans
+  // 0, laisse la musique continuer et clôture la manche sans
   // gagnant via timeoutRound — no-op côté serveur si un joueur avait buzzé
   // entre-temps (la RPC exige status = 'playing').
   useEffect(() => {
@@ -998,12 +1050,10 @@ function HostScreenInner() {
 
       if (remaining <= 0 && timedOutRoundId.current !== roundId) {
         timedOutRoundId.current = roundId;
-        if (spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
-          spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {
-            // Pas grave si la pause échoue : la manche est clôturée quand
-            // même côté base, le morceau continuera juste un peu en fond.
-          });
-        }
+        // Le son n'est volontairement PAS coupé ici : comme après un buzz
+        // jugé, la musique continue pendant l'affichage de la réponse
+        // jusqu'à ce que l'hôte lance la manche suivante. Seule exception,
+        // la dernière manche : coupée par l'effet de fin de partie.
         // Ce timer côté navigateur et un buzz réel côté serveur peuvent se
         // produire à quelques millisecondes d'écart : si un joueur buzze
         // juste avant l'expiration, la RPC timeout_round (qui exige
