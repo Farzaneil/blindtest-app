@@ -45,6 +45,7 @@ import {
 } from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
+import { JoinQrCode } from "../_components/JoinQrCode";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY, type CosmeticDefinition } from "../../lib/cosmetics";
@@ -77,6 +78,7 @@ import {
   Gamepad2,
   UserPlus,
   TrendingUp,
+  QrCode,
 } from "lucide-react";
 
 type HostMode = "gamemaster" | "player";
@@ -630,6 +632,10 @@ function HostScreenInner() {
   const [roundHistory, setRoundHistory] = useState<Round[]>([]);
   const [roundAttempts, setRoundAttempts] = useState<RoundAttempt[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  // QR code de la partie une fois la partie lancée (pour les retardataires) :
+  // replié par défaut pour ne pas encombrer l'écran de jeu. Avant le
+  // lancement, il est affiché en permanence (voir JoinQrCode dans le JSX).
+  const [showJoinQr, setShowJoinQr] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Surface un échec de connexion Spotify renvoyé en query param par
   // api/spotify/callback (voir COOKIE_NEXT dans spotifyAuth.ts) : avant le
@@ -1573,7 +1579,18 @@ function HostScreenInner() {
               Rejoignez la partie avec le code
             </p>
             <p className="text-4xl sm:text-6xl font-bold tracking-widest text-sage font-display">{room.code}</p>
+            {showJoinQr && (
+              <div className="mt-4">
+                <JoinQrCode code={room.code} />
+              </div>
+            )}
             <div className="flex justify-center gap-4 mt-3">
+              <button
+                onClick={() => setShowJoinQr((s) => !s)}
+                className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+              >
+                <QrCode className="w-3.5 h-3.5" /> {showJoinQr ? "Masquer le QR code" : "QR code"}
+              </button>
               <Link
                 href="/"
                 className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
@@ -1689,6 +1706,12 @@ function HostScreenInner() {
           </div>
         </div>
       )}
+
+      {/* QR code de la partie, affiché en permanence pendant toute la
+          préparation (choix du mode, playlist…) puisque c'est à ce moment
+          que les joueurs arrivent. Une fois la partie lancée, il passe
+          derrière le bouton "QR code" de la carte du code (retardataires). */}
+      {!gameStarted && <JoinQrCode code={room.code} />}
 
       {roundHistory.length > 0 && (
       <div className="w-full max-w-xl">

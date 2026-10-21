@@ -20,6 +20,7 @@ import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5 } from "lucide-react
 import {
   joinRoomByCode,
   getPlayerSession,
+  getRoomById,
   subscribeToRoom,
   subscribeToPlayers,
   subscribeToCurrentRoundForPlayer,
@@ -63,6 +64,18 @@ function writeStoredPlayerId(playerId: string) {
   }
 }
 
+/**
+ * Code de partie passé dans l'URL (/play?code=ABC123), typiquement via le
+ * QR code affiché sur l'écran hôte (voir _components/JoinQrCode.tsx).
+ * Lu directement depuis window.location plutôt que via useSearchParams
+ * pour ne pas avoir à envelopper la page dans un <Suspense>.
+ */
+function readCodeFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const code = new URLSearchParams(window.location.search).get("code");
+  return code ? code.trim().toUpperCase() : null;
+}
+
 function clearStoredPlayerId() {
   if (typeof window === "undefined") return;
   try {
@@ -78,13 +91,28 @@ export default function PlayPage() {
   // avant d'afficher JoinView, sinon on verrait JoinView clignoter une
   // fraction de seconde même quand on va être reconnecté automatiquement.
   const [checkingSession, setCheckingSession] = useState(true);
+  const [urlCode, setUrlCode] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const codeFromUrl = readCodeFromUrl();
+      if (!cancelled) setUrlCode(codeFromUrl);
       const storedPlayerId = readStoredPlayerId();
       if (storedPlayerId) {
         const found = await getPlayerSession(storedPlayerId);
+        // Arrivée via le QR code d'une AUTRE partie que celle mémorisée dans
+        // cet onglet : on affiche l'écran pour rejoindre la nouvelle partie
+        // plutôt que de renvoyer sur l'ancien buzzer. La session mémorisée
+        // n'est pas effacée ici : elle sera simplement remplacée si le
+        // joueur rejoint la nouvelle partie.
+        if (found && codeFromUrl) {
+          const storedRoom = await getRoomById(found.roomId);
+          if (storedRoom && storedRoom.code.toUpperCase() !== codeFromUrl) {
+            if (!cancelled) setCheckingSession(false);
+            return;
+          }
+        }
         if (found && !cancelled) {
           setSession(found);
           setCheckingSession(false);
@@ -119,14 +147,18 @@ export default function PlayPage() {
       ) : session ? (
         <BuzzerView roomId={session.roomId} playerId={session.playerId} onLeave={handleLeave} />
       ) : (
-        <JoinView onJoined={handleJoined} />
+        <JoinView onJoined={handleJoined} initialCode={urlCode ?? ""} />
       )}
     </main>
   );
 }
 
-function JoinView({ onJoined }: { onJoined: (s: Session) => void }) {
-  const [code, setCode] = useState("");
+function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; initialCode: string }) {
+  // Pré-rempli quand on arrive via le QR code de l'écran hôte (?code=…) :
+  // il ne reste alors qu'à saisir son pseudo (ou juste à valider si on est
+  // connecté à son compte joueur). JoinView n'est monté qu'une fois
+  // checkingSession terminé, donc initialCode est déjà connu ici.
+  const [code, setCode] = useState(initialCode);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

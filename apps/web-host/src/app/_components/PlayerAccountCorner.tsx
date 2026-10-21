@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { UserCircle2 } from "lucide-react";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
@@ -40,6 +41,16 @@ export function PlayerAccountCorner() {
   useForceLoopbackHost();
   const pathname = usePathname();
   const { account, loading, refresh } = usePlayerAccount();
+  // Query string conservée dans `next` : un joueur arrivé via le QR code de
+  // l'hôte (/play?code=ABC123) qui se connecte à son compte doit revenir
+  // sur /play avec le code toujours pré-rempli. Lue depuis window.location
+  // après montage (pas useSearchParams, qui imposerait un <Suspense> sur
+  // chacune des pages qui rendent ce composant).
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearch(window.location.search);
+  }, [pathname]);
 
   if (loading) {
     return <div className="fixed top-4 right-4 z-20 h-8 w-32 rounded-full bg-inkSurface2 animate-pulse" />;
@@ -48,7 +59,7 @@ export function PlayerAccountCorner() {
   if (!account) {
     return (
       <Link
-        href={`/connexion?next=${encodeURIComponent(pathname || "/")}`}
+        href={`/connexion?next=${encodeURIComponent((pathname || "/") + search)}`}
         title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
         className="fixed top-4 right-4 z-20 bg-inkSurface2 border border-inkBorder hover:border-sage transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-sage inline-flex items-center gap-1.5"
       >
