@@ -413,20 +413,48 @@ littérale en local, voir "Pourquoi 127.0.0.1 et pas localhost" plus haut).
 
 ### Variables d'environnement
 
-Dans `apps/web-host/.env.local` (jamais commité, voir `.gitignore`) :
+Un modèle commenté est fourni : copie-le puis remplis les valeurs.
 
-- `NEXT_PUBLIC_SUPABASE_URL` = https://ton-projet.supabase.co
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` = clé anon publique du projet Supabase
-- `SPOTIFY_CLIENT_ID` = Client ID de ton app Spotify Developer
-- `SPOTIFY_REDIRECT_URI` = http://127.0.0.1:3000/api/spotify/callback
+```bash
+cp apps/web-host/.env.example apps/web-host/.env.local
+```
+
+`apps/web-host/.env.local` n'est jamais commité (voir `.gitignore`). Les 7 variables
+sont nécessaires :
+
+| Variable | Où la trouver | Secrète ? |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → Data API → Project URL (sans `/` final) | Non |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API Keys → `anon` | Non |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → `service_role` | **Oui** |
+| `SPOTIFY_CLIENT_ID` | Spotify Developer Dashboard → ton app → Settings | Non |
+| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` | Non |
+| `SPOTIFY_PLAYER_REDIRECT_URI` | `http://127.0.0.1:3000/api/player-auth/callback` | Non |
+| `PLAYER_SESSION_SECRET` | À générer : `openssl rand -hex 32` | **Oui** |
 
 Pas de `SPOTIFY_CLIENT_SECRET` nécessaire (flow PKCE).
+
+Pièges rencontrés :
+
+- **Ne jamais préfixer une clé secrète par `NEXT_PUBLIC_`** : ce préfixe l'envoie dans
+  le JavaScript du navigateur. `SUPABASE_SERVICE_ROLE_KEY` contourne toutes les règles
+  RLS et doit rester côté serveur.
+- Les variables ne sont lues qu'au démarrage : relancer `npm run web-host` après
+  chaque modification de `.env.local`.
+- Sur Vercel, les variables marquées *Sensitive* ne sont plus lisibles ni copiables.
+  Pour une nouvelle machine, récupérer la clé `service_role` dans Supabase et générer
+  un nouveau `PLAYER_SESSION_SECRET` local (il peut différer de celui de prod).
+- Erreur `TypeError: Load failed` / `fetch failed` au chargement : URL Supabase
+  incorrecte, ou projet Supabase mis en pause après inactivité (offre gratuite) →
+  le restaurer depuis le dashboard Supabase.
+- Les fichiers commençant par un point sont masqués dans le Finder : `Cmd + Maj + .`
+  pour les afficher.
 
 ### Configuration Supabase
 
 1. Crée un projet sur [supabase.com](https://supabase.com).
 2. Dans SQL Editor, exécute dans l'ordre les fichiers de `supabase/migrations/`
-   (0001 → 0011). Chaque fichier est commenté pour expliquer ce qu'il fait.
+   (0001 → 0024). Chaque fichier est commenté pour expliquer ce qu'il fait.
 3. Dans Database → Publications → `supabase_realtime`, vérifie que les tables
    `players`, `rounds`, `buzzes`, `rooms` et `round_attempts` sont bien activées
    (la migration `0010` le fait déjà pour `round_attempts` par SQL, mais un nouveau
@@ -438,7 +466,8 @@ Pas de `SPOTIFY_CLIENT_SECRET` nécessaire (flow PKCE).
 
 1. Crée une app sur le [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
 2. Dans Settings → Redirect URIs, ajoute `http://127.0.0.1:3000/api/spotify/callback`
-   (et l'URL de prod si tu déploies, voir plus bas).
+   et `http://127.0.0.1:3000/api/player-auth/callback` (et les équivalents de prod si
+   tu déploies, voir plus bas).
 3. Copie le Client ID dans `.env.local` (pas besoin du Client Secret).
 
 ## Déploiement (Vercel)
@@ -451,11 +480,13 @@ Pour redéployer ou recréer le déploiement :
 1. Sur [vercel.com](https://vercel.com), importe le repo GitHub, avec **Root
    Directory = `apps/web-host`** (monorepo — Vercel doit savoir où trouver l'app
    Next.js).
-2. Renseigne les variables d'environnement (mêmes noms qu'en local, sauf
-   `SPOTIFY_REDIRECT_URI` qui doit pointer vers le domaine Vercel réel, ex.
-   `https://blindtest-app-web-host.vercel.app/api/spotify/callback`).
-3. Ajoute cette même URL dans les Redirect URIs du Spotify Developer Dashboard (en plus
-   de celle en `127.0.0.1`, garder les deux).
+2. Renseigne les 7 variables d'environnement (mêmes noms qu'en local, sauf les deux
+   URI de redirection qui doivent pointer vers le domaine Vercel réel :
+   `https://blindtest-app-web-host.vercel.app/api/spotify/callback` et
+   `https://blindtest-app-web-host.vercel.app/api/player-auth/callback`). Marquer
+   `SUPABASE_SERVICE_ROLE_KEY` et `PLAYER_SESSION_SECRET` comme *Sensitive*.
+3. Ajoute ces mêmes URL dans les Redirect URIs du Spotify Developer Dashboard (en plus
+   de celles en `127.0.0.1`, garder les quatre).
 4. Deploy.
 
 Les cookies de session Spotify sont automatiquement en `secure: true` en production
