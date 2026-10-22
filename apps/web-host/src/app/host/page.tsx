@@ -35,6 +35,9 @@ import {
   setPlayerTeam,
   shuffleRoomTeams,
   assignUnassignedPlayers,
+  subscribeToPendingRejoinRequests,
+  resolveRejoinRequest,
+  type RejoinRequest,
   type Player,
   type Round,
   type RoundAttempt,
@@ -50,6 +53,7 @@ import {
 } from "../../lib/teams";
 import { AwardCards, TeamDot, TeamRecapTable, TeamResultBanner, TeamScoreCards } from "../_components/Teams";
 import { TeamSetupPanel } from "../_components/TeamSetupPanel";
+import { RejoinRequestsBanner } from "../_components/RejoinRequestsBanner";
 import { withRanks, formatOrdinal, podiumRowClasses } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
@@ -660,6 +664,8 @@ function HostScreenInner() {
   // pendant un aller-retour serveur (évite les doubles clics).
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsBusy, setTeamsBusy] = useState(false);
+  // Demandes de reprise de place des joueurs invités (voir migration 0026).
+  const [rejoinRequests, setRejoinRequests] = useState<RejoinRequest[]>([]);
   const [round, setRound] = useState<Round | null>(null);
   const [roundHistory, setRoundHistory] = useState<Round[]>([]);
   const [roundAttempts, setRoundAttempts] = useState<RoundAttempt[]>([]);
@@ -891,6 +897,25 @@ function HostScreenInner() {
     }
     return subscribeToTeams(roomIdForTeams, setTeams);
   }, [roomIdForTeams]);
+
+  useEffect(() => {
+    if (!roomIdForTeams) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setRejoinRequests([]);
+      return;
+    }
+    return subscribeToPendingRejoinRequests(roomIdForTeams, setRejoinRequests);
+  }, [roomIdForTeams]);
+
+  const handleResolveRejoin = async (requestId: string, accept: boolean) => {
+    try {
+      await resolveRejoinRequest(requestId, accept);
+      // Retrait immédiat, sans attendre l'écho temps réel.
+      setRejoinRequests((current) => current.filter((r) => r.id !== requestId));
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de répondre à cette demande.");
+    }
+  };
 
   useEffect(() => {
     if (!room) return;
@@ -1670,6 +1695,12 @@ function HostScreenInner() {
   if (room && hostPlayerId && hostView === "buzzer") {
     return (
       <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-ink">
+        <RejoinRequestsBanner
+          requests={rejoinRequests}
+          players={players}
+          teams={teams}
+          onResolve={handleResolveRejoin}
+        />
         <HostBuzzerView
           round={round}
           players={players}
@@ -1688,6 +1719,12 @@ function HostScreenInner() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-ink">
       <PlayerAccountCorner />
+      <RejoinRequestsBanner
+        requests={rejoinRequests}
+        players={players}
+        teams={teams}
+        onResolve={handleResolveRejoin}
+      />
       {gameStarted ? (
         <>
           <div className="text-center bg-inkSurface border border-inkBorder rounded-2xl px-10 py-6">

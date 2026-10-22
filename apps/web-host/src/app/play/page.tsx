@@ -21,6 +21,9 @@ import {
   joinRoomByCode,
   getJoinInfoByCode,
   getTeams,
+  PseudoTakenError,
+  requestRejoin,
+  getRejoinRequestStatus,
   subscribeToTeams,
   getPlayerSession,
   getRoomById,
@@ -212,7 +215,50 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
   const needsTeam = joinTeams.length > 0;
   const selectedTeam = joinTeams.find((t) => t.id === selectedTeamId) ?? null;
 
-  const effectiveName = account ? account.pseudo : name;
+  // Pseudo déjà pris dans la partie (voir PseudoTakenError) : le champ
+  // passe en rouge avec un message, et un joueur connecté à son compte peut
+  // alors saisir un autre pseudo pour cette partie uniquement.
+  const [pseudoTaken, setPseudoTaken] = useState(false);
+  const [useCustomName, setUseCustomName] = useState(false);
+  // Reprise de place (voir migration 0026) : joueur existant qui porte ce
+  // pseudo, et demande envoyée à l'hôte une fois que le joueur dit "c'est
+  // moi". Le statut de la demande est relu toutes les 2 s tant qu'elle est
+  // en attente (plus robuste qu'un abonnement temps réel pour un écran
+  // qu'on ne garde que quelques secondes).
+  const [rejoinTarget, setRejoinTarget] = useState<{ playerId: string; roomId: string } | null>(null);
+  const [rejoinRequestId, setRejoinRequestId] = useState<string | null>(null);
+  const [rejoinRefused, setRejoinRefused] = useState(false);
+  useEffect(() => {
+    if (!rejoinRequestId || !rejoinTarget) return;
+    let cancelled = false;
+    const check = async () => {
+      const status = await getRejoinRequestStatus(rejoinRequestId);
+      if (cancelled) return;
+      if (status === "accepted") {
+        onJoined({ roomId: rejoinTarget.roomId, playerId: rejoinTarget.playerId });
+      } else if (status === "refused" || status === null) {
+        setRejoinRequestId(null);
+        setRejoinRefused(true);
+      }
+    };
+    const interval = setInterval(check, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [rejoinRequestId, rejoinTarget, onJoined]);
+
+  const onRequestRejoin = async () => {
+    if (!rejoinTarget) return;
+    setError(null);
+    setRejoinRefused(false);
+    try {
+      setRejoinRequestId(await requestRejoin(rejoinTarget.playerId));
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible d’envoyer la demande à l’hôte.");
+    }
+  };
+  const effectiveName = account && !useCustomName ? account.pseudo : name;
   const canSubmit =
     code.trim().length > 0 &&
     effectiveName.trim().length > 0 &&
@@ -231,6 +277,15 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
       );
       onJoined({ roomId: room.id, playerId: player.id });
     } catch (e: any) {
+      if (e instanceof PseudoTakenError) {
+        setPseudoTaken(true);
+        setRejoinTarget({ playerId: e.existingPlayerId, roomId: e.roomId });
+        setRejoinRefused(false);
+        if (account && !useCustomName) {
+          setUseCustomName(true);
+          setName(account.pseudo);
+        }
+      }
       setError(e?.message ?? "Une erreur est survenue.");
     } finally {
       setLoading(false);
@@ -248,17 +303,33 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
         placeholder="Code de la partie"
         className="w-full text-center text-xl uppercase bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
       />
-      {account ? (
+      {account && !useCustomName ? (
         <p className="text-sm text-inkMuted">
           Tu rejoins en tant que <span className="font-semibold text-white">{account.pseudo}</span>
         </p>
       ) : (
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (pseudoTaken) {
+              setPseudoTaken(false);
+              setRejoinTarget(null);
+              setRejoinRefused(false);
+              setError(null);
+            }
+          }}
           placeholder="Ton pseudo"
-          className="w-full text-center text-xl bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
+          aria-invalid={pseudoTaken}
+          className={`w-full text-center text-xl bg-inkSurface2 border-2 outline-none transition rounded-xl px-4 py-3 ${
+            pseudoTaken ? "border-danger focus:border-danger" : "border-inkBorder focus:border-sage"
+          }`}
         />
+      )}
+      {useCustomName && (
+        <p className="text-xs text-inkMuted text-center -mt-2">
+          Ce pseudo ne vaut que pour cette partie, ton compte garde le sien.
+        </p>
       )}
       {needsTeam && (
         <fieldset className="w-full flex flex-col gap-2.5">
@@ -293,6 +364,40 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
         </fieldset>
       )}
       {error && <p className="text-danger text-center">{error}</p>}
+      {pseudoTaken && rejoinTarget && (
+        <div className="w-full bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3 flex flex-col gap-2 text-center">
+          {rejoinRequestId ? (
+            <>
+              <p className="text-sm text-white font-semibold animate-pulse">Demande envoyée à l’hôte…</p>
+              <p className="text-xs text-inkMuted">
+                Dès qu’il accepte, tu reprends ta place avec ton score. Garde cette page ouverte.
+              </p>
+              <button
+                type="button"
+                onClick={() => setRejoinRequestId(null)}
+                className="text-xs text-inkMuted hover:text-danger underline transition self-center"
+              >
+                Annuler
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-inkMuted">
+                {rejoinRefused
+                  ? "L’hôte n’a pas validé ta demande. Choisis un autre pseudo, ou redemande-lui."
+                  : "C’était toi ? Tu peux reprendre ta place (avec ton score) si l’hôte valide. Sinon, choisis un autre pseudo."}
+              </p>
+              <button
+                type="button"
+                onClick={onRequestRejoin}
+                className="bg-inkSurface3 border border-inkBorderStrong hover:border-sage transition rounded-xl px-4 py-2.5 text-sm font-bold"
+              >
+                C’est moi : demander à reprendre ma place
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <button
         onClick={onSubmit}
         disabled={!canSubmit}

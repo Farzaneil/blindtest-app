@@ -787,6 +787,91 @@ export async function joinRoomAsHost(
   return data as Player;
 }
 
+/** Comparaison de pseudos insensible à la casse et aux espaces autour. */
+function normalizePseudo(name: string): string {
+  return name.trim().toLocaleLowerCase("fr");
+}
+
+/**
+ * Erreur levée par joinRoomByCode quand le pseudo est déjà utilisé dans la
+ * partie — classe dédiée pour que l'écran "Rejoindre" puisse la
+ * reconnaître (et proposer de changer de pseudo) sans comparer de texte.
+ */
+export class PseudoTakenError extends Error {
+  // Joueur qui porte déjà ce pseudo : permet de proposer une demande de
+  // reprise de place à l'hôte (voir requestRejoin).
+  readonly existingPlayerId: string;
+  readonly roomId: string;
+  constructor(pseudo: string, existingPlayerId: string, roomId: string) {
+    super(`Le pseudo « ${pseudo.trim()} » est déjà pris dans cette partie.`);
+    this.name = "PseudoTakenError";
+    this.existingPlayerId = existingPlayerId;
+    this.roomId = roomId;
+  }
+}
+
+// ============================================================================
+// Reprise de place pour un joueur invité (voir migration 0026) : demande
+// envoyée à l'hôte, qui accepte ou refuse depuis son écran.
+// ============================================================================
+
+export type RejoinRequest = {
+  id: string;
+  room_id: string;
+  player_id: string;
+  status: "pending" | "accepted" | "refused";
+  created_at: string;
+};
+
+export async function requestRejoin(playerId: string): Promise<string> {
+  const { data, error } = await supabase.rpc("request_rejoin", { p_player_id: playerId });
+  if (error || !data) throw new Error("Impossible d’envoyer la demande à l’hôte, réessaie.");
+  return data as string;
+}
+
+export async function getRejoinRequestStatus(requestId: string): Promise<RejoinRequest["status"] | null> {
+  const { data } = await supabase.from("rejoin_requests").select("status").eq("id", requestId).maybeSingle();
+  return (data?.status as RejoinRequest["status"] | undefined) ?? null;
+}
+
+export async function resolveRejoinRequest(requestId: string, accept: boolean): Promise<void> {
+  const { error } = await supabase.rpc("resolve_rejoin_request", {
+    p_request_id: requestId,
+    p_accept: accept,
+  });
+  if (error) throw error;
+}
+
+/** Demandes en attente d'une room, pour l'écran hôte (temps réel). */
+export function subscribeToPendingRejoinRequests(
+  roomId: string,
+  onChange: (requests: RejoinRequest[]) => void
+) {
+  const fetchAndEmit = async () => {
+    const { data } = await supabase
+      .from("rejoin_requests")
+      .select("*")
+      .eq("room_id", roomId)
+      .eq("status", "pending")
+      .order("created_at");
+    onChange((data as RejoinRequest[]) ?? []);
+  };
+  fetchAndEmit();
+
+  const channel = supabase
+    .channel(`rejoin-requests:${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "rejoin_requests", filter: `room_id=eq.${roomId}` },
+      fetchAndEmit
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
 export async function joinRoomByCode(
   code: string,
   displayName: string,
@@ -803,6 +888,31 @@ export async function joinRoomByCode(
 
   if (roomError || !room) {
     throw new Error("Code de partie introuvable. Vérifie qu'il est bien affiché sur l'écran hôte.");
+  }
+
+  // Pseudo déjà utilisé dans CETTE partie (casse et espaces ignorés) :
+  // vérifié côté client avant l'insertion. Pas de contrainte d'unicité en
+  // base, donc deux joueurs validant le même pseudo à la même seconde
+  // pourraient encore passer — acceptable entre amis.
+  const { data: existingPlayers } = await supabase
+    .from("players")
+    .select("*")
+    .eq("room_id", room.id);
+  const existing = (existingPlayers as Player[] | null) ?? [];
+
+  // Joueur connecté à un compte qui a déjà un joueur dans cette partie
+  // (onglet fermé, "Quitter la partie", autre téléphone...) : on le
+  // rattache directement à son ancien joueur — même score, même équipe —
+  // sans validation, l'account_id prouvant que c'est bien lui.
+  if (accountId) {
+    const mine = existing.find((p) => p.account_id === accountId);
+    if (mine) return { room, player: mine };
+  }
+
+  const wanted = normalizePseudo(displayName);
+  const homonym = existing.find((p) => normalizePseudo(p.display_name) === wanted);
+  if (homonym) {
+    throw new PseudoTakenError(displayName, homonym.id, room.id);
   }
 
   const { data: player, error: playerError } = await supabase
