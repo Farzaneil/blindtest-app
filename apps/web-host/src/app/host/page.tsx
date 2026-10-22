@@ -29,6 +29,7 @@ import {
   awardGameRewards,
   recordPlaylistImport,
   subscribeToTeams,
+  getTeams,
   configureRoomTeams,
   renameTeam,
   setPlayerTeam,
@@ -1384,15 +1385,23 @@ function HostScreenInner() {
     if (!room) return;
     return runTeamAction(async () => {
       await configureRoomTeams(room.id, count);
-      // game_mode n'est pas écouté en direct côté hôte (room est un état
-      // local) : on le reflète tout de suite, les équipes arrivent via
-      // subscribeToTeams.
+      // Relecture immédiate des équipes plutôt que d'attendre l'écho
+      // Realtime de subscribeToTeams : sans ça, le passage Solo -> Équipes
+      // pouvait rester sans effet visible jusqu'au rechargement de la page
+      // (le mode équipes ne s'affiche qu'une fois des équipes connues).
+      // Équipes ET game_mode posés dans le même tour pour éviter un état
+      // intermédiaire "équipes mais pas d'équipe".
+      const freshTeams = await getTeams(room.id);
+      setTeams(freshTeams);
       setRoom((current) => (current ? { ...current, game_mode: count === 0 ? "solo" : "team" } : current));
     }, "Impossible de changer le format de la partie.");
   };
 
   const handleRenameTeam = (teamId: string, name: string) =>
-    runTeamAction(() => renameTeam(teamId, name), "Impossible de renommer l'équipe.");
+    runTeamAction(async () => {
+      await renameTeam(teamId, name);
+      if (room) setTeams(await getTeams(room.id));
+    }, "Impossible de renommer l'équipe.");
 
   const handleMovePlayer = (playerId: string, teamId: string | null) =>
     runTeamAction(() => setPlayerTeam(playerId, teamId), "Impossible de changer ce joueur d'équipe.");
@@ -1686,6 +1695,19 @@ function HostScreenInner() {
               Rejoignez la partie avec le code
             </p>
             <p className="text-4xl sm:text-6xl font-bold tracking-widest text-sage font-display">{room.code}</p>
+            {/* Hôte qui joue aussi : la vue admin n'avait aucun moyen de
+                revenir au buzzer (seul le lancement d'une manche y
+                rebasculait automatiquement) — un clic sur "Vue admin"
+                pendant une manche en cours privait donc l'hôte de son
+                buzzer jusqu'à la manche suivante. */}
+            {hostPlayerId && (
+              <button
+                onClick={() => setHostView("buzzer")}
+                className="mt-4 bg-sage text-ink hover:bg-sage/90 transition px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2"
+              >
+                <Gamepad2 className="w-4 h-4" /> Revenir à mon buzzer
+              </button>
+            )}
             {showJoinQr && (
               <div className="mt-4">
                 <JoinQrCode code={room.code} />

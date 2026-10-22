@@ -20,6 +20,7 @@ import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5, Check } from "lucid
 import {
   joinRoomByCode,
   getJoinInfoByCode,
+  getTeams,
   subscribeToTeams,
   getPlayerSession,
   getRoomById,
@@ -561,6 +562,11 @@ function BuzzerView({
     return subscribeToRoom(roomId, (room) => {
       setRoomStatus(room?.status ?? null);
       setGameMode(room?.game_mode ?? "solo");
+      // configure_room_teams met toujours à jour la room : on en profite
+      // pour relire les équipes, sans dépendre uniquement de l'écho
+      // Realtime de subscribeToTeams (même cause que le bug "Solo ->
+      // Équipes" côté hôte, voir handleSetTeamCount).
+      getTeams(roomId).then(setTeams).catch(() => {});
     });
   }, [roomId]);
 
