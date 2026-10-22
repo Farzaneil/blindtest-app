@@ -65,6 +65,7 @@ import {
   type SpotifyQuotaLocks,
 } from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
+import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
@@ -135,7 +136,8 @@ const ROUND_DURATION_SECONDS = 30;
 // raccrocher silencieusement à la même partie (et au même device Spotify).
 // ============================================================================
 
-const ROOM_STORAGE_KEY = "blindtest_host_room";
+// Partagée avec l'accueil (partie en cours -> "Reprendre"), voir lib/hostSession.ts.
+const ROOM_STORAGE_KEY = HOST_ROOM_STORAGE_KEY;
 const MODE_STORAGE_KEY = "blindtest_host_mode";
 const QUEUE_STORAGE_KEY = "blindtest_host_queue";
 const QUEUE_INDEX_STORAGE_KEY = "blindtest_host_queue_index";
@@ -1523,11 +1525,17 @@ function HostScreenInner() {
   const handleStartNewGame = async () => {
     if (
       !window.confirm(
-        "Lancer une nouvelle partie ? Le code actuel et les scores en cours seront perdus."
+        "Lancer une nouvelle partie ? La partie en cours sera terminée pour tout le monde (les scores et badges sont enregistrés)."
       )
     ) {
       return;
     }
+    // Termine vraiment l'ancienne partie (écran de fin chez les joueurs,
+    // stats/badges attribués) au lieu de la laisser ouverte en base.
+    if (spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+      spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {});
+    }
+    if (room && room.status !== "finished") await endHostGame(room.id);
     clearStoredGameState();
     setHydrated(false);
     setPlayers([]);
@@ -1557,16 +1565,24 @@ function HostScreenInner() {
   if (error) {
     return (
       <main className="flex items-center justify-center min-h-screen p-10 text-center bg-page">
-        <div className="max-w-md bg-inkSurface border-[3px] border-danger/40 rounded-2xl p-8 shadow-sticker">
+        <div className="max-w-md bg-inkSurface border-[3px] border-fg rounded-2xl p-8 shadow-sticker">
           <p className="text-xl text-danger font-bold mb-2">Oups</p>
-          <p className="text-fg/90">
-            {error}
-            <br />
-            <span className="text-inkMuted text-sm">
+          <p className="text-fg/90">{error}</p>
+          {/* Aide technique (config Supabase locale) : seulement pour les
+              erreurs qui ne viennent pas de Spotify, sinon elle égare. */}
+          {process.env.NODE_ENV === "development" && !/spotify/i.test(error) && (
+            <p className="text-inkMuted text-sm mt-2">
               Vérifie que apps/web-host/.env.local contient bien NEXT_PUBLIC_SUPABASE_URL et
               NEXT_PUBLIC_SUPABASE_ANON_KEY, puis relance `npm run web-host`.
-            </span>
-          </p>
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-5 bg-sage text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-5 py-2.5 font-display inline-flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" /> Recharger la page
+          </button>
         </div>
       </main>
     );

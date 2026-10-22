@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { Mic2, Smartphone, BookOpen, Info, ShieldCheck, Music2 } from "lucide-react";
+import { BookOpen, Info, ShieldCheck, Music2 } from "lucide-react";
 import { PlayerAccountCorner } from "./_components/PlayerAccountCorner";
 import { ThemePicker } from "./_components/ThemePicker";
+import { HomeActions } from "./_components/HomeActions";
 
 /**
  * Page d'accueil : présente les deux chemins (créer une partie / en
@@ -11,7 +12,8 @@ import { ThemePicker } from "./_components/ThemePicker";
  * Refonte Arcade") : logo en deux autocollants inclinés (BLIND en rose —
  * seul usage du rose dans l'app — et TEST en bleu), gros contours noirs,
  * ombres décalées. "Créer une partie" prend la couleur d'action du thème
- * (bg-sage = --c1), "Rejoindre" la couleur de décor (bg-info = --c2).
+ * (bg-sage = --c1), "Rejoindre" la couleur de décor (bg-info = --c2). Ces
+ * boutons vivent dans HomeActions (partie en cours -> "Reprendre").
  */
 export default function HomePage() {
   return (
@@ -38,24 +40,7 @@ export default function HomePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-lg">
-        <Link
-          href="/host"
-          className="bg-sage text-fg border-[3px] border-fg rounded-2xl px-6 py-7 flex flex-col items-center gap-2 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none"
-        >
-          <Mic2 className="w-8 h-8" strokeWidth={2.5} />
-          <span className="text-xl font-display">Créer une partie</span>
-          <span className="text-sm font-bold">Je suis l’hôte</span>
-        </Link>
-        <Link
-          href="/play"
-          className="bg-info text-fg border-[3px] border-fg rounded-2xl px-6 py-7 flex flex-col items-center gap-2 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none"
-        >
-          <Smartphone className="w-8 h-8" strokeWidth={2.5} />
-          <span className="text-xl font-display">Rejoindre</span>
-          <span className="text-sm font-bold">Je suis joueur</span>
-        </Link>
-      </div>
+      <HomeActions />
 
       <ThemePicker className="w-full max-w-lg" />
 

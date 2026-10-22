@@ -17,6 +17,21 @@ export type SpotifyPlayerState = "checking" | "disconnected" | "connecting_playe
 // couper quoi que ce soit automatiquement.
 const STUCK_THRESHOLD_MS = 12_000;
 
+// Player Web Playback partagé au niveau du module (un seul par onglet) :
+// il survit aux navigations côté client (/host -> / -> /host sans
+// rechargement). Bug remonté : recréer un player au retour sur /host
+// pendant que l'ancien se déconnectait faisait disparaître le device côté
+// Spotify ("device introuvable" au morceau suivant), le SDK réutilisant le
+// même device_id pour l'onglet. On garde donc la même instance et on se
+// contente de rebrancher les écouteurs du composant qui la (ré)utilise.
+const shared: { player: any; deviceId: string | null; tokenRef: { current: string | null } | null } = {
+  player: null,
+  deviceId: null,
+  // Ref d'access token du montage courant : getOAuthToken (closure du
+  // montage qui a créé le player) écrit toujours dans celle-ci.
+  tokenRef: null,
+};
+
 /**
  * Encapsule la connexion au Web Playback SDK (device hôte du navigateur) :
  * vérifie si un compte Spotify est déjà connecté (cookies gérés par
@@ -40,7 +55,9 @@ export function useSpotifyPlayer() {
   const accessTokenRef = useRef<string | null>(null);
   // Référence directe à l'instance Spotify.Player, nécessaire pour pouvoir
   // appeler activateElement() (voir activateElement ci-dessous).
-  const playerRef = useRef<any>(null);
+  const playerRef = useRef<any>(shared.player);
+  // Écouteurs posés par CE montage sur le player partagé (retirés au démontage).
+  const listenersRef = useRef<[string, (arg: any) => void][]>([]);
   const unmountedRef = useRef(false);
   const notReadyRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stuckTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,8 +90,66 @@ export function useSpotifyPlayer() {
     armStuckTimer();
   }, [armStuckTimer]);
 
+  // Branche les écouteurs de CE montage sur le player (partagé).
+  const attachListeners = useCallback(
+    (player: any) => {
+      const listeners: [string, (arg: any) => void][] = [
+        [
+          "ready",
+          ({ device_id }: { device_id: string }) => {
+            shared.deviceId = device_id;
+            clearStuckTimer();
+            setStuckTooLong(false);
+            setDeviceId(device_id);
+            setState("ready");
+          },
+        ],
+        [
+          // "not_ready" : le device Web Playback est tombé (mise en veille de
+          // l'ordinateur, coupure réseau passagère, changement de wifi...). Le
+          // SDK ne relance pas forcément la connexion tout seul — sans ce
+          // retry explicite, l'écran restait bloqué en "connecting_player"
+          // jusqu'au rechargement (bug remonté). connect() peut être rappelé
+          // sans risque sur une instance déjà créée (voir doc Web Playback SDK).
+          "not_ready",
+          () => {
+            shared.deviceId = null;
+            setConnectingState();
+            if (notReadyRetryTimeoutRef.current) clearTimeout(notReadyRetryTimeoutRef.current);
+            notReadyRetryTimeoutRef.current = setTimeout(() => {
+              if (!unmountedRef.current) playerRef.current?.connect?.();
+            }, 2000);
+          },
+        ],
+        ["initialization_error", ({ message }: { message: string }) => setErrorMessage(`Erreur d'initialisation du player : ${message}`)],
+        ["authentication_error", ({ message }: { message: string }) => setErrorMessage(`Erreur d'authentification : ${message}`)],
+        ["account_error", ({ message }: { message: string }) => setErrorMessage(`Erreur de compte (Premium requis) : ${message}`)],
+      ];
+      for (const [event, cb] of listeners) player.addListener(event, cb);
+      listenersRef.current = listeners;
+    },
+    [clearStuckTimer, setConnectingState]
+  );
+
   const loadWebPlaybackSdk = useCallback(() => {
+    shared.tokenRef = accessTokenRef;
+    // Player déjà créé par un montage précédent dans cet onglet : on le
+    // réutilise tel quel.
+    if (shared.player) {
+      playerRef.current = shared.player;
+      attachListeners(shared.player);
+      if (shared.deviceId) {
+        clearStuckTimer();
+        setDeviceId(shared.deviceId);
+        setState("ready");
+      } else {
+        shared.player.connect();
+      }
+      return;
+    }
+
     window.onSpotifyWebPlaybackSDKReady = () => {
+      if (shared.player) return;
       const player = new window.Spotify.Player({
         name: "Blindtest — écran hôte",
         getOAuthToken: (cb: (token: string) => void) => {
@@ -92,7 +167,7 @@ export function useSpotifyPlayer() {
             fetch("/api/spotify/token")
               .then((r) => r.json())
               .then((d) => {
-                accessTokenRef.current = d.accessToken;
+                (shared.tokenRef ?? accessTokenRef).current = d.accessToken;
                 cb(d.accessToken);
               })
               .catch((e) => {
@@ -101,7 +176,7 @@ export function useSpotifyPlayer() {
                   attempt(true);
                   return;
                 }
-                cb(accessTokenRef.current ?? "");
+                cb((shared.tokenRef ?? accessTokenRef).current ?? "");
               });
           };
           attempt(false);
@@ -109,39 +184,9 @@ export function useSpotifyPlayer() {
         volume: 0.8,
       });
 
+      shared.player = player;
       playerRef.current = player;
-
-      player.addListener("ready", ({ device_id }: { device_id: string }) => {
-        clearStuckTimer();
-        setStuckTooLong(false);
-        setDeviceId(device_id);
-        setState("ready");
-      });
-
-      // "not_ready" : le device Web Playback est tombé (mise en veille de
-      // l'ordinateur, coupure réseau passagère, changement de wifi...). Le
-      // SDK ne relance pas forcément la connexion tout seul — sans ce
-      // retry explicite, l'écran restait bloqué en "connecting_player"
-      // jusqu'au rechargement (bug remonté). connect() peut être rappelé
-      // sans risque sur une instance déjà créée (voir doc Web Playback SDK).
-      player.addListener("not_ready", () => {
-        setConnectingState();
-        if (notReadyRetryTimeoutRef.current) clearTimeout(notReadyRetryTimeoutRef.current);
-        notReadyRetryTimeoutRef.current = setTimeout(() => {
-          if (!unmountedRef.current) playerRef.current?.connect?.();
-        }, 2000);
-      });
-
-      player.addListener("initialization_error", ({ message }: { message: string }) =>
-        setErrorMessage(`Erreur d'initialisation du player : ${message}`)
-      );
-      player.addListener("authentication_error", ({ message }: { message: string }) =>
-        setErrorMessage(`Erreur d'authentification : ${message}`)
-      );
-      player.addListener("account_error", ({ message }: { message: string }) =>
-        setErrorMessage(`Erreur de compte (Premium requis) : ${message}`)
-      );
-
+      attachListeners(player);
       player.connect();
     };
 
@@ -155,10 +200,13 @@ export function useSpotifyPlayer() {
     script.src = "https://sdk.scdn.co/spotify-player.js";
     script.async = true;
     document.body.appendChild(script);
-  }, [clearStuckTimer, setConnectingState]);
+  }, [attachListeners, clearStuckTimer]); // accessTokenRef : ref stable
 
   useEffect(() => {
     let cancelled = false;
+    // Remis à false à chaque montage (le double montage du mode strict de
+    // React en dev réutilise la même ref après un premier démontage).
+    unmountedRef.current = false;
 
     const init = async () => {
       try {
@@ -188,6 +236,21 @@ export function useSpotifyPlayer() {
       unmountedRef.current = true;
       clearStuckTimer();
       if (notReadyRetryTimeoutRef.current) clearTimeout(notReadyRetryTimeoutRef.current);
+      // On quitte la page : le player partagé reste connecté (voir
+      // `shared`), on retire seulement nos écouteurs et on coupe le son
+      // pour que la musique ne continue pas sur l'accueil.
+      const player = playerRef.current;
+      if (player) {
+        for (const [event, cb] of listenersRef.current) {
+          try {
+            player.removeListener?.(event, cb);
+          } catch {
+            // ignore
+          }
+        }
+        listenersRef.current = [];
+        player.pause?.().catch?.(() => {});
+      }
     };
   }, [clearStuckTimer, loadWebPlaybackSdk, setConnectingState]);
 
@@ -218,6 +281,9 @@ export function useSpotifyPlayer() {
       // ignore
     }
     playerRef.current = null;
+    shared.player = null;
+    shared.deviceId = null;
+    listenersRef.current = [];
     accessTokenRef.current = null;
     setDeviceId(null);
     setErrorMessage(null);
