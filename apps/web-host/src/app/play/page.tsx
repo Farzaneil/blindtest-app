@@ -15,7 +15,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5, Check } from "lucide-react";
 import {
   joinRoomByCode,
@@ -735,12 +735,15 @@ function BuzzerView({
           ...baseCosmetic,
           swatch: teamColor(myTeam),
           accentColor: teamColor(myTeam),
-          textOn: "dark" as const,
+          textOn: textOnTeamColor(myTeam) === "#FFFFFF" ? ("light" as const) : ("dark" as const),
           icon: undefined,
         }
       : myTeam
         ? { ...baseCosmetic, accentColor: teamColor(myTeam) }
         : baseCosmetic;
+  // Anneau couleur d'équipe autour du buzzer quand un skin perso est équipé
+  // (avec le skin par défaut, c'est déjà le remplissage qui porte l'équipe).
+  const buzzRing = myTeam && baseCosmetic.key !== DEFAULT_COSMETIC_KEY ? teamColor(myTeam) : null;
 
   // Classement animé affiché à la révélation de la réponse (voir
   // AnimatedLeaderboard) : previousOrder mémorise l'ordre du classement tel
@@ -1152,14 +1155,8 @@ function BuzzerView({
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
-            className={`relative overflow-hidden w-56 h-56 rounded-full text-3xl font-black transition ${
-              canBuzz
-                ? "active:scale-95"
-                : alreadyBuzzed
-                  ? iWon
-                    ? "bg-transparent"
-                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
-                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
+            className={`buzzer-3d relative overflow-hidden w-56 h-56 rounded-full text-4xl font-display ${
+              canBuzz ? "buzzer-ready" : alreadyBuzzed && iWon ? "buzzer-pressed" : "buzzer-off bg-inkSurface2 text-inkMuted"
             }`}
             /* Skin de buzzer équipé (voir usePlayerCosmetics, migration
                0022) : appliqué uniquement quand CE buzzer représente
@@ -1167,15 +1164,16 @@ function BuzzerView({
                les états bloqué/perdu restent volontairement neutres (gris),
                ce ne sont pas des moments de mise en avant du skin. */
             style={
-              canBuzz
-                ? {
+              canBuzz || (alreadyBuzzed && iWon)
+                ? ({
                     background: equippedCosmetic.swatch,
-                    color: equippedCosmetic.textOn === "dark" ? "rgb(var(--bg))" : "#FFFFFF",
-                    boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}`,
-                  }
-                : alreadyBuzzed && iWon
-                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}` }
-                  : undefined
+                    color: equippedCosmetic.textOn === "dark" ? "#111111" : "#FFFFFF",
+                    // Anneau couleur d'équipe quand un skin perso est équipé
+                    // (le remplissage reste celui du skin).
+                    "--buzz-ring": buzzRing ?? "transparent",
+                    "--buzz-ring-w": buzzRing ? "8px" : "0px",
+                  } as CSSProperties)
+                : undefined
             }
           >
             {(canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.icon && (

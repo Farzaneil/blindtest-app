@@ -5,7 +5,7 @@
 // figer au moment du build.
 export const dynamic = "force-dynamic";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { spotify } from "@blindtest/api-clients";
@@ -332,6 +332,8 @@ function HostBuzzerView({
   const ranked = withRanks(players);
   const meRaw = ranked.find((p) => p.id === hostPlayerId);
   const me = meRaw ? withTeamStreaks(meRaw, players, team !== null) : meRaw;
+  // Mode équipes : anneau couleur d'équipe autour du buzzer.
+  const buzzRing = team ? teamColor(team) : null;
 
   // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
   // application se fait côté serveur (resolve_buzz_winner), ceci ne sert
@@ -399,14 +401,8 @@ function HostBuzzerView({
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
-            className={`relative overflow-hidden w-56 h-56 rounded-full text-3xl font-black transition ${
-              canBuzz
-                ? "active:scale-95"
-                : alreadyBuzzed
-                  ? iWon
-                    ? "bg-transparent"
-                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
-                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
+            className={`buzzer-3d relative overflow-hidden w-56 h-56 rounded-full text-4xl font-display ${
+              canBuzz ? "buzzer-ready" : alreadyBuzzed && iWon ? "buzzer-pressed" : "buzzer-off bg-inkSurface2 text-inkMuted"
             }`}
             /* Skin de buzzer équipé (voir usePlayerCosmetics, migration
                0022) — même traitement que BuzzerView (app/play/page.tsx) :
@@ -414,15 +410,16 @@ function HostBuzzerView({
                commentaire en tête de HostBuzzerView), donc reproduit ici à
                l'identique plutôt que factorisé. */
             style={
-              canBuzz
-                ? {
+              canBuzz || (alreadyBuzzed && iWon)
+                ? ({
                     background: equippedCosmetic.swatch,
-                    color: equippedCosmetic.textOn === "dark" ? "rgb(var(--bg))" : "#FFFFFF",
-                    boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}`,
-                  }
-                : alreadyBuzzed && iWon
-                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}` }
-                  : undefined
+                    color: equippedCosmetic.textOn === "dark" ? "#111111" : "#FFFFFF",
+                    // Anneau couleur d'équipe quand un skin perso est équipé
+                    // (le remplissage reste celui du skin).
+                    "--buzz-ring": buzzRing ?? "transparent",
+                    "--buzz-ring-w": buzzRing ? "8px" : "0px",
+                  } as CSSProperties)
+                : undefined
             }
           >
             {(canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.icon && (
@@ -2066,13 +2063,13 @@ function HostScreenInner() {
               <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
+                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
                 >
                   <CheckCircle2 className="w-5 h-5 text-fg" /> Artiste trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="flex-1 bg-transparent border border-danger/50 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface border-2 border-fg flex-1 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 shadow-sticker-sm"
                 >
                   <XCircle className="w-5 h-5" /> Toujours pas
                 </button>
@@ -2081,13 +2078,13 @@ function HostScreenInner() {
               <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
+                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
                 >
                   <CheckCircle2 className="w-5 h-5 text-fg" /> Titre trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="flex-1 bg-transparent border border-danger/50 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface border-2 border-fg flex-1 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 shadow-sticker-sm"
                 >
                   <XCircle className="w-5 h-5" /> Toujours pas
                 </button>
@@ -2096,13 +2093,13 @@ function HostScreenInner() {
               <div className="grid grid-cols-2 gap-3 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
                 >
                   <Music className="w-4 h-4 text-fg" /> Titre seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
                 >
                   <Mic className="w-4 h-4 text-fg" /> Artiste seul (+1)
                 </button>
@@ -2114,7 +2111,7 @@ function HostScreenInner() {
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-transparent border border-danger/50 text-danger hover:bg-danger/10 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface border-2 border-fg text-danger hover:bg-danger/10 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 shadow-sticker-sm"
                 >
                   <XCircle className="w-4 h-4" /> Aucun (-1)
                 </button>
@@ -2267,7 +2264,7 @@ function HostScreenInner() {
                 </button>
                 <button
                   onClick={() => setHostJoinSkipped(true)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted"
+                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted border-fg shadow-sticker-sm"
                 >
                   Non, je gère juste le jeu
                 </button>
@@ -2282,7 +2279,7 @@ function HostScreenInner() {
                 </button>
                 <button
                   onClick={() => setHostJoinSkipped(true)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted"
+                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted border-fg shadow-sticker-sm"
                 >
                   Non, je gère juste le jeu
                 </button>
@@ -2359,7 +2356,7 @@ function HostScreenInner() {
                 </p>
                 <button
                   onClick={spotifyPlayer.reconnect}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
+                  className="bg-inkSurface border-2 hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 border-fg shadow-sticker-sm"
                 >
                   <RefreshCw className="w-3.5 h-3.5" /> Réessayer
                 </button>
@@ -2499,7 +2496,7 @@ function HostScreenInner() {
               </button>
               <button
                 onClick={handleRestartGame}
-                className="flex-none sm:min-w-[220px] bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2"
+                className="flex-none sm:min-w-[220px] bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
               >
                 <RotateCcw className="w-4 h-4" /> Redémarrer une partie
               </button>
@@ -2604,7 +2601,7 @@ function HostScreenInner() {
                       setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Illimité"
-                    className="w-16 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                    className="w-24 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                   <span className="text-inkMuted">pts</span>
                 </label>
@@ -2631,7 +2628,7 @@ function HostScreenInner() {
                       setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Toute la playlist"
-                    className="w-32 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                    className="w-40 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                 </label>
               </div>
@@ -2752,7 +2749,7 @@ function HostScreenInner() {
                 <button
                   onClick={handleLoadMyPlaylists}
                   disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
+                  className="bg-inkSurface border-2 hover:border-fg disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start border-fg shadow-sticker-sm"
                 >
                   {myPlaylists !== null
                     ? (
@@ -2779,7 +2776,7 @@ function HostScreenInner() {
                           <button
                             onClick={() => handleImportPlaylist(playlist.id)}
                             disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
-                            className="bg-inkSurface border border-inkBorderStrong hover:border-fg disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
+                            className="bg-inkSurface border-2 hover:border-fg disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap border-fg shadow-sticker-sm"
                           >
                             {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
                           </button>

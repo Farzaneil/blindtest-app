@@ -14,16 +14,19 @@
   --bg: 255 225 77; /* #FFE14D */
   --c1: 168 220 255; /* #A8DCFF bleu ciel */
   --c2: 201 182 255; /* #C9B6FF lilas */
+  --tint: 255 246 200; /* fond clair dans les panneaux blancs */
 }
 :root[data-fond="ciel"] {
   --bg: 168 220 255;
   --c1: 255 225 77;
   --c2: 201 182 255;
+  --tint: 226 243 255;
 }
 :root[data-fond="lilas"] {
   --bg: 201 182 255;
   --c1: 255 225 77;
   --c2: 168 220 255;
+  --tint: 239 233 255;
 }
 
 html,
@@ -40,4 +43,55 @@ body {
 .font-display {
   font-weight: 400 !important;
   letter-spacing: 0.01em;
+}
+
+/*
+ * Gros buzzer (/play et buzzer de l'hôte-joueur) : bouton d'arcade en
+ * relief. Ombre noire décalée vers le bas = l'épaisseur du bouton ; reflet
+ * clair en haut et ombre interne en bas = le bombé. À l'appui il
+ * s'enfonce (translateY + ombre réduite). --buzz-ring / --buzz-ring-w :
+ * anneau couleur d'équipe optionnel (posé en style inline).
+ */
+.buzzer-3d {
+  border: 5px solid #111111;
+  box-shadow:
+    inset 0 -14px 0 rgb(0 0 0 / 0.16),
+    inset 0 12px 0 rgb(255 255 255 / 0.4),
+    0 0 0 var(--buzz-ring-w, 0px) var(--buzz-ring, transparent),
+    0 14px 0 var(--buzz-ring-w, 0px) #111111;
+  transition: transform 0.08s ease-out, box-shadow 0.08s ease-out;
+  -webkit-tap-highlight-color: transparent;
+}
+.buzzer-ready {
+  cursor: pointer;
+  animation: buzzerIdle 1.8s ease-in-out infinite;
+}
+.buzzer-ready:active,
+.buzzer-pressed {
+  animation: none;
+  transform: translateY(12px);
+  box-shadow:
+    inset 0 -4px 0 rgb(0 0 0 / 0.16),
+    inset 0 8px 0 rgb(0 0 0 / 0.12),
+    0 0 0 var(--buzz-ring-w, 0px) var(--buzz-ring, transparent),
+    0 2px 0 var(--buzz-ring-w, 0px) #111111;
+}
+.buzzer-off {
+  border-color: rgb(17 17 17 / 0.35);
+  transform: translateY(10px);
+  box-shadow: 0 4px 0 rgb(17 17 17 / 0.35);
+}
+@keyframes buzzerIdle {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-4px) scale(1.025);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .buzzer-ready {
+    animation: none;
+  }
 }

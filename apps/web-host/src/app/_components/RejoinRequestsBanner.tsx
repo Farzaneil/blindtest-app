@@ -77,7 +77,7 @@ export function RejoinRequestsBanner({
                 type="button"
                 disabled={busyId === r.id}
                 onClick={() => resolve(r.id, false)}
-                className="border border-danger/50 text-danger hover:bg-danger/10 disabled:opacity-50 transition rounded-xl px-4 py-2 text-sm font-bold"
+                className="bg-inkSurface border-2 border-fg text-danger hover:bg-danger/10 disabled:opacity-50 transition rounded-xl px-4 py-2 text-sm font-bold shadow-sticker-sm"
               >
                 Refuser
               </button>

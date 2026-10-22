@@ -30,8 +30,8 @@ module.exports = {
         fg: "#111111", // texte, contours, ombres
         ink: "#111111", // texte sur couleur (historique : text-ink)
         inkSurface: "#FFFFFF", // cartes
-        inkSurface2: "#F4F4F4", // lignes / champs dans une carte
-        inkSurface3: "#E9E9E9",
+        inkSurface2: "#FFFFFF", // lignes / champs dans une carte
+        inkSurface3: themeVar("--tint"),
         inkBorder: "#111111",
         inkBorderStrong: "#111111",
         inkMuted: "#4D4D4D", // texte secondaire (contraste OK sur les 3 fonds)

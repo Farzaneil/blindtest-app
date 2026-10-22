@@ -69,13 +69,13 @@ function ConnexionForm() {
 
         <a
           href={`/api/player-auth/login?next=${encodeURIComponent(next)}`}
-          className="bg-sage text-sageOn hover:bg-sage/90 transition rounded-xl py-3 font-bold flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
+          className="bg-[#1DB954] text-[#111111] hover:brightness-105 transition rounded-xl py-3 font-bold flex items-center justify-center gap-2 border-[3px] border-fg shadow-sticker"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" />
-            <path d="M7 10c3-1 7-1 10 1" stroke="#06110A" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-            <path d="M7.5 13c2.5-.8 6-.6 8.5.8" stroke="#06110A" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-            <path d="M8 16c2-.6 4.5-.4 6.5.8" stroke="#06110A" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+            <path d="M7 10c3-1 7-1 10 1" stroke="#1DB954" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+            <path d="M7.5 13c2.5-.8 6-.6 8.5.8" stroke="#1DB954" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+            <path d="M8 16c2-.6 4.5-.4 6.5.8" stroke="#1DB954" strokeWidth="1.6" fill="none" strokeLinecap="round" />
           </svg>
           Continuer avec Spotify
         </a>
@@ -83,7 +83,7 @@ function ConnexionForm() {
         <div className="flex flex-col gap-2">
           <button
             disabled
-            className="relative bg-inkSurface2 border border-deezer/40 text-fg rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            className="relative bg-inkSurface border-2 border-dashed border-fg/40 text-fg/70 rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" className="text-deezer">
               <rect x="2" y="14" width="3" height="6" fill="currentColor" />
@@ -98,7 +98,7 @@ function ConnexionForm() {
           </button>
           <button
             disabled
-            className="relative bg-inkSurface2 border border-appleMusic/40 text-fg rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            className="relative bg-inkSurface border-2 border-dashed border-fg/40 text-fg/70 rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-appleMusic">
               <path d="M9 18V5l12-2v13" />
@@ -112,7 +112,7 @@ function ConnexionForm() {
           </button>
           <button
             disabled
-            className="relative bg-inkSurface2 border border-ytMusic/40 text-fg rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            className="relative bg-inkSurface border-2 border-dashed border-fg/40 text-fg/70 rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" className="text-ytMusic">
               <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
