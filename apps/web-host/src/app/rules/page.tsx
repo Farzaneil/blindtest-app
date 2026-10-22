@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronLeft, Music2, Gamepad2, Trophy, Clock, Dice5, Zap, TrendingUp, Flame, XCircle, UserPlus } from "lucide-react";
 
+export const metadata = { title: "Règles du jeu" };
+
 /**
  * Page statique expliquant les règles du jeu — utile à partager avant une
  * soirée pour que tout le monde comprenne les modes, le score de base et
@@ -31,7 +33,7 @@ export default function RulesPage() {
           <p className="text-lg font-bold text-sage mb-3 font-display flex items-center gap-2">
             <Music2 className="w-5 h-5" /> Le principe
           </p>
-          <p className="text-white/90">
+          <p className="text-silver">
             L’hôte lance un morceau depuis Spotify. Les joueurs buzzent depuis leur téléphone dès
             qu’ils pensent connaître le titre et/ou l’artiste. Le premier à buzzer coupe le son et
             a la parole pour donner sa réponse à voix haute.
@@ -46,14 +48,14 @@ export default function RulesPage() {
           <div className="flex flex-col gap-4">
             <div>
               <p className="font-bold font-display">Maître du jeu</p>
-              <p className="text-white/90">
+              <p className="text-silver">
                 Une personne gère la partie (playlist, manches) sans jouer elle-même : elle voit
                 tous les titres à l’avance. Utile en soirée avec quelqu’un qui anime.
               </p>
             </div>
             <div>
               <p className="font-bold font-display">Tout le monde participe</p>
-              <p className="text-white/90">
+              <p className="text-silver">
                 Les morceaux de la file d’attente restent masqués (juste “Morceau 1”, “Morceau
                 2”…) pour que personne ne se spoile, y compris l’hôte s’il joue aussi.
               </p>
@@ -85,7 +87,7 @@ export default function RulesPage() {
               -1 aucun des deux
             </span>
           </div>
-          <p className="text-white/90">
+          <p className="text-silver">
             En mode <span className="font-bold">Maître du jeu</span>, tant que titre et artiste ne
             sont pas tous les deux trouvés, la musique reprend là où elle s’était arrêtée pour
             laisser une autre chance — le joueur qui vient de répondre doit attendre qu’un autre
@@ -100,7 +102,7 @@ export default function RulesPage() {
           <p className="text-lg font-bold text-amber mb-4 font-display flex items-center gap-2">
             <Dice5 className="w-5 h-5" /> Bonus et malus
           </p>
-          <p className="text-white/90 mb-4">
+          <p className="text-silver mb-4">
             L’hôte peut activer ou désactiver chacun de ces réglages à tout moment pendant la
             partie (tous activés par défaut) :
           </p>
@@ -109,7 +111,7 @@ export default function RulesPage() {
               <Dice5 className="w-4 h-4 text-amber shrink-0 mt-1" />
               <div>
                 <p className="font-bold font-display">Manche joker</p>
-                <p className="text-white/90 text-sm">
+                <p className="text-silver text-sm">
                   Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse
                   complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1).
                 </p>
@@ -119,7 +121,7 @@ export default function RulesPage() {
               <Zap className="w-4 h-4 text-sage shrink-0 mt-1" />
               <div>
                 <p className="font-bold font-display">Bonus vitesse</p>
-                <p className="text-white/90 text-sm">
+                <p className="text-silver text-sm">
                   +1 point si la réponse complète (titre + artiste) est buzzée en moins de 2
                   secondes.
                 </p>
@@ -129,7 +131,7 @@ export default function RulesPage() {
               <TrendingUp className="w-4 h-4 text-sage shrink-0 mt-1" />
               <div>
                 <p className="font-bold font-display">Bonus remontada</p>
-                <p className="text-white/90 text-sm">
+                <p className="text-silver text-sm">
                   +1 point si tu réponds juste alors que tu es strictement dernier·ère au
                   classement, avec plus de 5 points d’écart avec l’avant-dernier.
                 </p>
@@ -139,7 +141,7 @@ export default function RulesPage() {
               <Flame className="w-4 h-4 text-danger shrink-0 mt-1" />
               <div>
                 <p className="font-bold font-display">Malus série</p>
-                <p className="text-white/90 text-sm">
+                <p className="text-silver text-sm">
                   3 bonnes réponses d’affilée par la même personne : son buzzer est retardé de 5s,
                   puis 10s, puis 15s au tour suivant, tant que personne d’autre n’a répondu juste.
                 </p>
@@ -149,7 +151,7 @@ export default function RulesPage() {
               <XCircle className="w-4 h-4 text-danger shrink-0 mt-1" />
               <div>
                 <p className="font-bold font-display">Malus buzzer bloqué</p>
-                <p className="text-white/90 text-sm">
+                <p className="text-silver text-sm">
                   3 premiers-buzz ratés d’affilée par la même personne : son buzzer est
                   complètement bloqué à la manche suivante.
                 </p>
@@ -163,7 +165,7 @@ export default function RulesPage() {
           <p className="text-lg font-bold text-info mb-3 font-display flex items-center gap-2">
             <Clock className="w-5 h-5" /> Le temps
           </p>
-          <p className="text-white/90">
+          <p className="text-silver">
             Chaque manche dure 30 secondes. Si personne n’a buzzé à la fin du compte à rebours, la
             réponse s’affiche et la manche se termine sans gagnant. Le temps de jugement d’une
             réponse n’est jamais décompté du budget de 30 secondes.

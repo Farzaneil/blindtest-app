@@ -2,11 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Fond unique de l'app (token "ink") : sert aussi de fond au rebond du
+   scroll sur iOS. Les pages n'ont plus besoin de le redéclarer. */
 html,
 body {
-  background-color: #120e1a;
+  background-color: #0a0a0c;
 }
 
 body {
-  @apply bg-arcade text-white min-h-screen;
+  @apply bg-ink text-white min-h-screen;
 }

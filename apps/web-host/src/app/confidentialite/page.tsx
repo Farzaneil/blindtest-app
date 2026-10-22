@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronLeft, Database, Cookie, Trash2 } from "lucide-react";
 
+export const metadata = { title: "Confidentialité" };
+
 /**
  * Page confidentialité (RGPD) — Phase 6 du plan cadrage_comptes_
  * recompenses_rgpd.md (section 6) : une page simple et transparente, pas
@@ -38,7 +40,7 @@ export default function ConfidentialitePage() {
           <p className="text-lg font-bold text-sage mb-3 font-display flex items-center gap-2">
             <Database className="w-5 h-5" /> Ce qui est stocké, et pourquoi
           </p>
-          <ul className="flex flex-col gap-3 text-white/90">
+          <ul className="flex flex-col gap-3 text-silver">
             <li>
               <span className="font-semibold text-white">Pseudo et avatar</span> — repris depuis ton compte
               Spotify au moment de la connexion, pour t’identifier auprès des autres joueurs (classement,
@@ -67,7 +69,7 @@ export default function ConfidentialitePage() {
           <p className="text-lg font-bold text-info mb-3 font-display flex items-center gap-2">
             <Cookie className="w-5 h-5" /> Cookies
           </p>
-          <p className="text-white/90">
+          <p className="text-silver">
             Aujourd’hui, le site pose un seul cookie : un cookie de session qui te garde connecté à ton
             compte joueur. C’est un cookie strictement nécessaire au fonctionnement du site — il ne
             demande pas de consentement, au même titre que n’importe quel cookie de connexion.
@@ -84,7 +86,7 @@ export default function ConfidentialitePage() {
           <p className="text-lg font-bold text-danger mb-3 font-display flex items-center gap-2">
             <Trash2 className="w-5 h-5" /> Tes droits
           </p>
-          <p className="text-white/90">
+          <p className="text-silver">
             Tu peux supprimer ton compte et tes données à tout moment, sans avoir à te justifier : rends-toi
             dans <span className="font-semibold text-white">/profil → Réglages → « Supprimer mon compte et
             mes données »</span>. Ton pseudo, ton avatar et ta connexion Spotify sont alors définitivement

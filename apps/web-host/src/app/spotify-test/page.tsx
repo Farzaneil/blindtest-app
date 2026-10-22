@@ -58,28 +58,28 @@ export default function SpotifyTestPage() {
       <h1 className="text-3xl font-black">Test intégration Spotify</h1>
 
       {errorMessage && (
-        <p className="text-red-400 max-w-xl text-center break-words">{errorMessage}</p>
+        <p className="text-danger max-w-xl text-center break-words">{errorMessage}</p>
       )}
 
-      {player.state === "checking" && <p className="text-gray-400">Vérification de la connexion…</p>}
+      {player.state === "checking" && <p className="text-inkMuted">Vérification de la connexion…</p>}
 
       {player.state === "disconnected" && (
-        <button onClick={player.connect} className="bg-accent px-8 py-4 rounded-full text-xl font-bold">
+        <button onClick={player.connect} className="bg-sage text-sageOn px-8 py-4 rounded-full text-xl font-bold">
           Se connecter à Spotify
         </button>
       )}
 
       {player.state === "connecting_player" && (
-        <p className="text-gray-400">Connexion au Web Playback SDK…</p>
+        <p className="text-inkMuted">Connexion au Web Playback SDK…</p>
       )}
 
       {player.state === "ready" && (
         <div className="w-full max-w-xl flex flex-col gap-4">
-          <p className="text-green-400 text-center">✅ Player prêt (device connecté)</p>
+          <p className="text-sage text-center">✅ Player prêt (device connecté)</p>
 
           <button
             onClick={() => player.disconnect()}
-            className="text-sm text-gray-400 hover:text-red-400 underline transition self-center"
+            className="text-sm text-inkMuted hover:text-danger underline transition self-center"
           >
             Déconnecter Spotify (changer de compte)
           </button>
@@ -90,9 +90,9 @@ export default function SpotifyTestPage() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Chercher un morceau…"
-              className="flex-1 bg-white/5 border-2 border-accent rounded-xl px-4 py-3"
+              className="flex-1 bg-inkSurface2 border-2 border-sage rounded-xl px-4 py-3"
             />
-            <button onClick={handleSearch} className="bg-accent px-6 py-3 rounded-xl font-bold">
+            <button onClick={handleSearch} className="bg-sage text-sageOn px-6 py-3 rounded-xl font-bold">
               Chercher
             </button>
           </div>
@@ -101,14 +101,14 @@ export default function SpotifyTestPage() {
             {results.map((track) => (
               <li
                 key={track.sourceTrackId}
-                className="flex justify-between items-center bg-white/5 rounded-lg px-4 py-3"
+                className="flex justify-between items-center bg-inkSurface2 rounded-lg px-4 py-3"
               >
                 <span>
                   {track.title} — {track.artist}
                 </span>
                 <button
                   onClick={() => handlePlay(track)}
-                  className="bg-accent2 px-4 py-2 rounded-full text-sm font-bold"
+                  className="bg-info text-infoOn px-4 py-2 rounded-full text-sm font-bold"
                 >
                   ▶ Jouer
                 </button>

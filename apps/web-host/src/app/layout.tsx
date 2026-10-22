@@ -18,14 +18,17 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
 });
 
+// Titre d'onglet par page (voir `metadata` / les layout.tsx de chaque
+// route) : "Règles du jeu · Blindtest", etc.
 export const metadata = {
-  title: "Blindtest — Écran hôte",
+  title: { default: "Blindtest", template: "%s · Blindtest" },
+  description: "Le blind test entre potes : un écran hôte, les téléphones en buzzer.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="fr" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <body className="bg-dark text-white min-h-screen font-sans">
+      <body className="bg-ink text-white min-h-screen font-sans">
         {children}
         <CookieConsentBanner />
       </body>

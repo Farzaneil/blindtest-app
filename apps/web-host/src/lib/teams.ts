@@ -14,6 +14,8 @@ export const FALLBACK_TEAM_COLOR = "#8B8B96";
 // Couleur de texte lisible posée SUR la couleur d'équipe (bandeaux, buzzer).
 const TEXT_ON_TEAM_COLOR: Record<string, string> = {
   "#6E93D6": "#0A1526",
+  "#F0874A": "#2B1206",
+  // Ancienne couleur "Les Ambres" (avant la migration 0027).
   "#D6A15A": "#2B1B08",
   "#A78BFA": "#1A1033",
   "#E879A6": "#2B0A18",

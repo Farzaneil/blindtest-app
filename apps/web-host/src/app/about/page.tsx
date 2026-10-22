@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronLeft, Heart, Wrench, Map } from "lucide-react";
 
+export const metadata = { title: "À propos" };
+
 /**
  * Page "à propos" : contexte du projet (perso, non-commercial), résumé
  * technique succinct, et roadmap condensée. Composant serveur statique,
@@ -31,7 +33,7 @@ export default function AboutPage() {
           <p className="text-lg font-bold text-sage mb-3 font-display flex items-center gap-2">
             <Heart className="w-5 h-5" /> Le projet
           </p>
-          <p className="text-white/90">
+          <p className="text-silver">
             Blindtest est un projet perso, développé pour jouer entre amis sans dépendre d’un
             générateur en ligne ou d’un tableur bricolé. Pas de compte, pas de pub, pas de
             monétisation — juste un outil gratuit pour animer une soirée.
@@ -43,7 +45,7 @@ export default function AboutPage() {
           <p className="text-lg font-bold text-info mb-3 font-display flex items-center gap-2">
             <Wrench className="w-5 h-5" /> Sous le capot
           </p>
-          <p className="text-white/90">
+          <p className="text-silver">
             Next.js pour l’interface, Supabase pour la base de données et le temps réel (les
             buzzers et le score se mettent à jour instantanément sur tous les écrans), et le SDK
             Spotify pour la lecture des morceaux directement depuis un compte Premium. Hébergé
@@ -56,7 +58,7 @@ export default function AboutPage() {
           <p className="text-lg font-bold text-amber mb-3 font-display flex items-center gap-2">
             <Map className="w-5 h-5" /> Roadmap
           </p>
-          <ul className="flex flex-col gap-2 text-white/90">
+          <ul className="flex flex-col gap-2 text-silver">
             <li className="flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-amber shrink-0" />
               Historique des parties passées

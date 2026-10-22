@@ -1,25 +1,31 @@
 /**
  * Design tokens partagés entre l'écran hôte (Tailwind, apps/web-host) et
- * l'appli mobile (NativeWind, apps/mobile). Source de vérité unique pour la
- * DA "jeu télé / arcade néon" décrite dans le blueprint (section 6).
+ * l'appli mobile (NativeWind, apps/mobile). Reflète la direction "minimal premium
+ * sombre" actuelle de l'écran web.
  *
  * Si tu changes une couleur ici, reporte-la aussi dans
  * apps/web-host/tailwind.config.js pour rester synchro.
  */
 export const colors = {
-  background: "#120E1A", // fond très sombre, légèrement teinté violet
-  backgroundVia: "#1A1330", // point médian du dégradé de fond (voir globals.css)
-  surface: "#211A33", // fond des cartes/panneaux
-  surfaceBorder: "#3A2E58", // bordure des cartes
-  accent: "#1DB954", // vert néon Spotify — dominante, actions principales, buzz
-  accentSoft: "#4ADE80", // variante plus claire (survol, texte accentué)
-  accent2: "#7C3AED", // violet — touche secondaire, statut "en lecture"
-  accent2Soft: "#A78BFA",
+  // Direction "minimal premium sombre" (miroir de apps/web-host/tailwind.config.js).
+  ink: "#0A0A0C", // fond de l'app
+  inkSurface: "#1C1C23", // cartes
+  inkSurface2: "#27272F",
+  inkSurface3: "#303039",
+  inkBorder: "#3A3A45",
+  inkBorderStrong: "#4D4D5A",
+  inkMuted: "#8B8B96", // texte secondaire
+  silver: "#C7CBD1", // texte courant atténué, argent du podium
+  sage: "#3ECF7E", // accent principal (actions, buzz, bonne réponse)
+  info: "#4FB6C2",
+  amber: "#D6A15A", // joker, séries
   danger: "#F43F5E", // mauvaise réponse, erreurs
-  gold: "#F5A524", // médaille du classement, mise en avant ponctuelle
+  gold: "#F5A524", // podium, MVP
+  bronze: "#C97B4A",
   textPrimary: "#FFFFFF",
-  textMuted: "#9CA3AF",
-  teams: ["#7C3AED", "#1DB954", "#F5A524", "#F43F5E"], // couleurs par équipe
+  // Couleurs d'équipe (mode équipes, voir supabase/migrations/0027) :
+  // volontairement distinctes des couleurs d'état ci-dessus.
+  teams: ["#6E93D6", "#F0874A", "#A78BFA", "#E879A6"],
 };
 
 export const typography = {
@@ -41,16 +47,4 @@ export const radius = {
   md: 16,
   lg: 24,
   full: 9999,
-};
-
-/**
- * Halos lumineux ("glow") utilisés sur les actions principales pour
- * renforcer l'ambiance arcade — appliqués via box-shadow côté web
- * (voir apps/web-host/tailwind.config.js), et via shadow color côté mobile.
- */
-export const glow = {
-  accent: "rgba(29, 185, 84, 0.45)",
-  accent2: "rgba(124, 58, 237, 0.45)",
-  danger: "rgba(244, 63, 94, 0.45)",
-  gold: "rgba(245, 165, 36, 0.45)",
 };
