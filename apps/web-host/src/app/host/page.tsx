@@ -28,11 +28,27 @@ import {
   updateRoomBonusMalusSettings,
   awardGameRewards,
   recordPlaylistImport,
+  subscribeToTeams,
+  configureRoomTeams,
+  renameTeam,
+  setPlayerTeam,
+  shuffleRoomTeams,
+  assignUnassignedPlayers,
   type Player,
   type Round,
   type RoundAttempt,
   type Room,
+  type Team,
 } from "../../lib/rooms";
+import {
+  computeAwards,
+  computePlayerStats,
+  computeTeamStandings,
+  teamColor,
+  withTeamStreaks,
+} from "../../lib/teams";
+import { AwardCards, TeamDot, TeamRecapTable, TeamResultBanner, TeamScoreCards } from "../_components/Teams";
+import { TeamSetupPanel } from "../_components/TeamSetupPanel";
 import { withRanks, formatOrdinal, podiumRowClasses } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
@@ -276,10 +292,13 @@ function HostBuzzerView({
   onBuzz,
   onBackToAdmin,
   equippedCosmetic,
+  team = null,
 }: {
   round: Round | null;
   players: Player[];
   hostPlayerId: string;
+  // Mode équipes : équipe de l'hôte-joueur (bandeau + séries d'équipe).
+  team?: Team | null;
   gameOver: boolean;
   sending: boolean;
   onBuzz: () => void;
@@ -306,7 +325,8 @@ function HostBuzzerView({
   const answerRevealed = round?.status === "scored";
 
   const ranked = withRanks(players);
-  const me = ranked.find((p) => p.id === hostPlayerId);
+  const meRaw = ranked.find((p) => p.id === hostPlayerId);
+  const me = meRaw ? withTeamStreaks(meRaw, players, team !== null) : meRaw;
 
   // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
   // application se fait côté serveur (resolve_buzz_winner), ceci ne sert
@@ -338,8 +358,14 @@ function HostBuzzerView({
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
       <div className="relative w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
-        <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage" />
-        <span className="font-bold truncate">{me?.display_name ?? "Toi"}</span>
+        <span
+          className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage"
+          style={team ? { background: teamColor(team) } : undefined}
+        />
+        <span className="font-bold truncate">
+          {me?.display_name ?? "Toi"}
+          {team && <span className="font-medium text-sm ml-2" style={{ color: teamColor(team) }}>{team.name}</span>}
+        </span>
         <span className="text-sm text-inkMuted whitespace-nowrap">
           {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
           <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
@@ -628,6 +654,11 @@ function HostScreenInner() {
   // la relire.
   const [hydrated, setHydrated] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
+  // Mode équipes (voir migration 0025) : équipes de la room, synchronisées
+  // en direct ; teamsBusy désactive brièvement les contrôles de préparation
+  // pendant un aller-retour serveur (évite les doubles clics).
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsBusy, setTeamsBusy] = useState(false);
   const [round, setRound] = useState<Round | null>(null);
   const [roundHistory, setRoundHistory] = useState<Round[]>([]);
   const [roundAttempts, setRoundAttempts] = useState<RoundAttempt[]>([]);
@@ -850,6 +881,16 @@ function HostScreenInner() {
     hostView,
   ]);
 
+  const roomIdForTeams = room?.id ?? null;
+  useEffect(() => {
+    if (!roomIdForTeams) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTeams([]);
+      return;
+    }
+    return subscribeToTeams(roomIdForTeams, setTeams);
+  }, [roomIdForTeams]);
+
   useEffect(() => {
     if (!room) return;
     const unsubPlayers = subscribeToPlayers(room.id, setPlayers);
@@ -955,12 +996,21 @@ function HostScreenInner() {
   // inutilisable dans un hook) : dupliqué ici en amont pour pouvoir être lu
   // par cet effet et par celui de reprise de la musique ci-dessous.
   const canStartRoundNow = !round || round.status === "scored";
+  // Mode équipes : le score cible s'applique au total de chaque équipe
+  // (somme de ses joueurs), pas aux scores individuels.
+  const teamMode = room?.game_mode === "team" && teams.length > 0;
+  const teamStandings = teamMode ? computeTeamStandings(teams, players) : [];
+  const targetHitNow =
+    targetScore !== null &&
+    (teamMode
+      ? teamStandings.some((s) => s.score >= targetScore)
+      : players.some((p) => p.score >= targetScore));
   const isGameOverNow =
     !!room &&
     canStartRoundNow &&
     queueIndex > 0 &&
     (queue.slice(queueIndex).length === 0 ||
-      (targetScore !== null && players.some((p) => p.score >= targetScore)) ||
+      targetHitNow ||
       (maxRounds !== null && queueIndex >= maxRounds));
 
   useEffect(() => {
@@ -1238,6 +1288,13 @@ function HostScreenInner() {
     spotifyPlayer.activateElement();
     setLaunchingRound(true);
 
+    // Mode équipes : personne ne doit jouer "hors équipe" — les joueurs qui
+    // n'ont pas choisi (ou l'hôte qui joue aussi) sont placés dans l'équipe
+    // la moins remplie. Un échec ne doit pas bloquer le lancement.
+    if (room && teamMode) {
+      await assignUnassignedPlayers(room.id).catch(() => {});
+    }
+
     await launchRound(queue[queueIndex]);
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
@@ -1311,6 +1368,40 @@ function HostScreenInner() {
   // manche en cours n'est pas terminée (voir resolve_round_attempt/
   // resolve_buzz_winner côté SQL, qui relisent la room à chaque appel), donc
   // pas besoin d'attendre la confirmation serveur pour refléter le choix.
+  // --- Mode équipes (préparation, voir TeamSetupPanel) ---------------------
+  const runTeamAction = async (action: () => Promise<void>, fallbackMessage: string) => {
+    setTeamsBusy(true);
+    try {
+      await action();
+    } catch (e: any) {
+      setError(e?.message ?? fallbackMessage);
+    } finally {
+      setTeamsBusy(false);
+    }
+  };
+
+  const handleSetTeamCount = (count: 0 | 2 | 3 | 4) => {
+    if (!room) return;
+    return runTeamAction(async () => {
+      await configureRoomTeams(room.id, count);
+      // game_mode n'est pas écouté en direct côté hôte (room est un état
+      // local) : on le reflète tout de suite, les équipes arrivent via
+      // subscribeToTeams.
+      setRoom((current) => (current ? { ...current, game_mode: count === 0 ? "solo" : "team" } : current));
+    }, "Impossible de changer le format de la partie.");
+  };
+
+  const handleRenameTeam = (teamId: string, name: string) =>
+    runTeamAction(() => renameTeam(teamId, name), "Impossible de renommer l'équipe.");
+
+  const handleMovePlayer = (playerId: string, teamId: string | null) =>
+    runTeamAction(() => setPlayerTeam(playerId, teamId), "Impossible de changer ce joueur d'équipe.");
+
+  const handleShuffleTeams = () => {
+    if (!room) return;
+    return runTeamAction(() => shuffleRoomTeams(room.id), "Impossible de mélanger les équipes.");
+  };
+
   const handleToggleBonusMalusSetting = async (key: keyof BonusMalusSettings) => {
     if (!room) return;
     const nextValue = !room[key];
@@ -1479,7 +1570,13 @@ function HostScreenInner() {
   // qui gère déjà les rangs à égalité).
   const playersReachingTargetScore =
     targetScore !== null ? players.filter((p) => p.score >= targetScore) : [];
-  const targetScoreReached = canStartRound && gameStarted && playersReachingTargetScore.length > 0;
+  // Mode équipes : c'est le total d'équipe qui compte pour le score cible.
+  const teamsReachingTargetScore =
+    teamMode && targetScore !== null ? teamStandings.filter((s) => s.score >= targetScore) : [];
+  const targetScoreReached =
+    canStartRound &&
+    gameStarted &&
+    (teamMode ? teamsReachingTargetScore.length > 0 : playersReachingTargetScore.length > 0);
   // Même logique que targetScoreReached mais sur le nombre de manches
   // jouées (queueIndex) plutôt que sur le score — cumulable avec le score
   // cible : la partie s'arrête dès la première limite atteinte.
@@ -1492,6 +1589,15 @@ function HostScreenInner() {
   // une autre limite, car c'est l'info la plus intéressante à afficher.
   const gameOver = queueExhausted || targetScoreReached || maxRoundsReached;
   const rankedPlayers = withRanks(players);
+  // Mode équipes : équipe d'un joueur (null en solo / sans équipe) et
+  // statistiques de l'écran de fin (voir lib/teams.ts).
+  const teamOfPlayer = (playerId: string | null | undefined): Team | null => {
+    if (!teamMode || !playerId) return null;
+    const p = players.find((x) => x.id === playerId);
+    return (p?.team_id && teams.find((t) => t.id === p.team_id)) || null;
+  };
+  const playerStats = teamMode ? computePlayerStats(players, roundAttempts) : new Map();
+  const teamAwards = teamMode ? computeAwards(players, playerStats) : [];
   const modeChosen = hostMode !== null;
   const blindMode = hostMode === "player";
   // "Tu joues aussi sur cet écran ?" doit être tranché avant de pouvoir
@@ -1564,6 +1670,7 @@ function HostScreenInner() {
           onBuzz={handleHostBuzz}
           onBackToAdmin={() => setHostView("admin")}
           equippedCosmetic={hostEquippedCosmetic}
+          team={teamOfPlayer(hostPlayerId)}
         />
       </main>
     );
@@ -1606,6 +1713,9 @@ function HostScreenInner() {
             </div>
           </div>
 
+          {teamMode ? (
+            <TeamScoreCards standings={teamStandings} />
+          ) : (
           <div className="relative w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl p-6">
             <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
             <h2 className="text-2xl font-bold mb-4 font-display">Joueurs connectés ({players.length})</h2>
@@ -1643,6 +1753,7 @@ function HostScreenInner() {
               })}
             </ul>
           </div>
+          )}
 
         </>
       ) : (
@@ -1684,6 +1795,7 @@ function HostScreenInner() {
                     <Headphones className="w-3.5 h-3.5 text-sage" />
                   )}
                   {hostMode === "gamemaster" ? "Maître du jeu" : "Tout le monde participe"}
+                  {teamMode && " · Équipes"}
                 </span>
               )}
             </div>
@@ -1712,6 +1824,21 @@ function HostScreenInner() {
           que les joueurs arrivent. Une fois la partie lancée, il passe
           derrière le bouton "QR code" de la carte du code (retardataires). */}
       {!gameStarted && <JoinQrCode code={room.code} />}
+
+      {/* Mode équipes : format + composition, avant la première manche
+          uniquement (figé ensuite). */}
+      {!gameStarted && (
+        <TeamSetupPanel
+          teamMode={teamMode}
+          teams={teams}
+          players={players}
+          busy={teamsBusy}
+          onSetTeamCount={handleSetTeamCount}
+          onRenameTeam={handleRenameTeam}
+          onMovePlayer={handleMovePlayer}
+          onShuffle={handleShuffleTeams}
+        />
+      )}
 
       {roundHistory.length > 0 && (
       <div className="w-full max-w-xl">
@@ -1765,6 +1892,9 @@ function HostScreenInner() {
                             return (
                               <li key={a.id} className={`flex justify-between gap-3 ${colorClass}`}>
                                 <span className="truncate min-w-0 flex-1">
+                                  {teamOfPlayer(a.player_id) && (
+                                    <TeamDot color={teamColor(teamOfPlayer(a.player_id))} className="w-2 h-2 mr-1.5" />
+                                  )}
                                   {attemptPlayer?.display_name ?? "Joueur"} — {label}
                                   {bonusLabels.length > 0 && ` (${bonusLabels.join(", ")})`}
                                 </span>
@@ -1826,6 +1956,11 @@ function HostScreenInner() {
             <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
+            {teamOfPlayer(winner?.id) && (
+              <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
+                <TeamDot color={teamColor(teamOfPlayer(winner?.id))} /> {teamOfPlayer(winner?.id)?.name}
+              </p>
+            )}
             {!blindMode && (
               <p className="text-lg text-inkMuted">
                 {round.title} — {round.artist}
@@ -1869,6 +2004,11 @@ function HostScreenInner() {
             <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
+            {teamOfPlayer(winner?.id) && (
+              <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
+                <TeamDot color={teamColor(teamOfPlayer(winner?.id))} /> {teamOfPlayer(winner?.id)?.name}
+              </p>
+            )}
             <p className="text-lg text-inkMuted">
               {round.title} — {round.artist}
             </p>
@@ -2186,7 +2326,12 @@ function HostScreenInner() {
           <div className="relative flex flex-col items-center gap-6 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
             <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-gold" />
             <Trophy className="w-10 h-10 text-gold" />
-            {targetScoreReached ? (
+            {targetScoreReached && teamMode ? (
+              <p className="text-2xl font-bold text-white text-center font-display">
+                {teamsReachingTargetScore.map((s) => s.team.name).join(" et ")}{" "}
+                {teamsReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore} points
+              </p>
+            ) : targetScoreReached ? (
               <p className="text-2xl font-bold text-white text-center font-display">
                 {playersReachingTargetScore.map((p) => p.display_name).join(" et ")}{" "}
                 {playersReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore}{" "}
@@ -2200,11 +2345,32 @@ function HostScreenInner() {
               <p className="text-2xl font-bold text-white font-display">Playlist terminée</p>
             )}
 
+            {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
+                tableau par équipe avec MVP, distinctions) à la place du
+                podium individuel. */}
+            {teamMode && (
+              <div className="w-full flex flex-col gap-5">
+                <TeamResultBanner standings={teamStandings} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {teamStandings.map((st) => (
+                    <TeamRecapTable key={st.team.id} standing={st} stats={playerStats} />
+                  ))}
+                </div>
+                <AwardCards
+                  awards={teamAwards}
+                  teamOf={(p) => {
+                    const t = teamOfPlayer(p.id);
+                    return t ? { color: teamColor(t) } : null;
+                  }}
+                />
+              </div>
+            )}
+
             {/* Podium visuel des 3 premiers (gestion des égalités déjà faite
                 par withRanks : deux joueurs à égalité partagent le même
                 rang, donc "top 3" ici veut dire les 3 premiers RANGS, pas
                 forcément 3 joueurs si égalité). */}
-            {rankedPlayers.length > 0 && (
+            {!teamMode && rankedPlayers.length > 0 && (
               <div className="flex items-end justify-center gap-3">
                 {rankedPlayers
                   .filter((p) => p.rank <= 3)
@@ -2235,7 +2401,7 @@ function HostScreenInner() {
               </div>
             )}
 
-            {(fastestAttempt || mostContestedCount > 1) && (
+            {!teamMode && (fastestAttempt || mostContestedCount > 1) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
                 {fastestAttempt && (
                   <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
@@ -2257,6 +2423,7 @@ function HostScreenInner() {
               </div>
             )}
 
+            {!teamMode && (
             <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
               {rankedPlayers.map((p) => {
                 const plate = podiumRowClasses(p.rank);
@@ -2274,6 +2441,7 @@ function HostScreenInner() {
                 );
               })}
             </ul>
+            )}
             <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
               <button
                 onClick={() => {

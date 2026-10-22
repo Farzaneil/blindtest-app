@@ -16,9 +16,11 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5 } from "lucide-react";
+import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5, Check } from "lucide-react";
 import {
   joinRoomByCode,
+  getJoinInfoByCode,
+  subscribeToTeams,
   getPlayerSession,
   getRoomById,
   subscribeToRoom,
@@ -31,7 +33,17 @@ import {
   type PlayerRound,
   type Round,
   type RoundAttempt,
+  type Team,
 } from "../../lib/rooms";
+import {
+  computePlayerStats,
+  computeTeamStandings,
+  formatSeconds,
+  teamColor,
+  textOnTeamColor,
+  withTeamStreaks,
+} from "../../lib/teams";
+import { MvpBadge, TeamDot, TeamRecapTable, TeamResultBanner } from "../_components/Teams";
 import { withRanks, formatOrdinal, podiumRowClasses, type RankedPlayer } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
@@ -170,14 +182,52 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
   // seul le code de la partie reste à saisir.
   const { account } = usePlayerAccount();
 
+  // Mode équipes : dès qu'un code complet est saisi (ou pré-rempli par le
+  // QR), on regarde si la partie se joue en équipes pour proposer le choix
+  // de l'équipe AVANT de rejoindre (maquette "Joueur · Rejoindre").
+  const [joinInfo, setJoinInfo] = useState<Awaited<ReturnType<typeof getJoinInfoByCode>>>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const normalizedCode = code.trim().toUpperCase();
+  useEffect(() => {
+    if (normalizedCode.length < 6) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setJoinInfo(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      getJoinInfoByCode(normalizedCode)
+        .then((info) => {
+          if (!cancelled) setJoinInfo(info);
+        })
+        .catch(() => {});
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [normalizedCode]);
+  const joinTeams = joinInfo?.gameMode === "team" ? joinInfo.teams : [];
+  const needsTeam = joinTeams.length > 0;
+  const selectedTeam = joinTeams.find((t) => t.id === selectedTeamId) ?? null;
+
   const effectiveName = account ? account.pseudo : name;
-  const canSubmit = code.trim().length > 0 && effectiveName.trim().length > 0 && !loading;
+  const canSubmit =
+    code.trim().length > 0 &&
+    effectiveName.trim().length > 0 &&
+    (!needsTeam || selectedTeam !== null) &&
+    !loading;
 
   const onSubmit = async () => {
     setError(null);
     setLoading(true);
     try {
-      const { room, player } = await joinRoomByCode(code.trim(), effectiveName.trim(), account?.id);
+      const { room, player } = await joinRoomByCode(
+        code.trim(),
+        effectiveName.trim(),
+        account?.id,
+        needsTeam ? selectedTeam?.id : null
+      );
       onJoined({ roomId: room.id, playerId: player.id });
     } catch (e: any) {
       setError(e?.message ?? "Une erreur est survenue.");
@@ -209,13 +259,45 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
           className="w-full text-center text-xl bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
         />
       )}
+      {needsTeam && (
+        <fieldset className="w-full flex flex-col gap-2.5">
+          <legend className="text-sm text-inkMuted mb-2 text-center w-full">Choisis ton équipe</legend>
+          {joinTeams.map((t) => {
+            const selected = t.id === selectedTeamId;
+            const color = teamColor(t);
+            const members = joinInfo?.membersByTeam[t.id] ?? [];
+            return (
+              <button
+                key={t.id}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => setSelectedTeamId(t.id)}
+                className="w-full min-h-[60px] rounded-2xl px-4 border-2 flex items-center justify-between gap-3 text-left transition"
+                style={{
+                  borderColor: color,
+                  background: selected ? color : "transparent",
+                  color: selected ? textOnTeamColor(t) : "#FFFFFF",
+                }}
+              >
+                <span className="flex flex-col min-w-0">
+                  <span className="font-bold text-lg truncate">{t.name}</span>
+                  <span className="text-xs opacity-80 truncate">
+                    {members.length === 0 ? "Personne encore" : members.join(", ")}
+                  </span>
+                </span>
+                {selected && <Check className="w-6 h-6 shrink-0" />}
+              </button>
+            );
+          })}
+        </fieldset>
+      )}
       {error && <p className="text-danger text-center">{error}</p>}
       <button
         onClick={onSubmit}
         disabled={!canSubmit}
         className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-3 rounded-xl text-lg font-bold w-full"
       >
-        {loading ? "..." : "Rejoindre"}
+        {loading ? "..." : selectedTeam ? `Rejoindre ${selectedTeam.name}` : "Rejoindre"}
       </button>
       <Link
         href="/"
@@ -325,6 +407,103 @@ function AnimatedLeaderboard({
   );
 }
 
+/**
+ * Bandeau du haut en mode équipes (maquette "Joueur · Buzzer") : nom et
+ * score de l'équipe dans sa couleur, rapport de force face à la meilleure
+ * équipe adverse, contribution personnelle.
+ */
+function TeamHeader({
+  team,
+  standings,
+  myScore,
+  myRankInTeam,
+  myName,
+  streak,
+}: {
+  team: Team;
+  standings: ReturnType<typeof computeTeamStandings>;
+  myScore: number;
+  myRankInTeam: number;
+  myName: string;
+  streak: number;
+}) {
+  const mine = standings.find((s) => s.team.id === team.id);
+  const bestOther = standings.find((s) => s.team.id !== team.id);
+  const myTotal = mine?.score ?? 0;
+  const otherTotal = bestOther?.score ?? 0;
+  const positive = Math.max(0, myTotal) + Math.max(0, otherTotal);
+  const ratio = positive === 0 ? 50 : Math.round((Math.max(0, myTotal) / positive) * 100);
+  const diff = myTotal - otherTotal;
+  const on = textOnTeamColor(team);
+  const summary = !bestOther
+    ? ""
+    : diff > 0
+      ? `${diff} pt${diff > 1 ? "s" : ""} d'avance sur ${bestOther.team.name}`
+      : diff < 0
+        ? `${-diff} pt${diff < -1 ? "s" : ""} de retard sur ${bestOther.team.name}`
+        : `Égalité avec ${bestOther.team.name}`;
+  return (
+    <div className="w-full flex flex-col gap-2">
+      <div className="w-full rounded-2xl px-5 py-4 flex flex-col gap-2" style={{ background: teamColor(team), color: on }}>
+        <div className="flex items-center justify-between gap-3">
+          <span className="font-display font-bold text-xl truncate">{team.name}</span>
+          {mine && standings.length > 1 && <span className="text-sm font-semibold whitespace-nowrap">{formatOrdinal(mine.rank)} / {standings.length}</span>}
+        </div>
+        {bestOther && (
+          <div className="flex items-center gap-3 tabular-nums">
+            <span className="font-display font-bold text-3xl leading-none">{myTotal}</span>
+            <div
+              className="flex-1 h-2 rounded-full overflow-hidden"
+              style={{ background: "rgba(10,10,12,0.25)" }}
+              role="img"
+              aria-label={`${team.name} ${myTotal} points, ${bestOther.team.name} ${otherTotal} points`}
+            >
+              <div className="h-full" style={{ width: `${ratio}%`, background: on }} />
+            </div>
+            <span className="font-display font-bold text-xl leading-none opacity-70">{otherTotal}</span>
+          </div>
+        )}
+        {summary && <span className="text-xs font-semibold opacity-80">{summary}</span>}
+      </div>
+      <p className="text-sm text-center text-inkMuted flex items-center justify-center gap-1.5">
+        <span className="text-white font-semibold truncate max-w-[140px]">{myName}</span>
+        {streak >= 3 && (
+          <span className="inline-flex items-center gap-0.5 text-xs text-amber" title="Ton équipe enchaîne : buzzer retardé en début de manche">
+            <Flame className="w-3.5 h-3.5" /> {streak}
+          </span>
+        )}
+        · ta contribution : <span className="font-bold text-white">{myScore} pts</span>
+        {myRankInTeam > 0 && <span>({formatOrdinal(myRankInTeam)} de l’équipe)</span>}
+      </p>
+    </div>
+  );
+}
+
+/** Classement compact des équipes, pendant la fenêtre de révélation. */
+function TeamMiniStandings({
+  standings,
+  myTeamId,
+}: {
+  standings: ReturnType<typeof computeTeamStandings>;
+  myTeamId: string | null;
+}) {
+  return (
+    <ul className="w-full bg-inkSurface border border-inkBorder rounded-2xl px-4 py-3 flex flex-col gap-2 text-sm">
+      {standings.map((st) => (
+        <li key={st.team.id} className={`flex justify-between gap-3 ${st.team.id === myTeamId ? "text-white font-bold" : "text-silver"}`}>
+          <span className="flex items-center gap-2 min-w-0">
+            <TeamDot color={teamColor(st.team)} className="w-2.5 h-2.5" />
+            <span className="truncate">
+              {st.rank}. {st.team.name}
+            </span>
+          </span>
+          <span className="font-display font-bold tabular-nums">{st.score}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function BuzzerView({
   roomId,
   playerId,
@@ -343,6 +522,11 @@ function BuzzerView({
   // quoi rien ne prévient un joueur que la partie est terminée puisque
   // `rounds` ne change plus une fois la dernière manche jugée.
   const [roomStatus, setRoomStatus] = useState<"lobby" | "in_progress" | "finished" | null>(null);
+  // Mode équipes (voir migration 0025) : format de la partie + équipes,
+  // synchronisés en direct (l'hôte peut renommer ou changer de format
+  // avant le lancement).
+  const [gameMode, setGameMode] = useState<"solo" | "team">("solo");
+  const [teams, setTeams] = useState<Team[]>([]);
   // Compte joueur connecté (voir usePlayerAccount) : uniquement pour savoir
   // à qui notifier un badge tout juste débloqué (voir
   // useNewlyUnlockedBadges ci-dessous) — un joueur invité (accountId
@@ -354,7 +538,7 @@ function BuzzerView({
   // identique à ce qui existait avant la phase 4 — aucun changement visuel
   // pour qui ne s'est jamais connecté.
   const { equippedKey } = usePlayerCosmetics(account?.id ?? "");
-  const equippedCosmetic = COSMETIC_BY_KEY[account ? equippedKey : DEFAULT_COSMETIC_KEY] ?? COSMETIC_BY_KEY[DEFAULT_COSMETIC_KEY];
+  const baseCosmetic = COSMETIC_BY_KEY[account ? equippedKey : DEFAULT_COSMETIC_KEY] ?? COSMETIC_BY_KEY[DEFAULT_COSMETIC_KEY];
   // Historique + tentatives : uniquement nécessaires pour calculer les
   // statistiques de l'écran de fin de partie (buzzeur le plus rapide,
   // manche la plus disputée) — mêmes données et même calcul que côté hôte,
@@ -374,7 +558,14 @@ function BuzzerView({
   }, [roomId]);
 
   useEffect(() => {
-    return subscribeToRoom(roomId, (room) => setRoomStatus(room?.status ?? null));
+    return subscribeToRoom(roomId, (room) => {
+      setRoomStatus(room?.status ?? null);
+      setGameMode(room?.game_mode ?? "solo");
+    });
+  }, [roomId]);
+
+  useEffect(() => {
+    return subscribeToTeams(roomId, setTeams);
   }, [roomId]);
 
   useEffect(() => {
@@ -412,6 +603,31 @@ function BuzzerView({
 
   const ranked = withRanks(players);
   const me = ranked.find((p) => p.id === playerId);
+  const teamMode = gameMode === "team" && teams.length > 0;
+  const myTeam = teamMode && me?.team_id ? (teams.find((t) => t.id === me.team_id) ?? null) : null;
+  const teamStandings = teamMode ? computeTeamStandings(teams, players) : [];
+  const myStanding = myTeam ? teamStandings.find((s) => s.team.id === myTeam.id) : undefined;
+  const teamOf = (pid: string | null | undefined) => {
+    const p = pid ? players.find((x) => x.id === pid) : undefined;
+    return teamMode && p?.team_id ? (teams.find((t) => t.id === p.team_id) ?? null) : null;
+  };
+  // Séries bonus/malus portées par l'équipe (même règle que le serveur).
+  const meForLockout = me ? withTeamStreaks(me, players, teamMode) : me;
+  // Mode équipes : le buzzer prend la couleur de l'équipe si le joueur n'a
+  // pas équipé de skin (skin par défaut) ; un skin choisi reste prioritaire
+  // sur le remplissage, seul l'anneau extérieur passe à la couleur d'équipe.
+  const equippedCosmetic =
+    myTeam && baseCosmetic.key === DEFAULT_COSMETIC_KEY
+      ? {
+          ...baseCosmetic,
+          swatch: teamColor(myTeam),
+          accentColor: teamColor(myTeam),
+          textOn: "dark" as const,
+          icon: undefined,
+        }
+      : myTeam
+        ? { ...baseCosmetic, accentColor: teamColor(myTeam) }
+        : baseCosmetic;
 
   // Classement animé affiché à la révélation de la réponse (voir
   // AnimatedLeaderboard) : previousOrder mémorise l'ordre du classement tel
@@ -454,8 +670,9 @@ function BuzzerView({
     return () => clearInterval(interval);
   }, [round?.id, round?.status]);
 
-  const fullyBlocked = me && round ? isFullyBlockedThisRound(me, round) : false;
-  const unlockedAtMs = me && round ? buzzUnlockedAtMs(me.correct_streak_count, round.started_at) : null;
+  const fullyBlocked = meForLockout && round ? isFullyBlockedThisRound(meForLockout, round) : false;
+  const unlockedAtMs =
+    meForLockout && round ? buzzUnlockedAtMs(meForLockout.correct_streak_count, round.started_at) : null;
   const lockoutRemainingSeconds =
     now !== null && unlockedAtMs ? Math.max(0, Math.ceil((unlockedAtMs - now) / 1000)) : 0;
   const isLockedOut = lockoutRemainingSeconds > 0;
@@ -507,6 +724,89 @@ function BuzzerView({
       setSending(false);
     }
   };
+
+  if (roomStatus === "finished" && teamMode) {
+    const stats = computePlayerStats(players, roundAttempts);
+    const myStats = stats.get(playerId);
+    const share =
+      me && myStanding && myStanding.score > 0 ? Math.round((Math.max(0, me.score) / myStanding.score) * 100) : null;
+    const otherStandings = teamStandings.filter((st) => st.team.id !== myTeam?.id);
+    return (
+      <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+        <TeamResultBanner standings={teamStandings} perspectiveTeamId={myTeam?.id ?? null} />
+
+        {newlyUnlockedBadges.length > 0 && (
+          <div className="w-full flex flex-col gap-2">
+            {newlyUnlockedBadges.map((u) => {
+              const def = BADGE_BY_KEY[u.badgeKey];
+              if (!def) return null;
+              return (
+                <div key={`${u.badgeKey}:${u.tier}`} className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
+                  <def.icon className="w-6 h-6 shrink-0 text-gold" />
+                  <p className="text-sm font-bold text-white">Badge débloqué : {def.label}</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {me && (
+          <section
+            className="w-full bg-inkSurface border rounded-2xl p-4 flex flex-col gap-3"
+            style={{ borderColor: myStanding?.mvpPlayerId === playerId ? "#F5A524" : "#3A3A45" }}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-display font-bold text-lg truncate">Toi · {me.display_name}</span>
+              {myStanding?.mvpPlayerId === playerId && <MvpBadge label={`MVP ${myTeam?.name ?? ""}`.trim()} />}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
+              <div className="bg-inkSurface2 rounded-xl py-2.5">
+                <p className="font-display font-bold text-xl">{me.score}</p>
+                <p className="text-[11px] text-silver">points</p>
+              </div>
+              <div className="bg-inkSurface2 rounded-xl py-2.5">
+                <p className="font-display font-bold text-xl">{myStats?.goodAnswers ?? 0}</p>
+                <p className="text-[11px] text-silver">bonnes rép.</p>
+              </div>
+              <div className="bg-inkSurface2 rounded-xl py-2.5">
+                <p className="font-display font-bold text-xl">
+                  {myStats?.fastestSeconds != null ? formatSeconds(myStats.fastestSeconds) : "—"}
+                </p>
+                <p className="text-[11px] text-silver">buzz record</p>
+              </div>
+            </div>
+            {share !== null && (
+              <p className="text-sm text-silver">Tu as apporté {share} % des points de ton équipe.</p>
+            )}
+          </section>
+        )}
+
+        {myStanding && <TeamRecapTable standing={myStanding} stats={stats} highlightPlayerId={playerId} />}
+
+        {otherStandings.length > 0 && (
+          <details className="w-full">
+            <summary className="text-sm text-inkMuted hover:text-sage cursor-pointer text-center py-2">
+              Voir le détail des autres équipes
+            </summary>
+            <div className="flex flex-col gap-3 mt-2">
+              {otherStandings.map((st) => (
+                <TeamRecapTable key={st.team.id} standing={st} stats={stats} />
+              ))}
+            </div>
+          </details>
+        )}
+
+        <div className="flex gap-4">
+          <Link href="/" className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1">
+            <ArrowLeft className="w-3.5 h-3.5" /> Accueil
+          </Link>
+          <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
+            Quitter la partie
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (roomStatus === "finished") {
     return (
@@ -627,7 +927,17 @@ function BuzzerView({
           le relais et rendrait ce résumé redondant. Visible dans tous les
           autres cas, y compris avant le tout premier lancement de manche
           (round === null) et pendant qu'une manche est en cours. */}
-      {!answerRevealed && (
+      {!answerRevealed && myTeam && myStanding && (
+        <TeamHeader
+          team={myTeam}
+          standings={teamStandings}
+          myScore={me?.score ?? 0}
+          myRankInTeam={myStanding.players.findIndex((p) => p.id === playerId) + 1}
+          myName={me?.display_name ?? "…"}
+          streak={meForLockout?.correct_streak_count ?? 0}
+        />
+      )}
+      {!answerRevealed && !myTeam && (
         <div className="relative w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
           <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage" />
           <span className="font-bold truncate flex items-center gap-1.5">
@@ -666,8 +976,9 @@ function BuzzerView({
               {players.map((p) => (
                 <li
                   key={p.id}
-                  className="bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-2.5 text-center truncate"
+                  className="bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-2.5 text-center truncate flex items-center justify-center gap-2"
                 >
+                  {teamOf(p.id) && <TeamDot color={teamColor(teamOf(p.id))} className="w-2.5 h-2.5" />}
                   {p.display_name}
                 </li>
               ))}
@@ -687,7 +998,7 @@ function BuzzerView({
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
                   ? "Personne n’a buzzé à temps"
-                  : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+                  : `${buzzer?.display_name ?? "Un autre joueur"}${teamOf(buzzer?.id) ? ` (${teamOf(buzzer?.id)?.name})` : ""} a buzzé en premier !`}
             </p>
           )}
           <div className="relative w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
@@ -710,6 +1021,7 @@ function BuzzerView({
               conditionnel ci-dessus (round.status repasse alors à
               "playing" sur un round.id différent, ce qui redémonte ce
               composant et fait réapparaître le buzzer). */}
+          {teamMode && <TeamMiniStandings standings={teamStandings} myTeamId={myTeam?.id ?? null} />}
           <AnimatedLeaderboard players={ranked} previousOrder={previousOrder} meId={playerId} />
         </>
       ) : (
@@ -786,7 +1098,7 @@ function BuzzerView({
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
                   ? "Personne n’a buzzé à temps"
-                  : `${buzzer?.display_name ?? "Un autre joueur"} a buzzé en premier !`}
+                  : `${buzzer?.display_name ?? "Un autre joueur"}${teamOf(buzzer?.id) ? ` (${teamOf(buzzer?.id)?.name})` : ""} a buzzé en premier !`}
             </p>
           )}
           {!alreadyBuzzed && fullyBlocked && (

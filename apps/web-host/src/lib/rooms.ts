@@ -16,6 +16,18 @@ export type Room = {
   bonus_remontada_enabled: boolean;
   malus_streak_lockout_enabled: boolean;
   malus_streak_block_enabled: boolean;
+  // Mode équipes (voir migration 0025) : modifié uniquement via
+  // configureRoomTeams (RPC configure_room_teams).
+  game_mode: "solo" | "team";
+};
+
+export type Team = {
+  id: string;
+  room_id: string;
+  name: string;
+  color: string | null;
+  // Ordre d'affichage, et choix du nom/couleur par défaut (voir migration 0025).
+  position: number;
 };
 
 export type Player = {
@@ -29,6 +41,9 @@ export type Player = {
   // et lib/usePlayerAccount.ts) ; null pour un joueur invité, comportement
   // inchangé sinon.
   account_id: string | null;
+  // Équipe du joueur en mode équipes (voir migration 0025) ; null en solo
+  // ou tant que le joueur n'a pas été placé.
+  team_id: string | null;
   // Bonus/malus (voir migration 0017) : nombre de bonnes réponses
   // d'affilée pour CE joueur — il n'y en a jamais qu'un seul avec un
   // compteur > 0 dans toute la room à un instant donné (resolve_round_
@@ -142,7 +157,7 @@ export async function createRoom(): Promise<Room> {
 export async function getRoomById(roomId: string): Promise<Room | null> {
   const { data } = await supabase
     .from("rooms")
-    .select("id, code, status, bonus_joker_enabled, bonus_speed_enabled, bonus_remontada_enabled, malus_streak_lockout_enabled, malus_streak_block_enabled")
+    .select("id, code, status, bonus_joker_enabled, bonus_speed_enabled, bonus_remontada_enabled, malus_streak_lockout_enabled, malus_streak_block_enabled, game_mode")
     .eq("id", roomId)
     .maybeSingle();
   return (data as Room) ?? null;
@@ -160,7 +175,7 @@ export function subscribeToRoom(roomId: string, onChange: (room: Room | null) =>
   const fetchAndEmit = async () => {
     const { data } = await supabase
       .from("rooms")
-      .select("id, code, status, bonus_joker_enabled, bonus_speed_enabled, bonus_remontada_enabled, malus_streak_lockout_enabled, malus_streak_block_enabled")
+      .select("id, code, status, bonus_joker_enabled, bonus_speed_enabled, bonus_remontada_enabled, malus_streak_lockout_enabled, malus_streak_block_enabled, game_mode")
       .eq("id", roomId)
       .maybeSingle();
     onChange((data as Room) ?? null);
@@ -293,6 +308,108 @@ export async function recordPlaylistImport(roomId: string, playlistId: string): 
     { onConflict: "room_id,playlist_id", ignoreDuplicates: true }
   );
   if (error) throw error;
+}
+
+// ============================================================================
+// Mode équipes (voir supabase/migrations/0025_teams.sql). Toutes les
+// écritures passent par des fonctions SECURITY DEFINER : players.team_id et
+// rooms.game_mode ne sont pas ouverts en écriture à la clé anon.
+// ============================================================================
+
+/** 0 = repasser en solo ; 2 à 4 = mode équipes avec ce nombre d'équipes. */
+export async function configureRoomTeams(roomId: string, teamCount: 0 | 2 | 3 | 4): Promise<void> {
+  const { error } = await supabase.rpc("configure_room_teams", {
+    p_room_id: roomId,
+    p_team_count: teamCount,
+  });
+  if (error) throw error;
+}
+
+export async function renameTeam(teamId: string, name: string): Promise<void> {
+  const { error } = await supabase.rpc("rename_team", { p_team_id: teamId, p_name: name });
+  if (error) throw error;
+}
+
+export async function setPlayerTeam(playerId: string, teamId: string | null): Promise<void> {
+  const { error } = await supabase.rpc("set_player_team", {
+    p_player_id: playerId,
+    p_team_id: teamId,
+  });
+  if (error) throw error;
+}
+
+export async function shuffleRoomTeams(roomId: string): Promise<void> {
+  const { error } = await supabase.rpc("shuffle_room_teams", { p_room_id: roomId });
+  if (error) throw error;
+}
+
+/**
+ * Place les joueurs encore sans équipe dans l'équipe la moins remplie —
+ * appelée par l'hôte au lancement de chaque manche (no-op en solo).
+ */
+export async function assignUnassignedPlayers(roomId: string): Promise<void> {
+  const { error } = await supabase.rpc("assign_unassigned_players", { p_room_id: roomId });
+  if (error) throw error;
+}
+
+export async function getTeams(roomId: string): Promise<Team[]> {
+  const { data } = await supabase
+    .from("teams")
+    .select("id, room_id, name, color, position")
+    .eq("room_id", roomId)
+    .order("position");
+  return (data as Team[]) ?? [];
+}
+
+export function subscribeToTeams(roomId: string, onChange: (teams: Team[]) => void) {
+  const fetchAndEmit = async () => onChange(await getTeams(roomId));
+  fetchAndEmit();
+
+  const channel = supabase
+    .channel(`teams:${roomId}`)
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "teams", filter: `room_id=eq.${roomId}` },
+      fetchAndEmit
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
+ * Infos minimales d'une partie à partir de son code, pour l'écran
+ * "Rejoindre" : savoir AVANT de rejoindre si la partie est en mode équipes
+ * (et lesquelles proposer). null si le code n'existe pas.
+ */
+export async function getJoinInfoByCode(code: string): Promise<{
+  roomId: string;
+  gameMode: "solo" | "team";
+  teams: Team[];
+  // Pseudos déjà inscrits par équipe (affichés sur les boutons d'équipe).
+  membersByTeam: Record<string, string[]>;
+} | null> {
+  const { data } = await supabase
+    .from("rooms")
+    .select("id, game_mode")
+    .eq("code", code.trim().toUpperCase())
+    .maybeSingle();
+  if (!data) return null;
+  if (data.game_mode !== "team") {
+    return { roomId: data.id, gameMode: "solo", teams: [], membersByTeam: {} };
+  }
+  const [teams, { data: members }] = await Promise.all([
+    getTeams(data.id),
+    supabase.from("players").select("display_name, team_id").eq("room_id", data.id).order("joined_at"),
+  ]);
+  const membersByTeam: Record<string, string[]> = {};
+  for (const m of (members as { display_name: string; team_id: string | null }[] | null) ?? []) {
+    if (!m.team_id) continue;
+    (membersByTeam[m.team_id] ??= []).push(m.display_name);
+  }
+  return { roomId: data.id, gameMode: "team", teams, membersByTeam };
 }
 
 export function subscribeToPlayers(roomId: string, onChange: (players: Player[]) => void) {
@@ -670,7 +787,14 @@ export async function joinRoomAsHost(
   return data as Player;
 }
 
-export async function joinRoomByCode(code: string, displayName: string, accountId?: string | null) {
+export async function joinRoomByCode(
+  code: string,
+  displayName: string,
+  accountId?: string | null,
+  // Mode équipes : équipe choisie sur l'écran "Rejoindre" (team_id fait
+  // partie des colonnes accordées en insert, voir 0004_rls_hardening.sql).
+  teamId?: string | null
+) {
   const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("id, code, status")
@@ -688,6 +812,7 @@ export async function joinRoomByCode(code: string, displayName: string, accountI
       display_name: displayName,
       device_id: webDeviceId,
       ...(accountId ? { account_id: accountId } : {}),
+      ...(teamId ? { team_id: teamId } : {}),
     })
     .select()
     .single();
