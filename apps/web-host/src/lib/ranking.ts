@@ -45,5 +45,5 @@ export function podiumRowClasses(rank: number): { row: string; text: string } {
   if (rank === 1) return { row: "bg-gold", text: "text-goldOn" };
   if (rank === 2) return { row: "bg-silver", text: "text-silverOn" };
   if (rank === 3) return { row: "bg-bronze", text: "text-bronzeOn" };
-  return { row: "bg-inkSurface2", text: "text-white" };
+  return { row: "bg-inkSurface2", text: "text-fg" };
 }

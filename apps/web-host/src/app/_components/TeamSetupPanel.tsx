@@ -39,7 +39,7 @@ export function TeamSetupPanel({
     <section className="w-full max-w-4xl flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-xl font-bold font-display flex items-center gap-2">
-          <Users className="w-5 h-5 text-sage" /> Format de la partie
+          <Users className="w-5 h-5 text-fg" /> Format de la partie
         </h2>
         <div className="flex flex-wrap gap-3">
           <div role="group" aria-label="Format" className="flex bg-inkSurface border border-inkBorder rounded-xl p-1 gap-1">
@@ -87,7 +87,7 @@ export function TeamSetupPanel({
                 <>
                   <span>Sans équipe :</span>
                   {unassigned.map((p) => (
-                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-inkSurface2 border border-inkBorder rounded-lg pl-2.5 pr-1 py-0.5 text-white">
+                    <span key={p.id} className="inline-flex items-center gap-1.5 bg-inkSurface2 border border-inkBorder rounded-lg pl-2.5 pr-1 py-0.5 text-fg">
                       <span className="truncate max-w-[120px]">{p.display_name}</span>
                       <MoveSelect player={p} teams={teams} busy={busy} onMovePlayer={onMovePlayer} />
                     </span>
@@ -100,7 +100,7 @@ export function TeamSetupPanel({
               type="button"
               onClick={onShuffle}
               disabled={busy || players.length === 0}
-              className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage disabled:opacity-40 transition rounded-xl px-4 py-2.5 text-sm font-bold inline-flex items-center gap-2"
+              className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg disabled:opacity-40 transition rounded-xl px-4 py-2.5 text-sm font-bold inline-flex items-center gap-2"
             >
               <Shuffle className="w-4 h-4" /> Mélanger les équipes
             </button>
@@ -132,7 +132,7 @@ function SegmentButton({
       onClick={onClick}
       className={`min-h-[40px] rounded-lg text-sm font-bold transition disabled:opacity-60 ${
         square ? "w-10" : "px-4"
-      } ${active ? "bg-sage text-sageOn" : "text-inkMuted hover:text-white"}`}
+      } ${active ? "bg-sage text-sageOn border-2 border-fg shadow-sticker-sm" : "text-inkMuted hover:text-fg"}`}
     >
       {children}
     </button>
@@ -170,7 +170,7 @@ function TeamCard({
   };
 
   return (
-    <article className="bg-inkSurface border border-inkBorder rounded-2xl overflow-hidden">
+    <article className="bg-inkSurface border-[3px] border-inkBorder rounded-2xl overflow-hidden shadow-sticker">
       <div className="h-1.5" style={{ background: color }} />
       <div className="px-5 py-4 flex flex-col gap-3">
         <div className="flex items-center gap-3">
@@ -185,7 +185,7 @@ function TeamCard({
               onKeyDown={(e) => {
                 if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               }}
-              className="w-full bg-transparent border-0 border-b border-dashed border-inkBorderStrong focus:border-sage outline-none font-display font-bold text-lg py-1"
+              className="w-full bg-transparent border-0 border-b border-dashed border-inkBorderStrong focus:border-fg outline-none font-display font-bold text-lg py-1"
             />
           </label>
           <span className="text-xs text-inkMuted whitespace-nowrap">

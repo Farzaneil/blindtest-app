@@ -1,59 +1,86 @@
 /** @type {import('tailwindcss').Config} */
+
+// Couleur pilotée par une variable CSS (canaux RGB, voir globals.css) :
+// permet les modificateurs d'opacité Tailwind (bg-sage/90, bg-info/10...).
+const themeVar = (name) => `rgb(var(${name}) / <alpha-value>)`;
+
 module.exports = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // Direction "minimal premium sombre" — seule palette du projet
-        // (l'ancienne palette néon a été retirée lors de l'audit design
-        // d'octobre 2026, plus aucun écran ne l'utilisait). Doit rester
-        // synchro avec packages/ui/src/tokens.ts.
-        // États : danger (mauvaise réponse, erreurs), gold (podium, MVP).
-        danger: "#F43F5E",
+        // ------------------------------------------------------------------
+        // Direction "Arcade autocollants" (refonte d'octobre 2026, voir le
+        // canevas "Blindtest — Refonte Arcade") : fonds pastel, contours et
+        // ombres noirs pleins, stickers légèrement de travers.
+        //
+        // Trio de fonds jaune / bleu ciel / lilas : l'un sert de fond de
+        // page, les deux autres colorent les boutons et les stickers
+        // (voir les variables --bg / --c1 / --c2 dans globals.css et le
+        // choix du fond dans _components/ThemePicker.tsx).
+        //
+        // Les noms historiques (ink*, sage, info...) sont conservés pour ne
+        // pas réécrire chaque écran : seule leur valeur change.
+        // ------------------------------------------------------------------
+        page: themeVar("--bg"), // fond de page (thème choisi)
+        sage: themeVar("--c1"), // actions principales (boutons, buzzer)
+        sageOn: "#111111",
+        info: themeVar("--c2"), // décor, actions secondaires
+        infoOn: "#111111",
+        fg: "#111111", // texte, contours, ombres
+        ink: "#111111", // texte sur couleur (historique : text-ink)
+        inkSurface: "#FFFFFF", // cartes
+        inkSurface2: "#F4F4F4", // lignes / champs dans une carte
+        inkSurface3: "#E9E9E9",
+        inkBorder: "#111111",
+        inkBorderStrong: "#111111",
+        inkMuted: "#4D4D4D", // texte secondaire (contraste OK sur les 3 fonds)
+        // Logo uniquement ("BLIND") : jamais sur les boutons.
+        logo: "#FF6FB5",
+        // États : bonne / mauvaise réponse.
+        good: "#39D98A",
+        danger: "#D7263D",
+        // Podium / MVP.
         gold: "#F5A524",
-        ink: "#0A0A0C",
-        inkSurface: "#1C1C23",
-        inkSurface2: "#27272F",
-        inkSurface3: "#303039",
-        inkBorder: "#3A3A45",
-        inkBorderStrong: "#4D4D5A",
-        inkMuted: "#8B8B96",
-        sage: "#3ECF7E",
-        sageOn: "#06110A",
-        goldOn: "#1A1508",
-        silver: "#C7CBD1",
-        silverOn: "#24262B",
-        bronze: "#C97B4A",
-        bronzeOn: "#2B1608",
-        // Teal plutôt que bleu : l'ancien #6E93D6 était identique à la
-        // couleur de l'équipe des Bleus (mode équipes), on ne distinguait
-        // plus "info" d'"équipe".
-        info: "#4FB6C2",
-        infoOn: "#06181B",
-        amber: "#D6A15A",
-        amberOn: "#2B1B08",
-        // Couleurs de marque des providers de connexion joueur (écran
-        // /connexion) — Spotify utilise déjà "sage" pour son bouton actif ;
-        // celles-ci ne servent qu'aux boutons désactivés "Bientôt".
+        goldOn: "#111111",
+        silver: "#D6D9DE",
+        silverOn: "#111111",
+        bronze: "#E7B48F",
+        bronzeOn: "#111111",
+        // Joker, séries : fond orange vif, texte orangé foncé lisible.
+        amber: "#FF9A3C",
+        amberOn: "#111111",
+        amberStrong: "#9A4A00",
+        // Couleurs de marque des providers de connexion joueur (boutons
+        // désactivés "Bientôt" de /connexion).
         deezer: "#B34A9E",
         appleMusic: "#D6497A",
         ytMusic: "#C8503F",
       },
+      borderWidth: {
+        // Contour "autocollant" : la classe `border` seule vaut 2px.
+        DEFAULT: "2px",
+      },
+      boxShadow: {
+        // Ombres décalées sans flou (style autocollant).
+        sticker: "5px 5px 0 #111111",
+        "sticker-sm": "3px 3px 0 #111111",
+        "sticker-lg": "8px 8px 0 #111111",
+      },
       fontFamily: {
-        // var(--font-…) : noms générés par next/font (voir layout.tsx). Les
-        // noms en dur "Inter"/"Space Grotesk" ne correspondaient à aucune
-        // police chargée, le texte retombait sur la police système.
-        sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["var(--font-space-grotesk)", "var(--font-inter)", "sans-serif"],
+        // var(--font-…) : noms générés par next/font (voir layout.tsx).
+        sans: ["var(--font-rubik)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-dela)", "var(--font-rubik)", "sans-serif"],
       },
       keyframes: {
+        // Manche en cours : l'ombre du sticker "respire".
         pulseGlow: {
-          "0%, 100%": { boxShadow: "0 0 24px rgba(62, 207, 126, 0.25)" },
-          "50%": { boxShadow: "0 0 44px rgba(62, 207, 126, 0.45)" },
+          "0%, 100%": { boxShadow: "5px 5px 0 #111111" },
+          "50%": { boxShadow: "9px 9px 0 #111111" },
         },
       },
       animation: {
-        pulseGlow: "pulseGlow 2s ease-in-out infinite",
+        pulseGlow: "pulseGlow 1.6s ease-in-out infinite",
       },
     },
   },

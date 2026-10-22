@@ -263,7 +263,7 @@ function BonusMalusToggleRow({
         disabled={saving}
         onClick={onToggle}
         className={`relative shrink-0 w-9 h-5 rounded-full border transition-colors disabled:opacity-50 ${
-          enabled ? "bg-sage border-sage" : "bg-inkSurface2 border-inkBorder"
+          enabled ? "bg-sage border-fg border-2 shadow-sticker-sm" : "bg-inkSurface2 border-inkBorder"
         }`}
       >
         <span
@@ -362,18 +362,14 @@ function HostBuzzerView({
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
-      <div className="relative w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
-        <span
-          className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage"
-          style={team ? { background: teamColor(team) } : undefined}
-        />
+      <div className="relative w-full flex justify-between items-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-5 py-3 shadow-sticker">
         <span className="font-bold truncate">
           {me?.display_name ?? "Toi"}
           {team && <span className="font-medium text-sm ml-2" style={{ color: teamColor(team) }}>{team.name}</span>}
         </span>
         <span className="text-sm text-inkMuted whitespace-nowrap">
           {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
-          <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
+          <span className="font-bold text-fg">· {me?.score ?? 0} pts</span>
         </span>
       </div>
 
@@ -409,8 +405,8 @@ function HostBuzzerView({
                 : alreadyBuzzed
                   ? iWon
                     ? "bg-transparent"
-                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
-                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
+                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
+                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
             }`}
             /* Skin de buzzer équipé (voir usePlayerCosmetics, migration
                0022) — même traitement que BuzzerView (app/play/page.tsx) :
@@ -421,11 +417,11 @@ function HostBuzzerView({
               canBuzz
                 ? {
                     background: equippedCosmetic.swatch,
-                    color: equippedCosmetic.textOn === "dark" ? "#0A0A0C" : "#FFFFFF",
-                    boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}`,
+                    color: equippedCosmetic.textOn === "dark" ? "rgb(var(--bg))" : "#FFFFFF",
+                    boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}`,
                   }
                 : alreadyBuzzed && iWon
-                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}` }
+                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}` }
                   : undefined
             }
           >
@@ -454,7 +450,7 @@ function HostBuzzerView({
             </span>
           </button>
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center ${iWon ? "text-fg" : "text-danger"}`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -478,9 +474,9 @@ function HostBuzzerView({
             </p>
           )}
           {answerRevealed && (
-            <div className="w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
+            <div className="w-full text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-4 shadow-sticker">
               <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
-              <p className="text-xl font-bold text-sage font-display">
+              <p className="text-xl font-bold text-fg font-display">
                 {round.title} — {round.artist}
               </p>
             </div>
@@ -490,7 +486,7 @@ function HostBuzzerView({
 
       <button
         onClick={onBackToAdmin}
-        className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+        className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
       >
         <LayoutDashboard className="w-3.5 h-3.5" /> Vue admin
       </button>
@@ -1563,10 +1559,10 @@ function HostScreenInner() {
 
   if (error) {
     return (
-      <main className="flex items-center justify-center min-h-screen p-10 text-center bg-ink">
-        <div className="max-w-md bg-inkSurface border border-danger/40 rounded-2xl p-8">
+      <main className="flex items-center justify-center min-h-screen p-10 text-center bg-page">
+        <div className="max-w-md bg-inkSurface border-[3px] border-danger/40 rounded-2xl p-8 shadow-sticker">
           <p className="text-xl text-danger font-bold mb-2">Oups</p>
-          <p className="text-white/90">
+          <p className="text-fg/90">
             {error}
             <br />
             <span className="text-inkMuted text-sm">
@@ -1581,7 +1577,7 @@ function HostScreenInner() {
 
   if (!room) {
     return (
-      <main className="flex items-center justify-center min-h-screen bg-ink">
+      <main className="flex items-center justify-center min-h-screen bg-page">
         <p className="text-xl text-inkMuted animate-pulse">Création de la partie…</p>
       </main>
     );
@@ -1694,7 +1690,7 @@ function HostScreenInner() {
   // le JSX produit.
   if (room && hostPlayerId && hostView === "buzzer") {
     return (
-      <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-ink">
+      <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-page">
         <RejoinRequestsBanner
           requests={rejoinRequests}
           players={players}
@@ -1717,7 +1713,7 @@ function HostScreenInner() {
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-ink">
+    <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
       <PlayerAccountCorner />
       <RejoinRequestsBanner
         requests={rejoinRequests}
@@ -1727,11 +1723,11 @@ function HostScreenInner() {
       />
       {gameStarted ? (
         <>
-          <div className="text-center bg-inkSurface border border-inkBorder rounded-2xl px-10 py-6">
+          <div className="text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-10 py-6 shadow-sticker">
             <p className="text-sm uppercase tracking-[0.3em] text-inkMuted mb-1">
               Rejoignez la partie avec le code
             </p>
-            <p className="text-4xl sm:text-6xl font-bold tracking-widest text-sage font-display">{room.code}</p>
+            <p className="text-4xl sm:text-6xl font-bold tracking-widest text-fg font-display">{room.code}</p>
             {/* Hôte qui joue aussi : la vue admin n'avait aucun moyen de
                 revenir au buzzer (seul le lancement d'une manche y
                 rebasculait automatiquement) — un clic sur "Vue admin"
@@ -1740,7 +1736,7 @@ function HostScreenInner() {
             {hostPlayerId && (
               <button
                 onClick={() => setHostView("buzzer")}
-                className="mt-4 bg-sage text-ink hover:bg-sage/90 transition px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2"
+                className="mt-4 bg-sage text-ink hover:bg-sage/90 transition px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
               >
                 <Gamepad2 className="w-4 h-4" /> Revenir à mon buzzer
               </button>
@@ -1753,13 +1749,13 @@ function HostScreenInner() {
             <div className="flex justify-center gap-4 mt-3">
               <button
                 onClick={() => setShowJoinQr((s) => !s)}
-                className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+                className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
               >
                 <QrCode className="w-3.5 h-3.5" /> {showJoinQr ? "Masquer le QR code" : "QR code"}
               </button>
               <Link
                 href="/"
-                className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+                className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Accueil
               </Link>
@@ -1775,8 +1771,7 @@ function HostScreenInner() {
           {teamMode ? (
             <TeamScoreCards standings={teamStandings} />
           ) : (
-          <div className="relative w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl p-6">
-            <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
+          <div className="relative w-full max-w-xl bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
             <h2 className="text-2xl font-bold mb-4 font-display">Joueurs connectés ({players.length})</h2>
             <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
               {players.length === 0 && <li className="text-inkMuted">En attente de joueurs…</li>}
@@ -1794,7 +1789,7 @@ function HostScreenInner() {
                           informatif ici, l'application réelle se fait côté serveur. */}
                       {p.correct_streak_count >= 3 && (
                         <span
-                          className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
+                          className="inline-flex items-center gap-0.5 text-xs text-amberStrong shrink-0"
                           title={`${p.correct_streak_count} bonnes réponses d'affilée — buzzer retardé`}
                         >
                           <Flame className="w-3.5 h-3.5" /> {p.correct_streak_count}
@@ -1820,14 +1815,13 @@ function HostScreenInner() {
         // monde est à 0) : un bandeau compact (code + joueurs + mode) suffit
         // et laisse toute la place à la préparation de la playlist plutôt
         // que d'empiler 2 grandes cartes peu informatives à ce stade.
-        <div className="relative w-full max-w-xl bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4 flex flex-col gap-2">
-          <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-sage" />
+        <div className="relative w-full max-w-xl bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-4 flex flex-col gap-2 shadow-sticker">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-2xl font-bold tracking-widest text-sage font-display">{room.code}</span>
+            <span className="text-2xl font-bold tracking-widest text-fg font-display">{room.code}</span>
             <div className="flex gap-4">
               <Link
                 href="/"
-                className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+                className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Accueil
               </Link>
@@ -1849,9 +1843,9 @@ function HostScreenInner() {
               {hostMode && (
                 <span className="inline-flex items-center gap-1.5 whitespace-nowrap bg-inkSurface2 border border-inkBorder rounded-full px-3 py-1 text-xs font-medium">
                   {hostMode === "gamemaster" ? (
-                    <Mic2 className="w-3.5 h-3.5 text-sage" />
+                    <Mic2 className="w-3.5 h-3.5 text-fg" />
                   ) : (
-                    <Headphones className="w-3.5 h-3.5 text-sage" />
+                    <Headphones className="w-3.5 h-3.5 text-fg" />
                   )}
                   {hostMode === "gamemaster" ? "Maître du jeu" : "Tout le monde participe"}
                   {teamMode && " · Équipes"}
@@ -1867,7 +1861,7 @@ function HostScreenInner() {
                 {players.map((p) => (
                   <li
                     key={p.id}
-                    className="bg-inkSurface2 border border-inkBorder rounded-lg px-2.5 py-1 text-xs text-white truncate max-w-[160px]"
+                    className="bg-inkSurface2 border border-inkBorder rounded-lg px-2.5 py-1 text-xs text-fg truncate max-w-[160px]"
                   >
                     {p.display_name}
                   </li>
@@ -1903,14 +1897,14 @@ function HostScreenInner() {
       <div className="w-full max-w-xl">
         <button
           onClick={() => setShowHistory((s) => !s)}
-          className="text-sm text-inkMuted hover:text-sage underline transition"
+          className="text-sm text-inkMuted hover:text-fg underline transition"
         >
           {showHistory
             ? "▲ Masquer l’historique des manches"
             : `▼ Voir l’historique des manches (${roundHistory.length})`}
         </button>
         {showHistory && (
-          <div className="mt-2 bg-inkSurface border border-inkBorder rounded-2xl p-4 max-h-72 overflow-y-auto">
+          <div className="mt-2 bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-4 max-h-72 overflow-y-auto shadow-sticker">
             {roundHistory.length === 0 ? (
               <p className="text-inkMuted text-sm">Aucune manche jouée pour l’instant.</p>
             ) : (
@@ -1927,7 +1921,7 @@ function HostScreenInner() {
                     <li key={r.id} className="bg-inkSurface2 rounded-xl px-4 py-2 text-sm">
                       <p className="truncate font-medium flex items-center gap-1.5">
                         {i + 1}. {r.title} — {r.artist}
-                        {r.is_joker && <Dice5 className="w-3.5 h-3.5 text-amber shrink-0" />}
+                        {r.is_joker && <Dice5 className="w-3.5 h-3.5 text-amberStrong shrink-0" />}
                       </p>
                       {attemptsForRound.length === 0 ? (
                         <p className="text-inkMuted">Personne n’a trouvé</p>
@@ -1943,7 +1937,7 @@ function HostScreenInner() {
                                   ? "artiste seul"
                                   : "rien trouvé";
                             const colorClass =
-                              a.points_awarded > 0 ? "text-sage" : "text-danger";
+                              a.points_awarded > 0 ? "text-fg" : "text-danger";
                             const bonusLabels = [
                               a.speed_bonus_awarded && "bonus vitesse",
                               a.remontada_bonus_awarded && "bonus remontada",
@@ -1977,15 +1971,14 @@ function HostScreenInner() {
 
       <div className="w-full max-w-6xl text-center">
         {!canStartRound && round?.status === "playing" && (
-          <div className="relative bg-inkSurface border border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow">
-            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-sage" />
+          <div className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow shadow-sticker">
             {round.is_joker && (
               <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full mb-3">
                 <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
               </span>
             )}
             <p className="text-2xl font-bold flex items-center justify-center gap-2">
-              <Music2 className="w-6 h-6 text-sage" /> Manche en cours — en attente d’un buzz…
+              <Music2 className="w-6 h-6 text-fg" /> Manche en cours — en attente d’un buzz…
             </p>
             {!blindMode && (
               <p className="text-lg text-inkMuted mt-1">
@@ -2000,20 +1993,19 @@ function HostScreenInner() {
               </p>
             )}
             {timeLeft !== null && (
-              <p className="text-4xl sm:text-5xl font-bold mt-4 text-sage tabular-nums font-display">{timeLeft}s</p>
+              <p className="text-4xl sm:text-5xl font-bold mt-4 text-fg tabular-nums font-display">{timeLeft}s</p>
             )}
           </div>
         )}
         {!canStartRound && round?.status === "buzzed" && (
-          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
-            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-sage" />
+          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
             {round.is_joker && (
               <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
                 <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
               </span>
             )}
-            <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
-              <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+            <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
+              <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
             {teamOfPlayer(winner?.id) && (
               <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
@@ -2040,7 +2032,7 @@ function HostScreenInner() {
                 <button
                   onClick={handleReveal}
                   disabled={revealing}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2"
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
                 >
                   <Eye className="w-5 h-5" /> {revealing ? "..." : "Révéler la réponse"}
                 </button>
@@ -2053,15 +2045,14 @@ function HostScreenInner() {
           </div>
         )}
         {!canStartRound && round?.status === "revealed" && (
-          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
-            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-sage" />
+          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
             {round.is_joker && (
               <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
                 <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
               </span>
             )}
-            <p className="text-3xl font-bold text-white flex items-center justify-center gap-2">
-              <Bell className="w-7 h-7 text-sage" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+            <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
+              <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
             {teamOfPlayer(winner?.id) && (
               <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
@@ -2075,9 +2066,9 @@ function HostScreenInner() {
               <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <CheckCircle2 className="w-5 h-5 text-sage" /> Artiste trouvé
+                  <CheckCircle2 className="w-5 h-5 text-fg" /> Artiste trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
@@ -2090,9 +2081,9 @@ function HostScreenInner() {
               <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <CheckCircle2 className="w-5 h-5 text-sage" /> Titre trouvé
+                  <CheckCircle2 className="w-5 h-5 text-fg" /> Titre trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
@@ -2105,19 +2096,19 @@ function HostScreenInner() {
               <div className="grid grid-cols-2 gap-3 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <Music className="w-4 h-4 text-sage" /> Titre seul (+1)
+                  <Music className="w-4 h-4 text-fg" /> Titre seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <Mic className="w-4 h-4 text-sage" /> Artiste seul (+1)
+                  <Mic className="w-4 h-4 text-fg" /> Artiste seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(true, true)}
-                  className="bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                  className="bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Les deux (+2)
                 </button>
@@ -2133,17 +2124,17 @@ function HostScreenInner() {
         )}
 
         {isUnresolvedTimeout && round && (
-          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+          <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
             <p className="text-3xl font-bold text-danger">Personne n’a buzzé à temps</p>
             <p className="text-lg text-inkMuted">
               La réponse était :{" "}
-              <span className="font-bold text-sage">
+              <span className="font-bold text-fg">
                 {round.title} — {round.artist}
               </span>
             </p>
             <button
               onClick={() => setAcknowledgedTimeoutRoundId(round.id)}
-              className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold"
+              className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold border-2 border-fg shadow-sticker-sm"
             >
               Continuer
             </button>
@@ -2157,11 +2148,10 @@ function HostScreenInner() {
             <div className="flex flex-col md:flex-row gap-4 w-full">
               <button
                 onClick={() => setHostMode("gamemaster")}
-                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-sage rounded-2xl px-6 py-5 text-left"
+                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
               >
-                <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-sage" />
-                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
-                  <Mic2 className="w-5 h-5 text-sage" /> Maître du jeu
+                <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
+                  <Mic2 className="w-5 h-5 text-fg" /> Maître du jeu
                 </p>
                 <p className="text-sm text-inkMuted">
                   Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
@@ -2170,11 +2160,10 @@ function HostScreenInner() {
               </button>
               <button
                 onClick={() => setHostMode("player")}
-                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-info rounded-2xl px-6 py-5 text-left"
+                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
               >
-                <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-info" />
-                <p className="text-lg font-bold mb-1 text-white flex items-center gap-2">
-                  <Headphones className="w-5 h-5 text-info" /> Tout le monde participe
+                <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
+                  <Headphones className="w-5 h-5 text-fg" /> Tout le monde participe
                 </p>
                 <p className="text-sm text-inkMuted">
                   Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
@@ -2189,8 +2178,7 @@ function HostScreenInner() {
                 d'attendre la fin de la file d'attente. Vide = comportement
                 historique (jusqu'à la fin de la playlist). Réglable aussi
                 plus tard depuis le panneau playlist (voir plus bas). */}
-            <div className="relative w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-5 py-4 flex flex-col gap-2">
-              <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-info" />
+            <div className="relative w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-5 py-4 flex flex-col gap-2 shadow-sticker">
               <label htmlFor="target-score" className="text-sm font-bold text-inkMuted flex items-center gap-1.5">
                 <Target className="w-4 h-4" /> Score à atteindre pour gagner (optionnel)
               </label>
@@ -2210,7 +2198,7 @@ function HostScreenInner() {
                   setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Illimité (jusqu'à la fin de la playlist)"
-                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                className="bg-inkSurface2 border-2 border-inkBorder focus:border-fg rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
               />
               <p className="text-xs text-inkMuted">
                 Laisse vide pour jouer jusqu’à la fin de la playlist. Sinon, la partie se termine
@@ -2236,7 +2224,7 @@ function HostScreenInner() {
                   setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                 }}
                 placeholder="Toute la playlist"
-                className="bg-inkSurface2 border-2 border-inkBorder focus:border-sage rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                className="bg-inkSurface2 border-2 border-inkBorder focus:border-fg rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
               />
               <p className="text-xs text-inkMuted">
                 Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce
@@ -2255,10 +2243,9 @@ function HostScreenInner() {
             Spotify, construction de playlist…) restent masqués tant que ce
             n'est pas résolu. */}
         {canStartRound && modeChosen && blindMode && !hostJoinResolved && !isUnresolvedTimeout && (
-          <div className="relative flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border border-inkBorder rounded-2xl px-6 py-6">
-            <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-sage" />
-            <p className="text-lg font-bold text-white text-center flex items-center gap-2">
-              <Gamepad2 className="w-5 h-5 text-sage" /> Tu joues aussi sur cet écran ?
+          <div className="relative flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-6 shadow-sticker">
+            <p className="text-lg font-bold text-fg text-center flex items-center gap-2">
+              <Gamepad2 className="w-5 h-5 text-fg" /> Tu joues aussi sur cet écran ?
             </p>
             <p className="text-sm text-inkMuted text-center">
               Transforme cet écran en buzzer pour toi entre les manches, sans besoin d’un autre
@@ -2274,13 +2261,13 @@ function HostScreenInner() {
                 <button
                   onClick={() => handleJoinAsHost(hostPlayerAccount.pseudo)}
                   disabled={joiningAsHost}
-                  className="flex-1 bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-3 rounded-xl font-bold"
+                  className="flex-1 bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm"
                 >
                   {joiningAsHost ? "..." : `Oui, je joue (en tant que ${hostPlayerAccount.pseudo})`}
                 </button>
                 <button
                   onClick={() => setHostJoinSkipped(true)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-white transition px-4 py-3 rounded-xl font-bold text-inkMuted"
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted"
                 >
                   Non, je gère juste le jeu
                 </button>
@@ -2289,13 +2276,13 @@ function HostScreenInner() {
               <div className="flex gap-3 w-full">
                 <button
                   onClick={() => setJoinHostFormOpen(true)}
-                  className="flex-1 bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold"
+                  className="flex-1 bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm"
                 >
                   Oui, je joue
                 </button>
                 <button
                   onClick={() => setHostJoinSkipped(true)}
-                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-white transition px-4 py-3 rounded-xl font-bold text-inkMuted"
+                  className="flex-1 bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted"
                 >
                   Non, je gère juste le jeu
                 </button>
@@ -2305,12 +2292,12 @@ function HostScreenInner() {
                 <input
                   value={hostNameDraft}
                   onChange={(e) => setHostNameDraft(e.target.value)}
-                  className="min-w-0 flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-3 py-2 text-white"
+                  className="min-w-0 flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-fg outline-none transition rounded-xl px-3 py-2 text-fg"
                 />
                 <button
                   onClick={() => handleJoinAsHost(hostNameDraft)}
                   disabled={joiningAsHost || hostNameDraft.trim().length === 0}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap"
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap border-2 border-fg shadow-sticker-sm"
                 >
                   <UserPlus className="w-4 h-4" /> {joiningAsHost ? "..." : "Confirmer"}
                 </button>
@@ -2340,7 +2327,7 @@ function HostScreenInner() {
           <div className="flex flex-col items-center gap-2">
             <button
               onClick={spotifyPlayer.connect}
-              className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold"
+              className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold border-2 border-fg shadow-sticker-sm"
             >
               Se connecter à Spotify pour préparer une playlist
             </button>
@@ -2372,7 +2359,7 @@ function HostScreenInner() {
                 </p>
                 <button
                   onClick={spotifyPlayer.reconnect}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
                 >
                   <RefreshCw className="w-3.5 h-3.5" /> Réessayer
                 </button>
@@ -2382,26 +2369,25 @@ function HostScreenInner() {
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
-          <div className="relative flex flex-col items-center gap-6 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
-            <span className="absolute top-0 left-8 right-8 h-1 rounded-b-md bg-gold" />
-            <Trophy className="w-10 h-10 text-gold" />
+          <div className="relative flex flex-col items-center gap-6 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+            <Trophy className="w-10 h-10 text-fg" />
             {targetScoreReached && teamMode ? (
-              <p className="text-2xl font-bold text-white text-center font-display">
+              <p className="text-2xl font-bold text-fg text-center font-display">
                 {teamsReachingTargetScore.map((s) => s.team.name).join(" et ")}{" "}
                 {teamsReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore} points
               </p>
             ) : targetScoreReached ? (
-              <p className="text-2xl font-bold text-white text-center font-display">
+              <p className="text-2xl font-bold text-fg text-center font-display">
                 {playersReachingTargetScore.map((p) => p.display_name).join(" et ")}{" "}
                 {playersReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore}{" "}
                 points
               </p>
             ) : maxRoundsReached ? (
-              <p className="text-2xl font-bold text-white text-center font-display">
+              <p className="text-2xl font-bold text-fg text-center font-display">
                 Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte
               </p>
             ) : (
-              <p className="text-2xl font-bold text-white font-display">Playlist terminée</p>
+              <p className="text-2xl font-bold text-fg font-display">Playlist terminée</p>
             )}
 
             {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
@@ -2442,10 +2428,10 @@ function HostScreenInner() {
                     // ou 3 à ce stade.
                     const podiumColor =
                       p.rank === 1
-                        ? "border-gold bg-gold/10 text-gold"
+                        ? "border-gold bg-gold/10 text-fg"
                         : p.rank === 2
-                          ? "border-silver bg-silver/10 text-silver"
-                          : "border-bronze bg-bronze/10 text-bronze";
+                          ? "border-silver bg-silver/10 text-inkMuted"
+                          : "border-bronze bg-bronze/10 text-fg";
                     return (
                       <div key={p.id} className="flex flex-col items-center gap-1 w-20">
                         <span className="text-sm truncate w-full text-center">{p.display_name}</span>
@@ -2465,7 +2451,7 @@ function HostScreenInner() {
                 {fastestAttempt && (
                   <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
                     <p className="text-xs text-inkMuted flex items-center gap-1"><Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide</p>
-                    <p className="text-sm font-bold text-sage">
+                    <p className="text-sm font-bold text-fg">
                       {fastestPlayer?.display_name ?? "Joueur"} —{" "}
                       {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
                     </p>
@@ -2474,7 +2460,7 @@ function HostScreenInner() {
                 {mostContestedRound && mostContestedCount > 1 && (
                   <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
                     <p className="text-xs text-inkMuted flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Manche la plus disputée</p>
-                    <p className="text-sm font-bold text-sage">
+                    <p className="text-sm font-bold text-fg">
                       {mostContestedRound.title} ({mostContestedCount} tentatives)
                     </p>
                   </div>
@@ -2507,13 +2493,13 @@ function HostScreenInner() {
                   resumeRoom(room.id).catch(() => {});
                   setBuildingPlaylist(true);
                 }}
-                className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2"
+                className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
               >
                 <Play className="w-4 h-4" /> Continuer la partie
               </button>
               <button
                 onClick={handleRestartGame}
-                className="flex-none sm:min-w-[220px] bg-inkSurface2 border border-inkBorderStrong hover:border-sage transition px-6 py-3 rounded-xl font-bold text-white inline-flex items-center justify-center gap-2"
+                className="flex-none sm:min-w-[220px] bg-inkSurface2 border border-inkBorderStrong hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2"
               >
                 <RotateCcw className="w-4 h-4" /> Redémarrer une partie
               </button>
@@ -2526,7 +2512,7 @@ function HostScreenInner() {
         )}
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !gameOver && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-4 bg-inkSurface border border-inkBorder rounded-2xl px-8 py-8">
+          <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
             {launchingRound ? (
               <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
             ) : (
@@ -2544,7 +2530,7 @@ function HostScreenInner() {
             <button
               onClick={handlePlayNextInQueue}
               disabled={players.length === 0 || launchingRound}
-              className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-4 rounded-xl text-xl font-bold inline-flex items-center gap-2"
+              className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-4 rounded-xl text-xl font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
             >
               <Play className="w-5 h-5" /> Manche suivante
             </button>
@@ -2555,7 +2541,7 @@ function HostScreenInner() {
             )}
             <button
               onClick={() => setBuildingPlaylist(true)}
-              className="text-sm text-inkMuted hover:text-sage underline transition"
+              className="text-sm text-inkMuted hover:text-fg underline transition"
             >
               + Ajouter d’autres morceaux à la file
             </button>
@@ -2564,23 +2550,22 @@ function HostScreenInner() {
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
           <div className="relative w-full flex flex-col gap-7 text-left bg-inkSurface2 border border-inkBorder rounded-2xl p-7 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
-            <span className="absolute top-0 left-7 right-7 h-1 rounded-b-md bg-sage" />
             <div className="flex justify-between items-center">
               <span className="text-sm text-inkMuted flex items-center gap-1.5">
                 Mode :
                 {hostMode === "gamemaster" ? (
                   <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
-                    <Mic2 className="w-3.5 h-3.5 text-sage" /> Maître du jeu
+                    <Mic2 className="w-3.5 h-3.5 text-fg" /> Maître du jeu
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
-                    <Headphones className="w-3.5 h-3.5 text-sage" /> Tout le monde participe
+                    <Headphones className="w-3.5 h-3.5 text-fg" /> Tout le monde participe
                   </span>
                 )}
               </span>
               <button
                 onClick={() => setHostMode(null)}
-                className="text-sm text-inkMuted hover:text-sage underline transition"
+                className="text-sm text-inkMuted hover:text-fg underline transition"
               >
                 Changer de mode
               </button>
@@ -2619,7 +2604,7 @@ function HostScreenInner() {
                       setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Illimité"
-                    className="w-16 bg-inkSurface border border-inkBorderStrong focus:border-sage outline-none transition rounded-lg px-2 py-1 text-white font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                    className="w-16 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                   <span className="text-inkMuted">pts</span>
                 </label>
@@ -2646,7 +2631,7 @@ function HostScreenInner() {
                       setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Toute la playlist"
-                    className="w-32 bg-inkSurface border border-inkBorderStrong focus:border-sage outline-none transition rounded-lg px-2 py-1 text-white font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                    className="w-32 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                 </label>
               </div>
@@ -2671,7 +2656,7 @@ function HostScreenInner() {
                       label="Manche joker"
                       description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
                       icon={<Dice5 className="w-4 h-4" />}
-                      iconClassName="text-amber"
+                      iconClassName="text-amberStrong"
                       enabled={room.bonus_joker_enabled}
                       saving={savingBonusMalusSetting === "bonus_joker_enabled"}
                       onToggle={() => handleToggleBonusMalusSetting("bonus_joker_enabled")}
@@ -2680,7 +2665,7 @@ function HostScreenInner() {
                       label="Bonus vitesse"
                       description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 2 secondes."
                       icon={<Zap className="w-4 h-4" />}
-                      iconClassName="text-sage"
+                      iconClassName="text-fg"
                       enabled={room.bonus_speed_enabled}
                       saving={savingBonusMalusSetting === "bonus_speed_enabled"}
                       onToggle={() => handleToggleBonusMalusSetting("bonus_speed_enabled")}
@@ -2689,7 +2674,7 @@ function HostScreenInner() {
                       label="Bonus remontada"
                       description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement, avec plus de 5 points d'écart avec l'avant-dernier."
                       icon={<TrendingUp className="w-4 h-4" />}
-                      iconClassName="text-sage"
+                      iconClassName="text-fg"
                       enabled={room.bonus_remontada_enabled}
                       saving={savingBonusMalusSetting === "bonus_remontada_enabled"}
                       onToggle={() => handleToggleBonusMalusSetting("bonus_remontada_enabled")}
@@ -2700,7 +2685,7 @@ function HostScreenInner() {
                       label="Malus série"
                       description="3 bonnes réponses d'affilée par la même personne : son buzzer est retardé de 5s, puis 10s, puis 15s au tour suivant, tant que personne d'autre n'a répondu juste."
                       icon={<Flame className="w-4 h-4" />}
-                      iconClassName="text-amber"
+                      iconClassName="text-amberStrong"
                       enabled={room.malus_streak_lockout_enabled}
                       saving={savingBonusMalusSetting === "malus_streak_lockout_enabled"}
                       onToggle={() => handleToggleBonusMalusSetting("malus_streak_lockout_enabled")}
@@ -2767,7 +2752,7 @@ function HostScreenInner() {
                 <button
                   onClick={handleLoadMyPlaylists}
                   disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
-                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-info disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
+                  className="bg-inkSurface2 border border-inkBorderStrong hover:border-fg disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start"
                 >
                   {myPlaylists !== null
                     ? (
@@ -2794,7 +2779,7 @@ function HostScreenInner() {
                           <button
                             onClick={() => handleImportPlaylist(playlist.id)}
                             disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
-                            className="bg-inkSurface border border-inkBorderStrong hover:border-info disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
+                            className="bg-inkSurface border border-inkBorderStrong hover:border-fg disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap"
                           >
                             {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
                           </button>
@@ -2817,9 +2802,8 @@ function HostScreenInner() {
                   au lieu d'en faire partie. Un simple liseré sauge à
                   gauche suffit à la signaler comme le panneau important. */}
               <div className="relative flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4">
-                <span className="absolute top-0 left-4 right-4 h-1 rounded-b-md bg-gold" />
                 <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-white">
+                  <h3 className="font-bold text-fg">
                     File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
                   </h3>
                   {upcomingQueue.length > 0 && (
@@ -2844,7 +2828,7 @@ function HostScreenInner() {
                         onDragStart={handleDragStart(i)}
                         onDragOver={handleDragOver}
                         onDrop={handleDrop(i)}
-                        className="flex justify-between items-center gap-3 bg-ink rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
+                        className="flex justify-between items-center gap-3 bg-page rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
                       >
                         <span className="flex items-center gap-2 min-w-0 flex-1">
                           <GripVertical className="w-4 h-4 text-inkMuted flex-shrink-0" />
@@ -2873,7 +2857,7 @@ function HostScreenInner() {
                 <button
                   onClick={handlePlayNextInQueue}
                   disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1"
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1 border-2 border-fg shadow-sticker-sm"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
                     {!launchingRound && <Play className="w-5 h-5" />}

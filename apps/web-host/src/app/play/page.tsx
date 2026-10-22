@@ -157,7 +157,7 @@ export default function PlayPage() {
   };
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-ink">
+    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-page">
       {checkingSession ? (
         <p className="text-inkMuted animate-pulse">Reconnexion…</p>
       ) : session ? (
@@ -293,19 +293,18 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
   };
 
   return (
-    <div className="relative flex flex-col items-center gap-4 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
+    <div className="relative flex flex-col items-center gap-4 w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-8 shadow-sticker">
       <PlayerAccountCorner />
-      <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-info" />
-      <h1 className="text-3xl font-bold mb-2 font-display text-white">Rejoindre une partie</h1>
+      <h1 className="text-3xl font-bold mb-2 font-display text-fg">Rejoindre une partie</h1>
       <input
         value={code}
         onChange={(e) => setCode(e.target.value)}
         placeholder="Code de la partie"
-        className="w-full text-center text-xl uppercase bg-inkSurface2 border-2 border-inkBorder focus:border-sage outline-none transition rounded-xl px-4 py-3"
+        className="w-full text-center text-xl uppercase bg-inkSurface2 border-2 border-inkBorder focus:border-fg outline-none transition rounded-xl px-4 py-3"
       />
       {account && !useCustomName ? (
         <p className="text-sm text-inkMuted">
-          Tu rejoins en tant que <span className="font-semibold text-white">{account.pseudo}</span>
+          Tu rejoins en tant que <span className="font-semibold text-fg">{account.pseudo}</span>
         </p>
       ) : (
         <input
@@ -322,7 +321,7 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
           placeholder="Ton pseudo"
           aria-invalid={pseudoTaken}
           className={`w-full text-center text-xl bg-inkSurface2 border-2 outline-none transition rounded-xl px-4 py-3 ${
-            pseudoTaken ? "border-danger focus:border-danger" : "border-inkBorder focus:border-sage"
+            pseudoTaken ? "border-danger focus:border-danger" : "border-inkBorder focus:border-fg"
           }`}
         />
       )}
@@ -344,14 +343,16 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
                 type="button"
                 aria-pressed={selected}
                 onClick={() => setSelectedTeamId(t.id)}
-                className="w-full min-h-[60px] rounded-2xl px-4 border-2 flex items-center justify-between gap-3 text-left transition"
+                className={`w-full min-h-[60px] rounded-2xl px-4 border-[3px] border-fg flex items-center justify-between gap-3 text-left transition ${
+                  selected ? "shadow-sticker" : "shadow-sticker-sm"
+                }`}
                 style={{
-                  borderColor: color,
-                  background: selected ? color : "transparent",
-                  color: selected ? textOnTeamColor(t) : "#FFFFFF",
+                  background: selected ? color : "#FFFFFF",
+                  color: selected ? textOnTeamColor(t) : "#111111",
                 }}
               >
-                <span className="flex flex-col min-w-0">
+                {!selected && <TeamDot color={color} className="w-4 h-4 shrink-0" />}
+                <span className="flex flex-col min-w-0 flex-1">
                   <span className="font-bold text-lg truncate">{t.name}</span>
                   <span className="text-xs opacity-80 truncate">
                     {members.length === 0 ? "Personne encore" : members.join(", ")}
@@ -368,7 +369,7 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
         <div className="w-full bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3 flex flex-col gap-2 text-center">
           {rejoinRequestId ? (
             <>
-              <p className="text-sm text-white font-semibold animate-pulse">Demande envoyée à l’hôte…</p>
+              <p className="text-sm text-fg font-semibold animate-pulse">Demande envoyée à l’hôte…</p>
               <p className="text-xs text-inkMuted">
                 Dès qu’il accepte, tu reprends ta place avec ton score. Garde cette page ouverte.
               </p>
@@ -390,7 +391,7 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
               <button
                 type="button"
                 onClick={onRequestRejoin}
-                className="bg-inkSurface3 border border-inkBorderStrong hover:border-sage transition rounded-xl px-4 py-2.5 text-sm font-bold"
+                className="bg-inkSurface3 border border-inkBorderStrong hover:border-fg transition rounded-xl px-4 py-2.5 text-sm font-bold"
               >
                 C’est moi : demander à reprendre ma place
               </button>
@@ -401,13 +402,14 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
       <button
         onClick={onSubmit}
         disabled={!canSubmit}
-        className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-3 rounded-xl text-lg font-bold w-full"
+        className="bg-sage text-fg hover:brightness-95 disabled:opacity-40 transition px-8 py-3 rounded-xl text-lg font-display w-full border-[3px] border-fg shadow-sticker-sm"
+        style={selectedTeam ? { background: teamColor(selectedTeam), color: textOnTeamColor(selectedTeam) } : undefined}
       >
         {loading ? "..." : selectedTeam ? `Rejoindre ${selectedTeam.name}` : "Rejoindre"}
       </button>
       <Link
         href="/"
-        className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+        className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
       >
         <ArrowLeft className="w-3.5 h-3.5" /> Accueil
       </Link>
@@ -483,9 +485,9 @@ function AnimatedLeaderboard({
           p.rank <= 3
             ? `${plate.row} border-transparent`
             : isMe
-              ? "bg-sage/10 border-sage"
+              ? "bg-sage/10 border-fg"
               : "bg-inkSurface2 border-transparent";
-        const textClass = p.rank <= 3 ? plate.text : "text-white";
+        const textClass = p.rank <= 3 ? plate.text : "text-fg";
         return (
           <li
             key={p.id}
@@ -500,7 +502,7 @@ function AnimatedLeaderboard({
               <span className="truncate font-medium">{p.display_name}</span>
               {p.correct_streak_count >= 3 && (
                 <Flame
-                  className="w-3.5 h-3.5 text-amber shrink-0"
+                  className="w-3.5 h-3.5 text-amberStrong shrink-0"
                   aria-label="Bonnes réponses d'affilée"
                 />
               )}
@@ -572,13 +574,13 @@ function TeamHeader({
         {summary && <span className="text-xs font-semibold opacity-80">{summary}</span>}
       </div>
       <p className="text-sm text-center text-inkMuted flex items-center justify-center gap-1.5">
-        <span className="text-white font-semibold truncate max-w-[140px]">{myName}</span>
+        <span className="text-fg font-semibold truncate max-w-[140px]">{myName}</span>
         {streak >= 3 && (
-          <span className="inline-flex items-center gap-0.5 text-xs text-amber" title="Ton équipe enchaîne : buzzer retardé en début de manche">
+          <span className="inline-flex items-center gap-0.5 text-xs text-amberStrong" title="Ton équipe enchaîne : buzzer retardé en début de manche">
             <Flame className="w-3.5 h-3.5" /> {streak}
           </span>
         )}
-        · ta contribution : <span className="font-bold text-white">{myScore} pts</span>
+        · ta contribution : <span className="font-bold text-fg">{myScore} pts</span>
         {myRankInTeam > 0 && <span>({formatOrdinal(myRankInTeam)} de l’équipe)</span>}
       </p>
     </div>
@@ -594,9 +596,9 @@ function TeamMiniStandings({
   myTeamId: string | null;
 }) {
   return (
-    <ul className="w-full bg-inkSurface border border-inkBorder rounded-2xl px-4 py-3 flex flex-col gap-2 text-sm">
+    <ul className="w-full bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-4 py-3 flex flex-col gap-2 text-sm shadow-sticker">
       {standings.map((st) => (
-        <li key={st.team.id} className={`flex justify-between gap-3 ${st.team.id === myTeamId ? "text-white font-bold" : "text-silver"}`}>
+        <li key={st.team.id} className={`flex justify-between gap-3 ${st.team.id === myTeamId ? "text-fg font-bold" : "text-inkMuted"}`}>
           <span className="flex items-center gap-2 min-w-0">
             <TeamDot color={teamColor(st.team)} className="w-2.5 h-2.5" />
             <span className="truncate">
@@ -853,8 +855,8 @@ function BuzzerView({
               if (!def) return null;
               return (
                 <div key={`${u.badgeKey}:${u.tier}`} className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
-                  <def.icon className="w-6 h-6 shrink-0 text-gold" />
-                  <p className="text-sm font-bold text-white">Badge débloqué : {def.label}</p>
+                  <def.icon className="w-6 h-6 shrink-0 text-fg" />
+                  <p className="text-sm font-bold text-fg">Badge débloqué : {def.label}</p>
                 </div>
               );
             })}
@@ -863,8 +865,8 @@ function BuzzerView({
 
         {me && (
           <section
-            className="w-full bg-inkSurface border rounded-2xl p-4 flex flex-col gap-3"
-            style={{ borderColor: myStanding?.mvpPlayerId === playerId ? "#F5A524" : "#3A3A45" }}
+            className="w-full bg-inkSurface border-[3px] rounded-2xl p-4 flex flex-col gap-3 shadow-sticker"
+            style={{ borderColor: myStanding?.mvpPlayerId === playerId ? "#F5A524" : "#111111" }}
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-display font-bold text-lg truncate">Toi · {me.display_name}</span>
@@ -873,21 +875,21 @@ function BuzzerView({
             <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
               <div className="bg-inkSurface2 rounded-xl py-2.5">
                 <p className="font-display font-bold text-xl">{me.score}</p>
-                <p className="text-[11px] text-silver">points</p>
+                <p className="text-[11px] text-inkMuted">points</p>
               </div>
               <div className="bg-inkSurface2 rounded-xl py-2.5">
                 <p className="font-display font-bold text-xl">{myStats?.goodAnswers ?? 0}</p>
-                <p className="text-[11px] text-silver">bonnes rép.</p>
+                <p className="text-[11px] text-inkMuted">bonnes rép.</p>
               </div>
               <div className="bg-inkSurface2 rounded-xl py-2.5">
                 <p className="font-display font-bold text-xl">
                   {myStats?.fastestSeconds != null ? formatSeconds(myStats.fastestSeconds) : "—"}
                 </p>
-                <p className="text-[11px] text-silver">buzz record</p>
+                <p className="text-[11px] text-inkMuted">buzz record</p>
               </div>
             </div>
             {share !== null && (
-              <p className="text-sm text-silver">Tu as apporté {share} % des points de ton équipe.</p>
+              <p className="text-sm text-inkMuted">Tu as apporté {share} % des points de ton équipe.</p>
             )}
           </section>
         )}
@@ -896,7 +898,7 @@ function BuzzerView({
 
         {otherStandings.length > 0 && (
           <details className="w-full">
-            <summary className="text-sm text-inkMuted hover:text-sage cursor-pointer text-center py-2">
+            <summary className="text-sm text-inkMuted hover:text-fg cursor-pointer text-center py-2">
               Voir le détail des autres équipes
             </summary>
             <div className="flex flex-col gap-3 mt-2">
@@ -908,7 +910,7 @@ function BuzzerView({
         )}
 
         <div className="flex gap-4">
-          <Link href="/" className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1">
+          <Link href="/" className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1">
             <ArrowLeft className="w-3.5 h-3.5" /> Accueil
           </Link>
           <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
@@ -921,10 +923,9 @@ function BuzzerView({
 
   if (roomStatus === "finished") {
     return (
-      <div className="relative flex flex-col items-center gap-6 w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl px-6 py-8">
-        <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
-        <Trophy className="w-10 h-10 text-gold" />
-        <p className="text-2xl font-bold text-white text-center font-display">Partie terminée !</p>
+      <div className="relative flex flex-col items-center gap-6 w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-8 shadow-sticker">
+        <Trophy className="w-10 h-10 text-fg" />
+        <p className="text-2xl font-bold text-fg text-center font-display">Partie terminée !</p>
 
         {newlyUnlockedBadges.length > 0 && (
           <div className="w-full flex flex-col gap-2">
@@ -932,7 +933,7 @@ function BuzzerView({
               const def = BADGE_BY_KEY[u.badgeKey];
               if (!def) return null;
               const tierLabel = u.tier === "or" ? "Or" : u.tier === "argent" ? "Argent" : "Bronze";
-              const tierColor = u.tier === "or" ? "text-gold" : u.tier === "argent" ? "text-silver" : "text-bronze";
+              const tierColor = u.tier === "or" ? "text-fg" : u.tier === "argent" ? "text-inkMuted" : "text-fg";
               return (
                 <div
                   key={`${u.badgeKey}:${u.tier}`}
@@ -940,7 +941,7 @@ function BuzzerView({
                 >
                   <def.icon className={`w-6 h-6 shrink-0 ${tierColor}`} />
                   <p className="text-sm text-left">
-                    <span className="font-bold text-white">Badge débloqué : {def.label}</span>{" "}
+                    <span className="font-bold text-fg">Badge débloqué : {def.label}</span>{" "}
                     <span className={`font-semibold ${tierColor}`}>({tierLabel})</span>
                   </p>
                 </div>
@@ -958,10 +959,10 @@ function BuzzerView({
                 const height = p.rank === 1 ? "h-24" : p.rank === 2 ? "h-16" : "h-12";
                 const podiumColor =
                   p.rank === 1
-                    ? "border-gold bg-gold/10 text-gold"
+                    ? "border-gold bg-gold/10 text-fg"
                     : p.rank === 2
-                      ? "border-silver bg-silver/10 text-silver"
-                      : "border-bronze bg-bronze/10 text-bronze";
+                      ? "border-silver bg-silver/10 text-inkMuted"
+                      : "border-bronze bg-bronze/10 text-fg";
                 return (
                   <div key={p.id} className="flex flex-col items-center gap-1 w-20">
                     <span className="text-sm truncate w-full text-center">{p.display_name}</span>
@@ -983,7 +984,7 @@ function BuzzerView({
                 <p className="text-xs text-inkMuted flex items-center gap-1">
                   <Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide
                 </p>
-                <p className="text-sm font-bold text-sage">
+                <p className="text-sm font-bold text-fg">
                   {fastestPlayer?.display_name ?? "Joueur"} —{" "}
                   {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
                 </p>
@@ -994,7 +995,7 @@ function BuzzerView({
                 <p className="text-xs text-inkMuted flex items-center gap-1">
                   <Flame className="w-3.5 h-3.5" /> Manche la plus disputée
                 </p>
-                <p className="text-sm font-bold text-sage">
+                <p className="text-sm font-bold text-fg">
                   {mostContestedRound.title} ({mostContestedCount} tentatives)
                 </p>
               </div>
@@ -1019,7 +1020,7 @@ function BuzzerView({
         <div className="flex gap-4">
           <Link
             href="/"
-            className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+            className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Accueil
           </Link>
@@ -1049,15 +1050,14 @@ function BuzzerView({
         />
       )}
       {!answerRevealed && !myTeam && (
-        <div className="relative w-full flex justify-between items-center bg-inkSurface border border-inkBorder rounded-2xl px-5 py-3">
-          <span className="absolute top-0 left-5 right-5 h-1 rounded-b-md bg-sage" />
+        <div className="relative w-full flex justify-between items-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-5 py-3 shadow-sticker">
           <span className="font-bold truncate flex items-center gap-1.5">
             {me?.display_name ?? "…"}
             {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
                 informatif, l'application réelle se fait côté serveur. */}
             {me && me.correct_streak_count >= 3 && (
               <span
-                className="inline-flex items-center gap-0.5 text-xs text-amber shrink-0"
+                className="inline-flex items-center gap-0.5 text-xs text-amberStrong shrink-0"
                 title={`${me.correct_streak_count} bonnes réponses d'affilée — ton buzzer est retardé en début de manche`}
               >
                 <Flame className="w-3.5 h-3.5" /> {me.correct_streak_count}
@@ -1066,7 +1066,7 @@ function BuzzerView({
           </span>
           <span className="text-sm text-inkMuted whitespace-nowrap">
             {me ? `${formatOrdinal(me.rank)} / ${players.length}` : ""}{" "}
-            <span className="font-bold text-sage">· {me?.score ?? 0} pts</span>
+            <span className="font-bold text-fg">· {me?.score ?? 0} pts</span>
           </span>
         </div>
       )}
@@ -1104,7 +1104,7 @@ function BuzzerView({
             </span>
           )}
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center ${iWon ? "text-fg" : "text-danger"}`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -1112,14 +1112,13 @@ function BuzzerView({
                   : `${buzzer?.display_name ?? "Un autre joueur"}${teamOf(buzzer?.id) ? ` (${teamOf(buzzer?.id)?.name})` : ""} a buzzé en premier !`}
             </p>
           )}
-          <div className="relative w-full text-center bg-inkSurface border border-inkBorder rounded-2xl px-6 py-4">
-            <span className="absolute top-0 left-6 right-6 h-1 rounded-b-md bg-gold" />
+          <div className="relative w-full text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-4 shadow-sticker">
             <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
-            <p className="text-xl font-bold text-sage font-display">
+            <p className="text-xl font-bold text-fg font-display">
               {round.title} — {round.artist}
             </p>
             {(currentRoundHadSpeedBonus || currentRoundHadRemontadaBonus) && (
-              <p className="text-xs text-amber mt-2">
+              <p className="text-xs text-amberStrong mt-2">
                 {[currentRoundHadSpeedBonus && "bonus vitesse", currentRoundHadRemontadaBonus && "bonus remontada"]
                   .filter(Boolean)
                   .join(" · ")}
@@ -1159,8 +1158,8 @@ function BuzzerView({
                 : alreadyBuzzed
                   ? iWon
                     ? "bg-transparent"
-                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
-                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_#0A0A0C,0_0_0_9px_#3A3A45]"
+                    : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
+                  : "bg-inkSurface2 text-inkMuted shadow-[0_0_0_6px_rgb(var(--bg)),0_0_0_9px_#111111]"
             }`}
             /* Skin de buzzer équipé (voir usePlayerCosmetics, migration
                0022) : appliqué uniquement quand CE buzzer représente
@@ -1171,11 +1170,11 @@ function BuzzerView({
               canBuzz
                 ? {
                     background: equippedCosmetic.swatch,
-                    color: equippedCosmetic.textOn === "dark" ? "#0A0A0C" : "#FFFFFF",
-                    boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}`,
+                    color: equippedCosmetic.textOn === "dark" ? "rgb(var(--bg))" : "#FFFFFF",
+                    boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}`,
                   }
                 : alreadyBuzzed && iWon
-                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px #0A0A0C, 0 0 0 9px ${equippedCosmetic.accentColor}` }
+                  ? { color: equippedCosmetic.accentColor, boxShadow: `0 0 0 6px rgb(var(--bg)), 0 0 0 9px ${equippedCosmetic.accentColor}` }
                   : undefined
             }
           >
@@ -1204,7 +1203,7 @@ function BuzzerView({
             </span>
           </button>
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-sage" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center ${iWon ? "text-fg" : "text-danger"}`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -1232,7 +1231,7 @@ function BuzzerView({
       <div className="flex gap-4">
         <Link
           href="/"
-          className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Accueil
         </Link>

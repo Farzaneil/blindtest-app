@@ -19,7 +19,7 @@ import {
  */
 
 export function TeamDot({ color, className = "w-3 h-3" }: { color: string; className?: string }) {
-  return <span aria-hidden className={`inline-block rounded-full shrink-0 ${className}`} style={{ background: color }} />;
+  return <span aria-hidden className={`inline-block rounded-full shrink-0 border-2 border-fg ${className}`} style={{ background: color }} />;
 }
 
 /** Cartes de score des équipes, pendant la partie (écran hôte). */
@@ -34,8 +34,8 @@ export function TeamScoreCards({ standings }: { standings: TeamStanding[] }) {
         return (
           <article
             key={s.team.id}
-            className="bg-inkSurface border rounded-2xl overflow-hidden"
-            style={{ borderColor: leading ? color : "#3A3A45" }}
+            className="bg-inkSurface border-[3px] rounded-2xl overflow-hidden shadow-sticker"
+            style={{ borderColor: leading ? color : "#111111" }}
           >
             <div
               className="flex items-center justify-between gap-3 px-5 py-3"
@@ -98,11 +98,11 @@ export function TeamResultBanner({
         : "DÉFAITE"
       : "VICTOIRE";
   const title = tie && !mine ? winners.map((w) => w.team.name).join(" & ") : bannerTeam.team.name;
-  const color = mine && mine.rank !== 1 ? "#27272F" : teamColor(bannerTeam.team);
-  const textColor = mine && mine.rank !== 1 ? "#FFFFFF" : textOnTeamColor(bannerTeam.team);
+  const color = mine && mine.rank !== 1 ? "#FFFFFF" : teamColor(bannerTeam.team);
+  const textColor = mine && mine.rank !== 1 ? "#111111" : textOnTeamColor(bannerTeam.team);
   return (
     <section
-      className="w-full rounded-2xl px-6 py-5 flex flex-wrap items-center justify-between gap-4"
+      className="w-full rounded-2xl border-[3px] border-fg shadow-sticker px-6 py-5 flex flex-wrap items-center justify-between gap-4"
       style={{ background: color, color: textColor }}
     >
       <div className="flex flex-col gap-1 min-w-0">
@@ -135,7 +135,7 @@ export function TeamRecapTable({
 }) {
   const color = teamColor(standing.team);
   return (
-    <article className="bg-inkSurface border border-inkBorder rounded-2xl overflow-hidden text-left">
+    <article className="bg-inkSurface border-[3px] border-inkBorder rounded-2xl overflow-hidden text-left shadow-sticker">
       <header
         className="flex items-center justify-between gap-3 px-4 py-3"
         style={{ borderBottom: `3px solid ${color}` }}
@@ -184,8 +184,8 @@ export function TeamRecapTable({
                     </span>
                   </th>
                   <td className="px-2 py-2.5 font-bold">{p.score}</td>
-                  <td className="px-2 py-2.5 text-silver">{s?.goodAnswers ?? 0}</td>
-                  <td className="px-4 py-2.5 text-silver">
+                  <td className="px-2 py-2.5 text-inkMuted">{s?.goodAnswers ?? 0}</td>
+                  <td className="px-4 py-2.5 text-inkMuted">
                     {s?.fastestSeconds != null ? formatSeconds(s.fastestSeconds) : "—"}
                   </td>
                 </tr>
@@ -225,10 +225,10 @@ export function AwardCards({
         <div key={a.key} className="bg-inkSurface border border-inkBorder rounded-xl px-4 py-3 text-left flex flex-col gap-1">
           <span className="text-xs tracking-[0.15em] text-inkMuted uppercase">{a.label}</span>
           <span className="font-display font-bold text-lg flex items-center gap-2 min-w-0">
-            <TeamDot color={teamOf(a.player)?.color ?? "#8B8B96"} className="w-2.5 h-2.5" />
+            <TeamDot color={teamColor(teamOf(a.player))} className="w-2.5 h-2.5" />
             <span className="truncate">{a.player.display_name}</span>
           </span>
-          <span className="text-sm text-silver">{a.detail}</span>
+          <span className="text-sm text-inkMuted">{a.detail}</span>
         </div>
       ))}
     </div>

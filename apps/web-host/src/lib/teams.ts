@@ -11,22 +11,33 @@ import type { Player, RoundAttempt, Team } from "./rooms";
 // arriver : configure_room_teams en pose toujours une).
 export const FALLBACK_TEAM_COLOR = "#8B8B96";
 
+// Refonte "Arcade autocollants" : les couleurs stockées en base (choisies
+// pour l'ancien fond sombre) sont converties à l'affichage en teintes plus
+// franches, lisibles sur les fonds jaune / bleu ciel / lilas. Pas de
+// migration : la base garde ses valeurs, seul le rendu change.
+const ARCADE_TEAM_COLOR: Record<string, string> = {
+  "#6E93D6": "#4D7CFF", // Les Bleus
+  "#F0874A": "#FF9A3C", // Les Oranges
+  "#D6A15A": "#FF9A3C", // ancienne "Les Ambres" (avant 0027)
+  "#A78BFA": "#8A5CFF", // Les Violets
+  "#E879A6": "#FF6FB5", // Les Roses
+};
+
 // Couleur de texte lisible posée SUR la couleur d'équipe (bandeaux, buzzer).
 const TEXT_ON_TEAM_COLOR: Record<string, string> = {
-  "#6E93D6": "#0A1526",
-  "#F0874A": "#2B1206",
-  // Ancienne couleur "Les Ambres" (avant la migration 0027).
-  "#D6A15A": "#2B1B08",
-  "#A78BFA": "#1A1033",
-  "#E879A6": "#2B0A18",
+  "#4D7CFF": "#FFFFFF",
+  "#FF9A3C": "#111111",
+  "#8A5CFF": "#FFFFFF",
+  "#FF6FB5": "#111111",
 };
 
 export function teamColor(team: Pick<Team, "color"> | null | undefined): string {
-  return team?.color ?? FALLBACK_TEAM_COLOR;
+  const raw = (team?.color ?? FALLBACK_TEAM_COLOR).toUpperCase();
+  return ARCADE_TEAM_COLOR[raw] ?? raw;
 }
 
 export function textOnTeamColor(team: Pick<Team, "color"> | null | undefined): string {
-  return TEXT_ON_TEAM_COLOR[teamColor(team).toUpperCase()] ?? "#0A0A0C";
+  return TEXT_ON_TEAM_COLOR[teamColor(team)] ?? "#111111";
 }
 
 export type PlayerStats = {

@@ -2,13 +2,42 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Fond unique de l'app (token "ink") : sert aussi de fond au rebond du
-   scroll sur iOS. Les pages n'ont plus besoin de le redéclarer. */
+/*
+ * Thème de fond (refonte "Arcade autocollants") : trio jaune / bleu ciel /
+ * lilas. Le fond choisi est posé sur <html data-fond="…"> avant le premier
+ * rendu (script dans layout.tsx), les deux autres couleurs servent aux
+ * boutons (--c1) et au décor (--c2). Valeurs en canaux RGB pour que
+ * Tailwind puisse appliquer ses modificateurs d'opacité.
+ */
+:root,
+:root[data-fond="jaune"] {
+  --bg: 255 225 77; /* #FFE14D */
+  --c1: 168 220 255; /* #A8DCFF bleu ciel */
+  --c2: 201 182 255; /* #C9B6FF lilas */
+}
+:root[data-fond="ciel"] {
+  --bg: 168 220 255;
+  --c1: 255 225 77;
+  --c2: 201 182 255;
+}
+:root[data-fond="lilas"] {
+  --bg: 201 182 255;
+  --c1: 255 225 77;
+  --c2: 168 220 255;
+}
+
 html,
 body {
-  background-color: #0a0a0c;
+  background-color: rgb(var(--bg));
 }
 
 body {
-  @apply bg-ink text-white min-h-screen;
+  @apply text-fg min-h-screen;
+}
+
+/* Dela Gothic One n'existe qu'en une seule graisse : on neutralise le gras
+   synthétique que les classes font-bold/font-black produiraient. */
+.font-display {
+  font-weight: 400 !important;
+  letter-spacing: 0.01em;
 }

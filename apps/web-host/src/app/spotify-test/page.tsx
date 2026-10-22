@@ -64,7 +64,7 @@ export default function SpotifyTestPage() {
       {player.state === "checking" && <p className="text-inkMuted">Vérification de la connexion…</p>}
 
       {player.state === "disconnected" && (
-        <button onClick={player.connect} className="bg-sage text-sageOn px-8 py-4 rounded-full text-xl font-bold">
+        <button onClick={player.connect} className="bg-sage text-sageOn px-8 py-4 rounded-full text-xl font-bold border-2 border-fg shadow-sticker-sm">
           Se connecter à Spotify
         </button>
       )}
@@ -75,7 +75,7 @@ export default function SpotifyTestPage() {
 
       {player.state === "ready" && (
         <div className="w-full max-w-xl flex flex-col gap-4">
-          <p className="text-sage text-center">✅ Player prêt (device connecté)</p>
+          <p className="text-fg text-center">✅ Player prêt (device connecté)</p>
 
           <button
             onClick={() => player.disconnect()}
@@ -90,9 +90,9 @@ export default function SpotifyTestPage() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Chercher un morceau…"
-              className="flex-1 bg-inkSurface2 border-2 border-sage rounded-xl px-4 py-3"
+              className="flex-1 bg-inkSurface2 border-2 border-fg rounded-xl px-4 py-3"
             />
-            <button onClick={handleSearch} className="bg-sage text-sageOn px-6 py-3 rounded-xl font-bold">
+            <button onClick={handleSearch} className="bg-sage text-sageOn px-6 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm">
               Chercher
             </button>
           </div>

@@ -15,6 +15,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
+import { ThemePicker } from "../_components/ThemePicker";
 import { usePlayerProfileData } from "../../lib/usePlayerProfileData";
 import { usePlayerBadges } from "../../lib/usePlayerBadges";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
@@ -97,29 +98,30 @@ export default function ProfilPage() {
 
   if (accountLoading || !account) {
     return (
-      <main className="flex items-center justify-center min-h-screen bg-ink">
-        <div className="w-full max-w-3xl h-64 mx-6 rounded-2xl bg-inkSurface2 animate-pulse" />
+      <main className="flex items-center justify-center min-h-screen bg-page">
+        <div className="w-full max-w-3xl h-64 mx-6 rounded-2xl bg-inkSurface animate-pulse border-fg shadow-sticker" />
       </main>
     );
   }
 
   return (
-    <main className="flex flex-col items-center min-h-screen gap-4 p-6 bg-ink">
+    <main className="flex flex-col items-center min-h-screen gap-4 p-6 bg-page">
       <div className="w-full max-w-3xl flex justify-start">
         <Link
           href="/"
-          className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1"
+          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Accueil
         </Link>
       </div>
 
-      <div className="relative w-full max-w-3xl bg-inkSurface2 border border-inkBorder rounded-2xl p-7 flex flex-col gap-6">
-        <span className="absolute top-0 left-7 right-7 h-1 rounded-b-md bg-sage" />
+      <ThemePicker className="w-full max-w-3xl" />
+
+      <div className="relative w-full max-w-3xl bg-inkSurface border-[3px] border-fg rounded-2xl p-7 flex flex-col gap-6 shadow-sticker">
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="w-14 h-14 rounded-full bg-inkSurface3 border border-inkBorder overflow-hidden flex items-center justify-center font-display font-black text-xl text-sage shrink-0">
+            <div className="w-14 h-14 rounded-full bg-inkSurface3 border border-inkBorder overflow-hidden flex items-center justify-center font-display font-black text-xl text-fg shrink-0">
               {account.avatarUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={account.avatarUrl} alt="" className="w-full h-full object-cover" />
@@ -129,15 +131,15 @@ export default function ProfilPage() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="font-display font-bold text-lg truncate text-white">{account.pseudo}</p>
-                <span className="text-[11px] font-bold text-sage bg-sage/10 border border-sage/30 rounded-full px-2 py-0.5 whitespace-nowrap">
+                <p className="font-display font-bold text-lg truncate text-fg">{account.pseudo}</p>
+                <span className="text-[11px] font-bold text-fg bg-sage/10 border border-fg rounded-full px-2 py-0.5 whitespace-nowrap">
                   Niveau {levelForXp(account.xp)}
                 </span>
               </div>
               <div className="mt-1.5 max-w-[10rem]">
                 <div className="h-1.5 rounded-full bg-inkSurface3 overflow-hidden">
                   <div
-                    className="h-full bg-sage rounded-full"
+                    className="h-full bg-sage rounded-full border-2 border-fg shadow-sticker-sm"
                     style={{ width: `${(xpIntoCurrentLevel(account.xp) / XP_PER_LEVEL) * 100}%` }}
                   />
                 </div>
@@ -161,7 +163,7 @@ export default function ProfilPage() {
               }
               router.push("/");
             }}
-            className="text-xs text-inkMuted hover:text-white underline transition whitespace-nowrap shrink-0 mt-1"
+            className="text-xs text-inkMuted hover:text-fg underline transition whitespace-nowrap shrink-0 mt-1"
           >
             Se déconnecter
           </button>
@@ -175,7 +177,7 @@ export default function ProfilPage() {
               className={
                 "flex-1 whitespace-nowrap text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 sm:py-2.5 rounded-xl border transition " +
                 (tab === key
-                  ? "border-sage text-sage bg-sage/10"
+                  ? "border-fg text-fg bg-sage/10"
                   : "border-inkBorder text-inkMuted hover:border-inkBorderStrong")
               }
             >
@@ -285,19 +287,19 @@ function ReglagesPanel({
               value={pseudoInput}
               onChange={(e) => setPseudoInput(e.target.value)}
               maxLength={24}
-              className="w-full bg-transparent border-0 focus:ring-0 text-white font-medium p-0"
+              className="w-full bg-transparent border-0 focus:ring-0 text-fg font-medium p-0"
             />
           </div>
           <button
             onClick={savePseudo}
             disabled={saving || !pseudoInput.trim() || pseudoInput.trim() === pseudo}
-            className="bg-sage text-sageOn hover:bg-sage/90 disabled:opacity-40 disabled:cursor-not-allowed transition rounded-xl px-4 py-2.5 text-sm font-bold whitespace-nowrap"
+            className="bg-sage text-sageOn hover:bg-sage/90 disabled:opacity-40 disabled:cursor-not-allowed transition rounded-xl px-4 py-2.5 text-sm font-bold whitespace-nowrap border-2 border-fg shadow-sticker-sm"
           >
             {saving ? "..." : "Enregistrer"}
           </button>
         </div>
         {saveMessage && (
-          <p className={"text-xs " + (saveMessage.kind === "ok" ? "text-sage" : "text-danger")}>{saveMessage.text}</p>
+          <p className={"text-xs " + (saveMessage.kind === "ok" ? "text-fg" : "text-danger")}>{saveMessage.text}</p>
         )}
       </div>
 
@@ -317,7 +319,7 @@ function ReglagesPanel({
               className={
                 "flex-1 text-xs sm:text-sm font-bold px-2 sm:px-3 py-2 rounded-xl border transition " +
                 (skinCategory === cat
-                  ? "border-sage text-sage bg-sage/10"
+                  ? "border-fg text-fg bg-sage/10"
                   : "border-inkBorder text-inkMuted hover:border-inkBorderStrong")
               }
             >
@@ -349,7 +351,7 @@ function ReglagesPanel({
                     className="relative w-11 h-11 rounded-full flex items-center justify-center overflow-hidden shrink-0 transition disabled:cursor-not-allowed"
                     style={{
                       background: unlocked ? c.swatch : undefined,
-                      boxShadow: isEquipped ? `0 0 0 3px #303039, 0 0 0 5px ${c.accentColor}` : undefined,
+                      boxShadow: isEquipped ? `0 0 0 3px #FFFFFF, 0 0 0 6px #111111` : undefined,
                     }}
                   >
                     {!unlocked && (
@@ -371,7 +373,7 @@ function ReglagesPanel({
       </div>
 
       <div className="pt-3 border-t border-inkBorder/60 flex flex-col gap-2 items-start">
-        <Link href="/confidentialite" className="text-xs text-inkMuted/70 hover:text-sage transition underline">
+        <Link href="/confidentialite" className="text-xs text-inkMuted/70 hover:text-fg transition underline">
           Voir quelles données sont stockées et pourquoi
         </Link>
         {!confirmingDelete ? (
@@ -383,7 +385,7 @@ function ReglagesPanel({
           </button>
         ) : (
           <div className="flex flex-col gap-2 bg-danger/10 border border-danger/30 rounded-xl px-4 py-3 max-w-md">
-            <p className="text-xs text-white">
+            <p className="text-xs text-fg">
               Cette action supprime définitivement ton compte joueur (pseudo, avatar, connexion Spotify liée). Tes
               parties déjà jouées restent visibles pour les autres joueurs, mais sans être rattachées à ton compte.
               Impossible à annuler.
@@ -400,7 +402,7 @@ function ReglagesPanel({
               <button
                 onClick={() => setConfirmingDelete(false)}
                 disabled={deleting}
-                className="text-xs text-inkMuted hover:text-white underline transition"
+                className="text-xs text-inkMuted hover:text-fg underline transition"
               >
                 Annuler
               </button>
@@ -442,8 +444,8 @@ function StatsPanel({ accountId }: { accountId: string }) {
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <StatCard label="Parties jouées" value={String(stats.gamesPlayed)} />
       <StatCard label="Bonnes réponses" value={String(stats.correctAnswers)} />
-      <StatCard label="Meilleur streak" value={String(stats.bestStreak)} valueClassName="text-amber" />
-      <StatCard label="Taux de réussite" value={`${stats.successRate}%`} valueClassName="text-sage" />
+      <StatCard label="Meilleur streak" value={String(stats.bestStreak)} valueClassName="text-amberStrong" />
+      <StatCard label="Taux de réussite" value={`${stats.successRate}%`} valueClassName="text-fg" />
     </div>
   );
 }
@@ -451,9 +453,9 @@ function StatsPanel({ accountId }: { accountId: string }) {
 const BADGE_CATEGORIES: BadgeCategory[] = ["Performance en jeu", "Assiduité", "Social", "Côté hôte"];
 
 const TIER_COLOR: Record<string, string> = {
-  or: "text-gold",
-  argent: "text-silver",
-  bronze: "text-bronze",
+  or: "text-fg",
+  argent: "text-inkMuted",
+  bronze: "text-fg",
   none: "text-inkMuted",
 };
 
@@ -518,7 +520,7 @@ function BadgesPanel({ accountId }: { accountId: string }) {
                         <def.icon className={"w-6 h-6 " + TIER_COLOR[tier]} />
                       )}
                     </div>
-                    <p className="text-xs font-bold text-white">{def.label}</p>
+                    <p className="text-xs font-bold text-fg">{def.label}</p>
                     <p className={"text-[11px] font-semibold " + TIER_COLOR[tier]}>{TIER_LABEL[tier]}</p>
                     <p className="text-[10px] text-inkMuted">
                       {next !== null ? `${progress} / ${next}` : `${progress} (max)`}
@@ -555,7 +557,7 @@ function HistoriquePanel({ accountId }: { accountId: string }) {
     return <p className="text-xs text-inkMuted bg-inkSurface3 rounded-lg px-3 py-2">Aucune partie terminée pour l&rsquo;instant — reviens ici après ta prochaine partie !</p>;
   }
 
-  const rankColor = (rank: number) => (rank === 1 ? "text-gold" : rank === 2 ? "text-silver" : rank === 3 ? "text-bronze" : "text-sage");
+  const rankColor = (rank: number) => (rank === 1 ? "text-fg" : rank === 2 ? "text-inkMuted" : rank === 3 ? "text-fg" : "text-fg");
   const ordinal = (rank: number) => (rank === 1 ? "1er" : `${rank}e`);
 
   return (
@@ -563,7 +565,7 @@ function HistoriquePanel({ accountId }: { accountId: string }) {
       {history.map((entry) => (
         <div key={entry.roomId} className="flex justify-between items-center bg-inkSurface3 rounded-xl px-4 py-3">
           <div>
-            <p className="font-bold text-white">
+            <p className="font-bold text-fg">
               {new Date(entry.playedAt).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
             </p>
             <p className="text-xs text-inkMuted">
@@ -624,7 +626,7 @@ function ClassementPanel({ accountId }: { accountId: string }) {
               key={entry.accountId}
               className={
                 "rounded-xl flex items-center justify-between pl-4 pr-5 py-2.5 " +
-                (podiumClass ?? "bg-inkSurface3 text-white")
+                (podiumClass ?? "bg-inkSurface3 text-fg")
               }
             >
               <span className="flex items-center gap-3 min-w-0">

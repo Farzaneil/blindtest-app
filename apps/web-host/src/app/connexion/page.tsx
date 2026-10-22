@@ -51,12 +51,11 @@ function ConnexionForm() {
   const error = searchParams.get("error");
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-ink">
-      <div className="relative w-full max-w-sm bg-inkSurface border border-inkBorder rounded-2xl p-7 flex flex-col gap-4">
-        <span className="absolute top-0 left-7 right-7 h-1 rounded-b-md bg-sage" />
+    <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-page">
+      <div className="relative w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-7 flex flex-col gap-4 shadow-sticker">
 
         <div className="text-center">
-          <p className="text-2xl font-bold font-display text-white">Connecte-toi</p>
+          <p className="text-2xl font-bold font-display text-fg">Connecte-toi</p>
           <p className="text-sm text-inkMuted mt-1">
             Sauvegarde tes stats, débloque des badges, grimpe au classement.
           </p>
@@ -70,7 +69,7 @@ function ConnexionForm() {
 
         <a
           href={`/api/player-auth/login?next=${encodeURIComponent(next)}`}
-          className="bg-sage text-sageOn hover:bg-sage/90 transition rounded-xl py-3 font-bold flex items-center justify-center gap-2"
+          className="bg-sage text-sageOn hover:bg-sage/90 transition rounded-xl py-3 font-bold flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" />
@@ -84,7 +83,7 @@ function ConnexionForm() {
         <div className="flex flex-col gap-2">
           <button
             disabled
-            className="relative bg-inkSurface2 border border-deezer/40 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            className="relative bg-inkSurface2 border border-deezer/40 text-fg rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" className="text-deezer">
               <rect x="2" y="14" width="3" height="6" fill="currentColor" />
@@ -99,7 +98,7 @@ function ConnexionForm() {
           </button>
           <button
             disabled
-            className="relative bg-inkSurface2 border border-appleMusic/40 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            className="relative bg-inkSurface2 border border-appleMusic/40 text-fg rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-appleMusic">
               <path d="M9 18V5l12-2v13" />
@@ -113,7 +112,7 @@ function ConnexionForm() {
           </button>
           <button
             disabled
-            className="relative bg-inkSurface2 border border-ytMusic/40 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            className="relative bg-inkSurface2 border border-ytMusic/40 text-fg rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" className="text-ytMusic">
               <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -126,12 +125,12 @@ function ConnexionForm() {
           </button>
         </div>
 
-        <Link href={next} className="text-sm text-inkMuted hover:text-white underline transition self-center mt-1">
+        <Link href={next} className="text-sm text-inkMuted hover:text-fg underline transition self-center mt-1">
           Continuer en invité
         </Link>
         <Link
           href="/"
-          className="text-xs text-inkMuted hover:text-sage underline transition inline-flex items-center gap-1 self-center"
+          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1 self-center"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Accueil
         </Link>

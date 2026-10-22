@@ -38,10 +38,10 @@ export function CookieConsentBanner() {
   return (
     <div className="fixed bottom-0 inset-x-0 z-50 p-4 flex justify-center">
       <div className="w-full max-w-2xl bg-inkSurface border border-inkBorderStrong rounded-2xl shadow-lg shadow-black/40 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <p className="text-sm text-white/90 flex-1">
+        <p className="text-sm text-fg/90 flex-1">
           On utilise un cookie de mesure d’audience pour comprendre comment le site est utilisé. Tu peux
           l’accepter ou le refuser — le site fonctionne à l’identique dans les deux cas. Détails sur la{" "}
-          <Link href="/confidentialite" className="underline hover:text-sage transition">
+          <Link href="/confidentialite" className="underline hover:text-fg transition">
             page confidentialité
           </Link>
           .
@@ -49,13 +49,13 @@ export function CookieConsentBanner() {
         <div className="flex gap-2 shrink-0">
           <button
             onClick={() => respond("refused")}
-            className="bg-inkSurface2 border border-inkBorder hover:border-white transition rounded-lg px-3 py-1.5 text-xs font-bold text-white"
+            className="bg-inkSurface2 border border-inkBorder hover:border-fg transition rounded-lg px-3 py-1.5 text-xs font-bold text-fg"
           >
             Refuser
           </button>
           <button
             onClick={() => respond("accepted")}
-            className="bg-sage text-ink hover:bg-sage/90 transition rounded-lg px-3 py-1.5 text-xs font-bold"
+            className="bg-sage text-ink hover:bg-sage/90 transition rounded-lg px-3 py-1.5 text-xs font-bold border-2 border-fg shadow-sticker-sm"
           >
             Accepter
           </button>

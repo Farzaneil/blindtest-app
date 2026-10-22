@@ -53,7 +53,9 @@ function pawIcon({ size, fill }: { size: number; fill: string }): ReactNode {
 
 export const COSMETIC_DEFINITIONS: CosmeticDefinition[] = [
   // === Uni — couleurs de base, dès le départ, sans condition ================
-  { key: "uni_sage", category: "uni", label: "Sage", swatch: "#3ECF7E", accentColor: "#3ECF7E", textOn: "dark", unlock: { type: "always" }, unlockHint: "Disponible dès le départ." },
+  // Clé historique conservée (skins déjà équipés en base) : depuis la refonte
+  // "Arcade", ce skin prend la couleur des boutons du thème choisi (--c1).
+  { key: "uni_sage", category: "uni", label: "Couleur du thème", swatch: "rgb(var(--c1))", accentColor: "#111111", textOn: "dark", unlock: { type: "always" }, unlockHint: "Disponible dès le départ." },
   { key: "uni_bleu", category: "uni", label: "Bleu", swatch: "#6E93D6", accentColor: "#6E93D6", textOn: "dark", unlock: { type: "always" }, unlockHint: "Disponible dès le départ." },
   { key: "uni_magenta", category: "uni", label: "Magenta", swatch: "#E24B9E", accentColor: "#E24B9E", textOn: "light", unlock: { type: "always" }, unlockHint: "Disponible dès le départ." },
   { key: "uni_violet", category: "uni", label: "Violet", swatch: "#8B5CF6", accentColor: "#8B5CF6", textOn: "light", unlock: { type: "always" }, unlockHint: "Disponible dès le départ." },

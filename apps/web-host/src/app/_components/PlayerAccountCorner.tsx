@@ -61,7 +61,7 @@ export function PlayerAccountCorner() {
       <Link
         href={`/connexion?next=${encodeURIComponent((pathname || "/") + search)}`}
         title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
-        className="fixed top-4 right-4 z-20 bg-inkSurface2 border border-inkBorder hover:border-sage transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-sage inline-flex items-center gap-1.5"
+        className="fixed top-4 right-4 z-20 bg-inkSurface2 border border-inkBorder hover:border-fg transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-fg inline-flex items-center gap-1.5"
       >
         <UserCircle2 className="w-3.5 h-3.5" /> Compte joueur
       </Link>
@@ -74,7 +74,7 @@ export function PlayerAccountCorner() {
       className="fixed top-4 right-4 z-20 flex items-center gap-2 bg-inkSurface2 border border-inkBorder rounded-full pl-1.5 pr-3 py-1.5"
     >
       <Link href="/profil" className="flex items-center gap-2 min-w-0">
-        <div className="w-5 h-5 rounded-full bg-inkSurface3 overflow-hidden flex items-center justify-center text-[10px] font-black text-sage shrink-0">
+        <div className="w-5 h-5 rounded-full bg-inkSurface3 overflow-hidden flex items-center justify-center text-[10px] font-black text-fg shrink-0">
           {account.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={account.avatarUrl} alt="" className="w-full h-full object-cover" />
@@ -82,7 +82,7 @@ export function PlayerAccountCorner() {
             account.pseudo.charAt(0).toUpperCase()
           )}
         </div>
-        <span className="text-xs font-semibold text-white truncate max-w-[8rem] hover:underline">{account.pseudo}</span>
+        <span className="text-xs font-semibold text-fg truncate max-w-[8rem] hover:underline">{account.pseudo}</span>
       </Link>
       <button
         onClick={async () => {

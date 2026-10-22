@@ -44,12 +44,12 @@ export function RejoinRequestsBanner({
         return (
           <div
             key={r.id}
-            className="flex flex-wrap items-center justify-between gap-3 bg-inkSurface border-2 border-info rounded-2xl px-4 py-3"
+            className="flex flex-wrap items-center justify-between gap-3 bg-inkSurface border-2 border-fg rounded-2xl px-4 py-3 shadow-sticker"
           >
             <p className="text-sm flex items-center gap-2 min-w-0">
-              <UserCheck className="w-5 h-5 text-info shrink-0" />
+              <UserCheck className="w-5 h-5 text-fg shrink-0" />
               <span className="min-w-0">
-                <span className="font-bold text-white">{player?.display_name ?? "Un joueur"}</span>{" "}
+                <span className="font-bold text-fg">{player?.display_name ?? "Un joueur"}</span>{" "}
                 veut reprendre sa place
                 <span className="text-inkMuted">
                   {" "}
@@ -69,7 +69,7 @@ export function RejoinRequestsBanner({
                 type="button"
                 disabled={busyId === r.id}
                 onClick={() => resolve(r.id, true)}
-                className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-50 transition rounded-xl px-4 py-2 text-sm font-bold"
+                className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-50 transition rounded-xl px-4 py-2 text-sm font-bold border-2 border-fg shadow-sticker-sm"
               >
                 Accepter
               </button>
