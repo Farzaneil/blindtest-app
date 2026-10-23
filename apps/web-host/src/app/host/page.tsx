@@ -954,7 +954,10 @@ function HostScreenInner() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (err) setSpotifyOAuthError(`Erreur Spotify : ${err}`);
     if (err || params.get("connected")) {
-      window.history.replaceState({}, "", "/");
+      // On reste sur la page courante (/host) : ce nettoyage renvoyait
+      // l'URL sur "/" (héritage de l'époque où l'écran hôte était la page
+      // d'accueil), et Next affichait alors l'accueil au lieu de la partie.
+      window.history.replaceState(window.history.state, "", window.location.pathname);
     }
   }, []);
 
