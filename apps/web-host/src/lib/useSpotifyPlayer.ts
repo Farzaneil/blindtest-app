@@ -24,13 +24,28 @@ const STUCK_THRESHOLD_MS = 12_000;
 // Spotify ("device introuvable" au morceau suivant), le SDK réutilisant le
 // même device_id pour l'onglet. On garde donc la même instance et on se
 // contente de rebrancher les écouteurs du composant qui la (ré)utilise.
-const shared: { player: any; deviceId: string | null; tokenRef: { current: string | null } | null } = {
-  player: null,
-  deviceId: null,
-  // Ref d'access token du montage courant : getOAuthToken (closure du
-  // montage qui a créé le player) écrit toujours dans celle-ci.
-  tokenRef: null,
-};
+type SharedPlayer = { player: any; deviceId: string | null; tokenRef: { current: string | null } | null };
+// Rangé sur window (et non dans une simple variable de module) pour
+// survivre aussi au rechargement à chaud du code en développement, qui
+// sinon "oubliait" le player encore connecté et en recréait un second qui
+// ne devenait jamais prêt.
+const shared: SharedPlayer = (() => {
+  if (typeof window === "undefined") return { player: null, deviceId: null, tokenRef: null };
+  const w = window as unknown as { __blindtestSpotifyPlayer?: SharedPlayer };
+  w.__blindtestSpotifyPlayer ??= {
+    player: null,
+    deviceId: null,
+    // Ref d'access token du montage courant : getOAuthToken (closure du
+    // montage qui a créé le player) écrit toujours dans celle-ci.
+    tokenRef: null,
+  };
+  return w.__blindtestSpotifyPlayer;
+})();
+
+// Délai entre la déconnexion de l'ancien player et la création du nouveau
+// lors d'un "Réessayer" : laisse à Spotify le temps de retirer l'ancien
+// device avant d'enregistrer le nouveau (même device_id pour l'onglet).
+const RECONNECT_DELAY_MS = 1500;
 
 /**
  * Encapsule la connexion au Web Playback SDK (device hôte du navigateur) :
@@ -306,15 +321,40 @@ export function useSpotifyPlayer() {
   // qui n'a pas suffi à se rétablir tout seul), sinon relance tout le flow
   // d'initialisation depuis zéro (cas où le SDK n'a jamais réussi à créer de
   // player, ex. script bloqué/échoué au premier chargement).
+  // Bug remonté : rappeler connect() sur un player déjà "connecté" côté SDK
+  // ne redéclenche jamais "ready", donc le bouton ne débloquait rien. On
+  // repart désormais de zéro : déconnexion propre de l'ancien player, petit
+  // délai, puis création d'un nouveau. Après un échec, l'hôte se voit aussi
+  // proposer de recharger la page (reconnectAttempts).
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const reconnect = () => {
     setStuckTooLong(false);
-    if (playerRef.current) {
-      setConnectingState();
-      playerRef.current.connect();
-    } else {
-      setConnectingState();
-      loadWebPlaybackSdk();
+    setReconnectAttempts((n) => n + 1);
+    setErrorMessage(null);
+    setConnectingState();
+    const old = shared.player;
+    if (old) {
+      for (const [event, cb] of listenersRef.current) {
+        try {
+          old.removeListener?.(event, cb);
+        } catch {
+          // ignore
+        }
+      }
+      listenersRef.current = [];
+      try {
+        old.disconnect?.();
+      } catch {
+        // ignore
+      }
     }
+    shared.player = null;
+    shared.deviceId = null;
+    playerRef.current = null;
+    setDeviceId(null);
+    setTimeout(() => {
+      if (!unmountedRef.current) loadWebPlaybackSdk();
+    }, old ? RECONNECT_DELAY_MS : 0);
   };
 
   // Sur Safari iOS (et d'autres navigateurs mobiles), transférer la lecture
@@ -330,5 +370,5 @@ export function useSpotifyPlayer() {
     playerRef.current?.activateElement?.();
   };
 
-  return { state, deviceId, errorMessage, stuckTooLong, accessTokenRef, connect, disconnect, reconnect, activateElement };
+  return { state, deviceId, errorMessage, stuckTooLong, reconnectAttempts, accessTokenRef, connect, disconnect, reconnect, activateElement };
 }

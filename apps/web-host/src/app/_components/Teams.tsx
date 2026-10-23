@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Star } from "lucide-react";
+import { CountUp, TIMING } from "./ScoreAnimations";
 import type { Player } from "../../lib/rooms";
 import {
   formatSeconds,
@@ -26,8 +28,43 @@ export function TeamDot({ color, className = "w-3 h-3" }: { color: string; class
 export function TeamScoreCards({ standings }: { standings: TeamStanding[] }) {
   const leaderScore = standings[0]?.score;
   const soleLeader = standings.filter((s) => s.score === leaderScore).length === 1;
+  const leader = soleLeader ? standings[0] : null;
+
+  // Changement d'équipe en tête : bandeau "Les Bleus passent devant !",
+  // affiché une fois les scores défilés (voir TIMING).
+  const leaderId = leader?.team.id ?? null;
+  const prevLeaderRef = useRef<string | null | undefined>(undefined);
+  const [banner, setBanner] = useState<{ key: number; name: string; color: string; textColor: string } | null>(null);
+  useEffect(() => {
+    const prev = prevLeaderRef.current;
+    prevLeaderRef.current = leaderId;
+    if (prev === undefined || !leader || leaderId === prev) return;
+    const t1 = setTimeout(
+      () =>
+        setBanner({ key: Date.now(), name: leader.team.name, color: teamColor(leader.team), textColor: textOnTeamColor(leader.team) }),
+      TIMING.reorderAtMs
+    );
+    const t2 = setTimeout(() => setBanner(null), TIMING.reorderAtMs + 3200);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+    // Déclenché seulement par un changement d'équipe en tête.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [leaderId]);
+
   return (
-    <div className="w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="relative w-full max-w-4xl grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {banner && (
+        <div
+          key={banner.key}
+          aria-live="polite"
+          className="pointer-events-none absolute left-1/2 top-1/2 -translate-y-1/2 z-30 whitespace-nowrap font-display text-3xl sm:text-5xl border-[3px] border-fg rounded-2xl shadow-sticker-lg px-6 py-3 animate-[leaderBanner_3.2s_ease-out_both]"
+          style={{ background: banner.color, color: banner.textColor }}
+        >
+          {banner.name} {/^les\s/i.test(banner.name) ? "passent" : "passe"} devant !
+        </div>
+      )}
       {standings.map((s) => {
         const color = teamColor(s.team);
         const leading = soleLeader && s.rank === 1;
@@ -48,7 +85,9 @@ export function TeamScoreCards({ standings }: { standings: TeamStanding[] }) {
             </div>
             <div className="px-5 py-4 flex flex-col gap-3">
               <p className="flex items-baseline gap-2">
-                <span className="font-display font-bold text-5xl tabular-nums">{s.score}</span>
+                <span className="font-display font-bold text-5xl tabular-nums">
+                  <CountUp value={s.score} />
+                </span>
                 <span className="text-inkMuted">pts</span>
               </p>
               {s.players.length === 0 ? (

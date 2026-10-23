@@ -107,3 +107,56 @@ body {
     transform: scale(1) rotate(0);
   }
 }
+
+/* ===========================================================================
+ * Animations des scores (voir app/_components/ScoreAnimations.tsx).
+ * =========================================================================== */
+@keyframes stickerPop {
+  0% { opacity: 0; transform: scale(0.2) rotate(-18deg); }
+  70% { opacity: 1; transform: scale(1.25) rotate(6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(3deg); }
+}
+@keyframes crownDrop {
+  0% { opacity: 0; transform: translateY(-40px) rotate(-40deg) scale(0.6); }
+  60% { opacity: 1; transform: translateY(4px) rotate(-6deg) scale(1.15); }
+  100% { opacity: 1; transform: translateY(0) rotate(-12deg) scale(1); }
+}
+@keyframes confettiFall {
+  0% { opacity: 1; transform: translate3d(0, -20px, 0) rotate(0deg); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(var(--drift), 105vh, 0) rotate(var(--spin)); }
+}
+@keyframes drumHit {
+  from { transform: translateY(0) rotate(-8deg) scale(1); }
+  to { transform: translateY(-6px) rotate(8deg) scale(1.08); }
+}
+@keyframes drumPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+@keyframes stampIn {
+  0% { opacity: 0; transform: scale(2.2) rotate(-10deg); }
+  60% { opacity: 1; transform: scale(0.92) rotate(2deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes podiumRise {
+  0% { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes leaderBanner {
+  0% { opacity: 0; transform: translate(-50%, calc(-50% - 20px)) scale(0.6) rotate(-6deg); }
+  15% { opacity: 1; transform: translate(-50%, -50%) scale(1.1) rotate(-3deg); }
+  25% { transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
+  85% { opacity: 1; transform: translate(-50%, -50%) scale(1) rotate(-3deg); }
+  100% { opacity: 0; transform: translate(-50%, calc(-50% - 10px)) scale(0.9) rotate(-3deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

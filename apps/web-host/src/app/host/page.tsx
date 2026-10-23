@@ -69,6 +69,7 @@ import {
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { confirmDialog } from "../_components/ConfirmDialog";
+import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
@@ -1835,39 +1836,38 @@ function HostScreenInner() {
           ) : (
           <div className="relative w-full max-w-xl bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
             <h2 className="text-2xl font-bold mb-4 font-display">Joueurs connectés ({players.length})</h2>
-            <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
-              {players.length === 0 && <li className="text-inkMuted">En attente de joueurs…</li>}
-              {rankedPlayers.map((p) => {
-                const plate = podiumRowClasses(p.rank);
-                return (
-                  <li
-                    key={p.id}
-                    className={`flex justify-between items-center rounded-xl px-4 py-3 text-xl ${plate.row}`}
-                  >
-                    <span className={`flex items-center gap-3 min-w-0 ${plate.text}`}>
-                      <span className="font-display font-black w-5 shrink-0 text-center">{p.rank}</span>
-                      <span className="truncate font-medium">{p.display_name}</span>
-                      {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
-                          informatif ici, l'application réelle se fait côté serveur. */}
-                      {p.correct_streak_count >= 3 && (
-                        <span
-                          className="inline-flex items-center gap-0.5 text-xs text-amberStrong shrink-0"
-                          title={`${p.correct_streak_count} bonnes réponses d'affilée — buzzer retardé`}
-                        >
-                          <Flame className="w-3.5 h-3.5" /> {p.correct_streak_count}
-                        </span>
-                      )}
-                      {round && isFullyBlockedThisRound(p, round) && (
-                        <span className="text-xs text-danger shrink-0" title="Buzzer bloqué ce tour-ci">
-                          bloqué
-                        </span>
-                      )}
-                    </span>
-                    <span className={`font-black font-display shrink-0 ${plate.text}`}>{p.score} pts</span>
-                  </li>
-                );
-              })}
-            </ul>
+            {players.length === 0 ? (
+              <p className="text-inkMuted">En attente de joueurs…</p>
+            ) : (
+              // Classement animé entre les manches (étiquettes de points,
+              // scores qui défilent, dépassements, couronne) — voir
+              // _components/ScoreAnimations.tsx.
+              <AnimatedScoreboard
+                players={players}
+                variant="host"
+                bonuses={roundBonuses(roundAttempts, round)}
+                className="max-h-[30rem] overflow-y-auto"
+                renderExtra={(p) => (
+                  <>
+                    {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
+                        informatif ici, l'application réelle se fait côté serveur. */}
+                    {p.correct_streak_count >= 3 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-xs text-amberStrong shrink-0"
+                        title={`${p.correct_streak_count} bonnes réponses d'affilée — buzzer retardé`}
+                      >
+                        <Flame className="w-3.5 h-3.5" /> {p.correct_streak_count}
+                      </span>
+                    )}
+                    {round && isFullyBlockedThisRound(p, round) && (
+                      <span className="text-xs text-danger shrink-0" title="Buzzer bloqué ce tour-ci">
+                        bloqué
+                      </span>
+                    )}
+                  </>
+                )}
+              />
+            )}
           </div>
           )}
 
@@ -2426,12 +2426,24 @@ function HostScreenInner() {
                 <p className="text-xs text-inkMuted/70 text-center max-w-xs">
                   Ça prend plus longtemps que prévu.
                 </p>
-                <button
-                  onClick={spotifyPlayer.reconnect}
-                  className="bg-inkSurface border-2 hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 border-fg shadow-sticker-sm"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" /> Réessayer
-                </button>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button
+                    onClick={spotifyPlayer.reconnect}
+                    className="bg-inkSurface border-2 hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 border-fg shadow-sticker-sm"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Réessayer
+                  </button>
+                  {/* Après un premier essai raté : le rechargement reste le
+                      recours le plus sûr (la partie est conservée). */}
+                  {spotifyPlayer.reconnectAttempts > 0 && (
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="bg-sage text-fg border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Recharger la page (la partie est gardée)
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -2439,144 +2451,114 @@ function HostScreenInner() {
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
           <div className="relative flex flex-col items-center gap-6 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
-            <Trophy className="w-10 h-10 text-fg" />
-            {targetScoreReached && teamMode ? (
-              <p className="text-2xl font-bold text-fg text-center font-display">
-                {teamsReachingTargetScore.map((s) => s.team.name).join(" et ")}{" "}
-                {teamsReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore} points
-              </p>
-            ) : targetScoreReached ? (
-              <p className="text-2xl font-bold text-fg text-center font-display">
-                {playersReachingTargetScore.map((p) => p.display_name).join(" et ")}{" "}
-                {playersReachingTargetScore.length > 1 ? "ont" : "a"} atteint les {targetScore}{" "}
-                points
-              </p>
-            ) : maxRoundsReached ? (
-              <p className="text-2xl font-bold text-fg text-center font-display">
-                Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte
-              </p>
-            ) : (
-              <p className="text-2xl font-bold text-fg font-display">Playlist terminée</p>
-            )}
-
-            {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
-                tableau par équipe avec MVP, distinctions) à la place du
-                podium individuel. */}
-            {teamMode && (
-              <div className="w-full flex flex-col gap-5">
-                <TeamResultBanner standings={teamStandings} />
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {teamStandings.map((st) => (
-                    <TeamRecapTable key={st.team.id} standing={st} stats={playerStats} />
-                  ))}
+            <EndCeremony
+              title={
+                <>
+                  <Trophy className="w-10 h-10 text-fg" />
+                  {/* Pas de nom ici : le gagnant est révélé par le podium
+                      juste après (sinon le titre gâcherait la surprise). */}
+                  {targetScoreReached ? (
+                    <p className="text-2xl font-bold text-fg text-center font-display">
+                      Score cible de {targetScore} points atteint !
+                    </p>
+                  ) : maxRoundsReached ? (
+                    <p className="text-2xl font-bold text-fg text-center font-display">
+                      Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte
+                    </p>
+                  ) : (
+                    <p className="text-2xl font-bold text-fg font-display">Playlist terminée</p>
+                  )}
+                </>
+              }
+              podium={
+                teamMode
+                  ? podiumFrom(teamStandings, (st) => ({ id: st.team.id, name: st.team.name, score: st.score, color: teamColor(st.team) }))
+                  : podiumFrom(rankedPlayers, (p) => ({ id: p.id, name: p.display_name, score: p.score }))
+              }
+            >
+              {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
+                  tableau par équipe avec MVP, distinctions) à la place du
+                  podium individuel. */}
+              {teamMode && (
+                <div className="w-full flex flex-col gap-5">
+                  <TeamResultBanner standings={teamStandings} />
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {teamStandings.map((st) => (
+                      <TeamRecapTable key={st.team.id} standing={st} stats={playerStats} />
+                    ))}
+                  </div>
+                  <AwardCards
+                    awards={teamAwards}
+                    teamOf={(p) => {
+                      const t = teamOfPlayer(p.id);
+                      return t ? { color: teamColor(t) } : null;
+                    }}
+                  />
                 </div>
-                <AwardCards
-                  awards={teamAwards}
-                  teamOf={(p) => {
-                    const t = teamOfPlayer(p.id);
-                    return t ? { color: teamColor(t) } : null;
+              )}
+              {!teamMode && (fastestAttempt || mostContestedCount > 1) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
+                  {fastestAttempt && (
+                    <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
+                      <p className="text-xs text-inkMuted flex items-center gap-1"><Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide</p>
+                      <p className="text-sm font-bold text-fg">
+                        {fastestPlayer?.display_name ?? "Joueur"} —{" "}
+                        {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
+                      </p>
+                    </div>
+                  )}
+                  {mostContestedRound && mostContestedCount > 1 && (
+                    <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
+                      <p className="text-xs text-inkMuted flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Manche la plus disputée</p>
+                      <p className="text-sm font-bold text-fg">
+                        {mostContestedRound.title} ({mostContestedCount} tentatives)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!teamMode && (
+              <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
+                {rankedPlayers.map((p) => {
+                  const plate = podiumRowClasses(p.rank);
+                  return (
+                    <li
+                      key={p.id}
+                      className={`flex justify-between items-center rounded-xl border-2 border-fg px-4 py-3 ${plate.row}`}
+                    >
+                      <span className={`flex items-center gap-3 ${plate.text}`}>
+                        <span className="font-display font-black w-5 text-center">{p.rank}</span>
+                        <span className="font-medium">{p.display_name}</span>
+                      </span>
+                      <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              )}
+              <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+                <button
+                  onClick={() => {
+                    resumeRoom(room.id).catch(() => {});
+                    setBuildingPlaylist(true);
                   }}
-                />
+                  className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
+                >
+                  <Play className="w-4 h-4" /> Continuer la partie
+                </button>
+                <button
+                  onClick={handleRestartGame}
+                  className="flex-none sm:min-w-[220px] bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
+                >
+                  <RotateCcw className="w-4 h-4" /> Redémarrer une partie
+                </button>
               </div>
-            )}
-
-            {/* Podium visuel des 3 premiers (gestion des égalités déjà faite
-                par withRanks : deux joueurs à égalité partagent le même
-                rang, donc "top 3" ici veut dire les 3 premiers RANGS, pas
-                forcément 3 joueurs si égalité). */}
-            {!teamMode && rankedPlayers.length > 0 && (
-              <div className="flex items-end justify-center gap-3">
-                {rankedPlayers
-                  .filter((p) => p.rank <= 3)
-                  .sort((a, b) => a.rank - b.rank)
-                  .map((p) => {
-                    const height = p.rank === 1 ? "h-24" : p.rank === 2 ? "h-16" : "h-12";
-                    // Or / argent / bronze pour le podium (1er, 2e, 3e) —
-                    // seuls les 3 premiers RANGS sont affichés ici (voir le
-                    // filter juste au-dessus), donc rank vaut toujours 1, 2
-                    // ou 3 à ce stade.
-                    const podiumColor =
-                      p.rank === 1
-                        ? "border-gold bg-gold/10 text-fg"
-                        : p.rank === 2
-                          ? "border-silver bg-silver/10 text-inkMuted"
-                          : "border-bronze bg-bronze/10 text-fg";
-                    return (
-                      <div key={p.id} className="flex flex-col items-center gap-1 w-20">
-                        <span className="text-sm truncate w-full text-center">{p.display_name}</span>
-                        <div
-                          className={`w-full ${height} rounded-t-xl border-2 flex items-start justify-center pt-2 font-black text-lg ${podiumColor}`}
-                        >
-                          {p.rank}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            )}
-
-            {!teamMode && (fastestAttempt || mostContestedCount > 1) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
-                {fastestAttempt && (
-                  <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
-                    <p className="text-xs text-inkMuted flex items-center gap-1"><Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide</p>
-                    <p className="text-sm font-bold text-fg">
-                      {fastestPlayer?.display_name ?? "Joueur"} —{" "}
-                      {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
-                    </p>
-                  </div>
-                )}
-                {mostContestedRound && mostContestedCount > 1 && (
-                  <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
-                    <p className="text-xs text-inkMuted flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Manche la plus disputée</p>
-                    <p className="text-sm font-bold text-fg">
-                      {mostContestedRound.title} ({mostContestedCount} tentatives)
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!teamMode && (
-            <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
-              {rankedPlayers.map((p) => {
-                const plate = podiumRowClasses(p.rank);
-                return (
-                  <li
-                    key={p.id}
-                    className={`flex justify-between items-center rounded-xl px-4 py-3 ${plate.row}`}
-                  >
-                    <span className={`flex items-center gap-3 ${plate.text}`}>
-                      <span className="font-display font-black w-5 text-center">{p.rank}</span>
-                      <span className="font-medium">{p.display_name}</span>
-                    </span>
-                    <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
-                  </li>
-                );
-              })}
-            </ul>
-            )}
-            <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-              <button
-                onClick={() => {
-                  resumeRoom(room.id).catch(() => {});
-                  setBuildingPlaylist(true);
-                }}
-                className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
-              >
-                <Play className="w-4 h-4" /> Continuer la partie
-              </button>
-              <button
-                onClick={handleRestartGame}
-                className="flex-none sm:min-w-[220px] bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
-              >
-                <RotateCcw className="w-4 h-4" /> Redémarrer une partie
-              </button>
-            </div>
-            <p className="text-xs text-inkMuted text-center max-w-sm">
-              « Continuer » garde les scores et ajoute d’autres morceaux à la suite. «
-              Redémarrer » garde les mêmes joueurs mais remet les scores et l’historique à zéro.
-            </p>
+              <p className="text-xs text-inkMuted text-center max-w-sm">
+                « Continuer » garde les scores et ajoute d’autres morceaux à la suite. «
+                Redémarrer » garde les mêmes joueurs mais remet les scores et l’historique à zéro.
+              </p>
+            </EndCeremony>
           </div>
         )}
 

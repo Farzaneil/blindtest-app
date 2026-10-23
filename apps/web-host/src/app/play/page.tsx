@@ -56,6 +56,7 @@ import { BADGE_BY_KEY } from "../../lib/badges";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY } from "../../lib/cosmetics";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
+import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 
 type Session = { roomId: string; playerId: string };
 
@@ -417,104 +418,6 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
   );
 }
 
-// Hauteur fixe (en px) de chaque ligne du classement animé ci-dessous :
-// permet de calculer le décalage de l'animation par simple différence
-// d'index (ancien rang - nouveau rang) plutôt que par une vraie mesure DOM
-// (getBoundingClientRect) — suffisant tant que chaque ligne garde la même
-// hauteur (nom tronqué sur une seule ligne, voir truncate plus bas), et
-// beaucoup plus simple puisque ce composant est démonté/remonté à chaque
-// manche (voir AnimatedLeaderboard) : il n'y a donc pas de position DOM
-// "avant" à mesurer, seulement l'ordre précédent transmis en prop.
-const LEADERBOARD_ROW_HEIGHT_PX = 44;
-
-/**
- * Classement complet, affiché uniquement pendant la fenêtre entre "réponse
- * révélée" et le lancement de la manche suivante (voir answerRevealed dans
- * BuzzerView) : remplace le bouton buzz, qui ne sert plus à rien une fois
- * la manche jugée. Dès que l'hôte lance la manche suivante, ce composant
- * est démonté et le buzzer réapparaît (voir le rendu conditionnel dans
- * BuzzerView).
- *
- * Anime le changement de position d'un joueur qui en dépasse un autre (ou
- * se fait dépasser) suite aux points distribués sur CETTE manche : chaque
- * ligne démarre visuellement à sa position précédente (previousOrder,
- * capturé juste au lancement de cette manche — voir previousOrderRef dans
- * BuzzerView) puis glisse vers sa position finale via une transition CSS
- * déclenchée une frame après le montage (technique "FLIP" simplifiée,
- * sans mesure DOM réelle — voir LEADERBOARD_ROW_HEIGHT_PX ci-dessus).
- */
-function AnimatedLeaderboard({
-  players,
-  previousOrder,
-  meId,
-}: {
-  players: RankedPlayer[];
-  previousOrder: string[];
-  meId: string;
-}) {
-  const [settled, setSettled] = useState(false);
-
-  useEffect(() => {
-    // Double requestAnimationFrame : le premier laisse le navigateur peindre
-    // l'état initial (lignes décalées, sans transition), le second bascule
-    // vers l'état final avec la transition active — un seul rAF suffit
-    // presque toujours, mais deux évitent tout risque de saut sans
-    // animation sur un navigateur plus lent à peindre.
-    let raf2 = 0;
-    const raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(() => setSettled(true));
-    });
-    return () => {
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-    };
-  }, []);
-
-  return (
-    <ul className="w-full flex flex-col gap-1.5 max-h-80 overflow-y-auto pr-1">
-      {players.map((p, index) => {
-        const oldIndex = previousOrder.indexOf(p.id);
-        const offsetRows = oldIndex === -1 ? 0 : oldIndex - index;
-        const isMe = p.id === meId;
-        const plate = podiumRowClasses(p.rank);
-        // Podium (rang <= 3) : plaquette en fond plein or/argent/bronze,
-        // prioritaire sur la mise en avant "toi" (voir host/page.tsx pour
-        // la même règle). Au-delà du podium, "toi" garde son bordereau
-        // sauge distinctif sur la ligne neutre.
-        const rowClass =
-          p.rank <= 3
-            ? `${plate.row} border-transparent`
-            : isMe
-              ? "bg-sage/10 border-fg"
-              : "bg-inkSurface2 border-transparent";
-        const textClass = p.rank <= 3 ? plate.text : "text-fg";
-        return (
-          <li
-            key={p.id}
-            style={{
-              transform: settled ? "translateY(0)" : `translateY(${offsetRows * LEADERBOARD_ROW_HEIGHT_PX}px)`,
-              transition: settled ? "transform 450ms ease" : "none",
-            }}
-            className={`h-11 flex items-center justify-between gap-2 rounded-xl px-4 shrink-0 border ${rowClass}`}
-          >
-            <span className={`flex items-center gap-2 min-w-0 ${textClass}`}>
-              <span className="font-display font-black text-sm w-5 shrink-0 text-center">{p.rank}</span>
-              <span className="truncate font-medium">{p.display_name}</span>
-              {p.correct_streak_count >= 3 && (
-                <Flame
-                  className="w-3.5 h-3.5 text-amberStrong shrink-0"
-                  aria-label="Bonnes réponses d'affilée"
-                />
-              )}
-            </span>
-            <span className={`font-black font-display shrink-0 ${textClass}`}>{p.score} pts</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 /**
  * Bandeau du haut en mode équipes (maquette "Joueur · Buzzer") : nom et
  * score de l'équipe dans sa couleur, rapport de force face à la meilleure
@@ -746,14 +649,14 @@ function BuzzerView({
   const buzzRing = myTeam && baseCosmetic.key !== DEFAULT_COSMETIC_KEY ? teamColor(myTeam) : null;
 
   // Classement animé affiché à la révélation de la réponse (voir
-  // AnimatedLeaderboard) : previousOrder mémorise l'ordre du classement tel
+  // AnimatedScoreboard) : previousScores mémorise les scores tels
   // qu'il était juste AVANT que les points de la manche en cours ne soient
   // distribués — capturé une seule fois par manche, au moment où elle passe
   // à "playing" (donc juste après que les points de la manche PRÉCÉDENTE
   // ont déjà été appliqués). Un state plutôt qu'une ref : lire ref.current
-  // pendant le rendu (pour le passer en prop à AnimatedLeaderboard plus
+  // pendant le rendu (pour le passer en prop à AnimatedScoreboard plus
   // bas) n'est pas autorisé par les règles de pureté de React.
-  const [previousOrder, setPreviousOrder] = useState<string[]>([]);
+  const [previousScores, setPreviousScores] = useState<Record<string, number> | null>(null);
   const snapshotRoundIdRef = useRef<string | null>(null);
   const roundIdForSnapshot = round?.id ?? null;
   const roundStatusForSnapshot = round?.status ?? null;
@@ -763,10 +666,10 @@ function BuzzerView({
       roundIdForSnapshot &&
       snapshotRoundIdRef.current !== roundIdForSnapshot
     ) {
-      setPreviousOrder(ranked.map((p) => p.id));
+      setPreviousScores(Object.fromEntries(players.map((p) => [p.id, p.score])));
       snapshotRoundIdRef.current = roundIdForSnapshot;
     }
-  }, [roundIdForSnapshot, roundStatusForSnapshot, ranked]);
+  }, [roundIdForSnapshot, roundStatusForSnapshot, players]);
 
   // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
   // application se fait côté serveur (resolve_buzz_winner) — ceci ne sert
@@ -847,190 +750,205 @@ function BuzzerView({
     const share =
       me && myStanding && myStanding.score > 0 ? Math.round((Math.max(0, me.score) / myStanding.score) * 100) : null;
     const otherStandings = teamStandings.filter((st) => st.team.id !== myTeam?.id);
+    const myTeamRank = myStanding?.rank ?? null;
     return (
       <div className="flex flex-col items-center gap-4 w-full max-w-sm">
-        <TeamResultBanner standings={teamStandings} perspectiveTeamId={myTeam?.id ?? null} />
+        <EndCeremony
+          compact
+          confetti={myTeamRank === 1}
+          title={<p className="text-2xl font-bold text-fg text-center font-display">Partie terminée !</p>}
+          podium={podiumFrom(teamStandings, (st) => ({ id: st.team.id, name: st.team.name, score: st.score, color: teamColor(st.team) }))}
+          headline={
+            myTeam &&
+            myTeamRank !== null && (
+              <p
+                className="font-display text-2xl border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-2"
+                style={{ background: teamColor(myTeam), color: textOnTeamColor(myTeam) }}
+              >
+                {myTeamRank === 1
+                  ? `${myTeam.name} ${/^les\s/i.test(myTeam.name) ? "gagnent" : "gagne"} !`
+                  : `${myTeam.name} : ${formatOrdinal(myTeamRank)}`}
+              </p>
+            )
+          }
+        >
+          <TeamResultBanner standings={teamStandings} perspectiveTeamId={myTeam?.id ?? null} />
 
-        {newlyUnlockedBadges.length > 0 && (
-          <div className="w-full flex flex-col gap-2">
-            {newlyUnlockedBadges.map((u) => {
-              const def = BADGE_BY_KEY[u.badgeKey];
-              if (!def) return null;
-              return (
-                <div key={`${u.badgeKey}:${u.tier}`} className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
-                  <def.icon className="w-6 h-6 shrink-0 text-fg" />
-                  <p className="text-sm font-bold text-fg">Badge débloqué : {def.label}</p>
+          {newlyUnlockedBadges.length > 0 && (
+            <div className="w-full flex flex-col gap-2">
+              {newlyUnlockedBadges.map((u) => {
+                const def = BADGE_BY_KEY[u.badgeKey];
+                if (!def) return null;
+                return (
+                  <div key={`${u.badgeKey}:${u.tier}`} className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3">
+                    <def.icon className="w-6 h-6 shrink-0 text-fg" />
+                    <p className="text-sm font-bold text-fg">Badge débloqué : {def.label}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {me && (
+            <section
+              className="w-full bg-inkSurface border-[3px] rounded-2xl p-4 flex flex-col gap-3 shadow-sticker"
+              style={{ borderColor: myStanding?.mvpPlayerId === playerId ? "#F5A524" : "#111111" }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-display font-bold text-lg truncate">Toi · {me.display_name}</span>
+                {myStanding?.mvpPlayerId === playerId && <MvpBadge label={`MVP ${myTeam?.name ?? ""}`.trim()} />}
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
+                <div className="bg-inkSurface2 rounded-xl py-2.5">
+                  <p className="font-display font-bold text-xl">{me.score}</p>
+                  <p className="text-[11px] text-inkMuted">points</p>
                 </div>
-              );
-            })}
+                <div className="bg-inkSurface2 rounded-xl py-2.5">
+                  <p className="font-display font-bold text-xl">{myStats?.goodAnswers ?? 0}</p>
+                  <p className="text-[11px] text-inkMuted">bonnes rép.</p>
+                </div>
+                <div className="bg-inkSurface2 rounded-xl py-2.5">
+                  <p className="font-display font-bold text-xl">
+                    {myStats?.fastestSeconds != null ? formatSeconds(myStats.fastestSeconds) : "—"}
+                  </p>
+                  <p className="text-[11px] text-inkMuted">buzz record</p>
+                </div>
+              </div>
+              {share !== null && (
+                <p className="text-sm text-inkMuted">Tu as apporté {share} % des points de ton équipe.</p>
+              )}
+            </section>
+          )}
+
+          {myStanding && <TeamRecapTable standing={myStanding} stats={stats} highlightPlayerId={playerId} />}
+
+          {otherStandings.length > 0 && (
+            <details className="w-full">
+              <summary className="text-sm text-inkMuted hover:text-fg cursor-pointer text-center py-2">
+                Voir le détail des autres équipes
+              </summary>
+              <div className="flex flex-col gap-3 mt-2">
+                {otherStandings.map((st) => (
+                  <TeamRecapTable key={st.team.id} standing={st} stats={stats} />
+                ))}
+              </div>
+            </details>
+          )}
+
+          <div className="flex gap-4">
+            <Link href="/" className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1">
+              <ArrowLeft className="w-3.5 h-3.5" /> Accueil
+            </Link>
+            <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
+              Quitter la partie
+            </button>
           </div>
-        )}
-
-        {me && (
-          <section
-            className="w-full bg-inkSurface border-[3px] rounded-2xl p-4 flex flex-col gap-3 shadow-sticker"
-            style={{ borderColor: myStanding?.mvpPlayerId === playerId ? "#F5A524" : "#111111" }}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-display font-bold text-lg truncate">Toi · {me.display_name}</span>
-              {myStanding?.mvpPlayerId === playerId && <MvpBadge label={`MVP ${myTeam?.name ?? ""}`.trim()} />}
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center tabular-nums">
-              <div className="bg-inkSurface2 rounded-xl py-2.5">
-                <p className="font-display font-bold text-xl">{me.score}</p>
-                <p className="text-[11px] text-inkMuted">points</p>
-              </div>
-              <div className="bg-inkSurface2 rounded-xl py-2.5">
-                <p className="font-display font-bold text-xl">{myStats?.goodAnswers ?? 0}</p>
-                <p className="text-[11px] text-inkMuted">bonnes rép.</p>
-              </div>
-              <div className="bg-inkSurface2 rounded-xl py-2.5">
-                <p className="font-display font-bold text-xl">
-                  {myStats?.fastestSeconds != null ? formatSeconds(myStats.fastestSeconds) : "—"}
-                </p>
-                <p className="text-[11px] text-inkMuted">buzz record</p>
-              </div>
-            </div>
-            {share !== null && (
-              <p className="text-sm text-inkMuted">Tu as apporté {share} % des points de ton équipe.</p>
-            )}
-          </section>
-        )}
-
-        {myStanding && <TeamRecapTable standing={myStanding} stats={stats} highlightPlayerId={playerId} />}
-
-        {otherStandings.length > 0 && (
-          <details className="w-full">
-            <summary className="text-sm text-inkMuted hover:text-fg cursor-pointer text-center py-2">
-              Voir le détail des autres équipes
-            </summary>
-            <div className="flex flex-col gap-3 mt-2">
-              {otherStandings.map((st) => (
-                <TeamRecapTable key={st.team.id} standing={st} stats={stats} />
-              ))}
-            </div>
-          </details>
-        )}
-
-        <div className="flex gap-4">
-          <Link href="/" className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1">
-            <ArrowLeft className="w-3.5 h-3.5" /> Accueil
-          </Link>
-          <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
-            Quitter la partie
-          </button>
-        </div>
+        </EndCeremony>
       </div>
     );
   }
 
   if (roomStatus === "finished") {
+    const meRanked = ranked.find((p) => p.id === playerId) ?? null;
     return (
       <div className="relative flex flex-col items-center gap-6 w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-8 shadow-sticker">
-        <Trophy className="w-10 h-10 text-fg" />
-        <p className="text-2xl font-bold text-fg text-center font-display">Partie terminée !</p>
+        <EndCeremony
+          compact
+          confetti={meRanked?.rank === 1}
+          title={
+            <>
+              <Trophy className="w-10 h-10 text-fg" />
+              <p className="text-2xl font-bold text-fg text-center font-display">Partie terminée !</p>
+            </>
+          }
+          podium={podiumFrom(ranked, (p) => ({ id: p.id, name: p.display_name, score: p.score }))}
+          headline={
+            meRanked && (
+              <p
+                className={`font-display text-2xl border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-2 ${
+                  meRanked.rank === 1 ? "bg-gold" : "bg-info"
+                }`}
+              >
+                {meRanked.rank === 1 ? "Tu gagnes !" : `Tu finis ${formatOrdinal(meRanked.rank)} / ${ranked.length}`}
+              </p>
+            )
+          }
+        >
 
-        {newlyUnlockedBadges.length > 0 && (
-          <div className="w-full flex flex-col gap-2">
-            {newlyUnlockedBadges.map((u) => {
-              const def = BADGE_BY_KEY[u.badgeKey];
-              if (!def) return null;
-              const tierLabel = u.tier === "or" ? "Or" : u.tier === "argent" ? "Argent" : "Bronze";
-              const tierColor = u.tier === "or" ? "text-fg" : u.tier === "argent" ? "text-inkMuted" : "text-fg";
-              return (
-                <div
-                  key={`${u.badgeKey}:${u.tier}`}
-                  className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3"
-                >
-                  <def.icon className={`w-6 h-6 shrink-0 ${tierColor}`} />
-                  <p className="text-sm text-left">
-                    <span className="font-bold text-fg">Badge débloqué : {def.label}</span>{" "}
-                    <span className={`font-semibold ${tierColor}`}>({tierLabel})</span>
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {ranked.length > 0 && (
-          <div className="flex items-end justify-center gap-3">
-            {ranked
-              .filter((p) => p.rank <= 3)
-              .sort((a, b) => a.rank - b.rank)
-              .map((p) => {
-                const height = p.rank === 1 ? "h-24" : p.rank === 2 ? "h-16" : "h-12";
-                const podiumColor =
-                  p.rank === 1
-                    ? "border-gold bg-gold/10 text-fg"
-                    : p.rank === 2
-                      ? "border-silver bg-silver/10 text-inkMuted"
-                      : "border-bronze bg-bronze/10 text-fg";
+          {newlyUnlockedBadges.length > 0 && (
+            <div className="w-full flex flex-col gap-2">
+              {newlyUnlockedBadges.map((u) => {
+                const def = BADGE_BY_KEY[u.badgeKey];
+                if (!def) return null;
+                const tierLabel = u.tier === "or" ? "Or" : u.tier === "argent" ? "Argent" : "Bronze";
+                const tierColor = u.tier === "or" ? "text-fg" : u.tier === "argent" ? "text-inkMuted" : "text-fg";
                 return (
-                  <div key={p.id} className="flex flex-col items-center gap-1 w-20">
-                    <span className="text-sm truncate w-full text-center">{p.display_name}</span>
-                    <div
-                      className={`w-full ${height} rounded-t-xl border-2 flex items-start justify-center pt-2 font-black text-lg ${podiumColor}`}
-                    >
-                      {p.rank}
-                    </div>
+                  <div
+                    key={`${u.badgeKey}:${u.tier}`}
+                    className="flex items-center gap-3 bg-inkSurface2 border border-inkBorder rounded-xl px-4 py-3"
+                  >
+                    <def.icon className={`w-6 h-6 shrink-0 ${tierColor}`} />
+                    <p className="text-sm text-left">
+                      <span className="font-bold text-fg">Badge débloqué : {def.label}</span>{" "}
+                      <span className={`font-semibold ${tierColor}`}>({tierLabel})</span>
+                    </p>
                   </div>
                 );
               })}
+            </div>
+          )}
+          {(fastestAttempt || mostContestedCount > 1) && (
+            <div className="grid grid-cols-1 gap-3 w-full">
+              {fastestAttempt && (
+                <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
+                  <p className="text-xs text-inkMuted flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide
+                  </p>
+                  <p className="text-sm font-bold text-fg">
+                    {fastestPlayer?.display_name ?? "Joueur"} —{" "}
+                    {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
+                  </p>
+                </div>
+              )}
+              {mostContestedRound && mostContestedCount > 1 && (
+                <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
+                  <p className="text-xs text-inkMuted flex items-center gap-1">
+                    <Flame className="w-3.5 h-3.5" /> Manche la plus disputée
+                  </p>
+                  <p className="text-sm font-bold text-fg">
+                    {mostContestedRound.title} ({mostContestedCount} tentatives)
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
+            {ranked.map((p) => {
+              const plate = podiumRowClasses(p.rank);
+              return (
+                <li key={p.id} className={`flex justify-between rounded-xl border-2 border-fg px-4 py-3 ${plate.row}`}>
+                  <span className={`flex items-center gap-2 ${plate.text}`}>
+                    <span className="font-display font-black">{p.rank}.</span> {p.display_name}
+                  </span>
+                  <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="flex gap-4">
+            <Link
+              href="/"
+              className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Accueil
+            </Link>
+            <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
+              Quitter la partie
+            </button>
           </div>
-        )}
-
-        {(fastestAttempt || mostContestedCount > 1) && (
-          <div className="grid grid-cols-1 gap-3 w-full">
-            {fastestAttempt && (
-              <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
-                <p className="text-xs text-inkMuted flex items-center gap-1">
-                  <Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide
-                </p>
-                <p className="text-sm font-bold text-fg">
-                  {fastestPlayer?.display_name ?? "Joueur"} —{" "}
-                  {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
-                </p>
-              </div>
-            )}
-            {mostContestedRound && mostContestedCount > 1 && (
-              <div className="bg-inkSurface2 rounded-xl px-4 py-3 text-left">
-                <p className="text-xs text-inkMuted flex items-center gap-1">
-                  <Flame className="w-3.5 h-3.5" /> Manche la plus disputée
-                </p>
-                <p className="text-sm font-bold text-fg">
-                  {mostContestedRound.title} ({mostContestedCount} tentatives)
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
-          {ranked.map((p) => {
-            const plate = podiumRowClasses(p.rank);
-            return (
-              <li key={p.id} className={`flex justify-between rounded-xl px-4 py-3 ${plate.row}`}>
-                <span className={`flex items-center gap-2 ${plate.text}`}>
-                  <span className="font-display font-black">{p.rank}.</span> {p.display_name}
-                </span>
-                <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="flex gap-4">
-          <Link
-            href="/"
-            className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Accueil
-          </Link>
-          <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
-            Quitter la partie
-          </button>
-        </div>
+        </EndCeremony>
       </div>
     );
   }
@@ -1128,14 +1046,21 @@ function BuzzerView({
               </p>
             )}
           </div>
-          {/* Classement complet animé (voir AnimatedLeaderboard) : remplace
+          {/* Classement complet animé (voir AnimatedScoreboard) : remplace
               le bouton buzz pendant toute cette fenêtre de révélation,
               jusqu'à ce que l'hôte relance une manche — voir le rendu
               conditionnel ci-dessus (round.status repasse alors à
               "playing" sur un round.id différent, ce qui redémonte ce
               composant et fait réapparaître le buzzer). */}
           {teamMode && <TeamMiniStandings standings={teamStandings} myTeamId={myTeam?.id ?? null} />}
-          <AnimatedLeaderboard players={ranked} previousOrder={previousOrder} meId={playerId} />
+          <AnimatedScoreboard
+            players={players}
+            baseline={previousScores}
+            meId={playerId}
+            variant="phone"
+            bonuses={roundBonuses(roundAttempts, round)}
+            className="max-h-96 overflow-y-auto"
+          />
         </>
       ) : (
         <>
