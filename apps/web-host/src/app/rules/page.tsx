@@ -77,10 +77,10 @@ export default function RulesPage() {
             <span className="rounded-full bg-sage text-sageOn font-display font-bold text-sm px-4 py-1.5 border-2 border-fg shadow-sticker-sm">
               +2 titre et artiste
             </span>
-            <span className="rounded-full bg-info text-infoOn font-display font-bold text-sm px-4 py-1.5">
+            <span className="rounded-full bg-info text-infoOn font-display font-bold text-sm px-4 py-1.5 border-2 border-fg shadow-sticker-sm">
               +1 un seul des deux
             </span>
-            <span className="rounded-full bg-danger text-white font-display font-bold text-sm px-4 py-1.5">
+            <span className="rounded-full bg-danger text-white font-display font-bold text-sm px-4 py-1.5 border-2 border-fg shadow-sticker-sm">
               -1 aucun des deux
             </span>
           </div>

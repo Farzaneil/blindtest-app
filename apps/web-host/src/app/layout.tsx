@@ -2,6 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import { Dela_Gothic_One, Rubik } from "next/font/google";
 import { CookieConsentBanner } from "./_components/CookieConsentBanner";
+import { ConfirmDialogHost } from "./_components/ConfirmDialog";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
 // Auto-hébergées par next/font (pas de <link> vers Google Fonts, pas de
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="bg-page text-fg min-h-screen font-sans">
         {children}
         <CookieConsentBanner />
+        <ConfirmDialogHost />
       </body>
     </html>
   );

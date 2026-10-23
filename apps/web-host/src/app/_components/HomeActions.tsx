@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Mic2, Play, Plus, Smartphone } from "lucide-react";
+import { confirmDialog } from "./ConfirmDialog";
 import { endHostGame, forgetHostGame, readOngoingHostGame, type OngoingHostGame } from "../../lib/hostSession";
 
 /**
@@ -32,9 +33,11 @@ export function HomeActions() {
   const startNewGame = async () => {
     if (!ongoing) return;
     if (
-      !window.confirm(
-        `Lancer une nouvelle partie ? La partie ${ongoing.room.code} sera terminée pour tout le monde (les scores et badges sont enregistrés).`
-      )
+      !(await confirmDialog({
+        title: "Lancer une nouvelle partie ?",
+        message: `La partie ${ongoing.room.code} sera terminée pour tout le monde. Les scores et badges sont enregistrés.`,
+        confirmLabel: "Nouvelle partie",
+      }))
     ) {
       return;
     }

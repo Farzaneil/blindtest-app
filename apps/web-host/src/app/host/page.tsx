@@ -24,6 +24,8 @@ import {
   resumeRoom,
   resetRoomScores,
   joinRoomAsHost,
+  PseudoTakenError,
+  removeHostPlayer,
   sendBuzz,
   updateRoomBonusMalusSettings,
   awardGameRewards,
@@ -66,6 +68,7 @@ import {
 } from "../../lib/spotifyQuotaLock";
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
+import { confirmDialog } from "../_components/ConfirmDialog";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
@@ -264,13 +267,15 @@ function BonusMalusToggleRow({
         aria-label={label}
         disabled={saving}
         onClick={onToggle}
-        className={`relative shrink-0 w-9 h-5 rounded-full border transition-colors disabled:opacity-50 ${
-          enabled ? "bg-sage border-fg border-2 shadow-sticker-sm" : "bg-inkSurface2 border-inkBorder"
+        // Même relief autocollant (contour + ombre) coché ou non : seule la
+        // couleur et la position de la pastille changent.
+        className={`relative shrink-0 w-11 h-6 rounded-full border-2 border-fg shadow-sticker-sm transition-colors disabled:opacity-50 ${
+          enabled ? "bg-sage" : "bg-inkSurface"
         }`}
       >
         <span
-          className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${
-            enabled ? "translate-x-4" : "translate-x-0"
+          className={`absolute top-1/2 -translate-y-1/2 left-0.5 w-4 h-4 rounded-full border-2 border-fg transition-transform ${
+            enabled ? "translate-x-5 bg-white" : "translate-x-0 bg-inkSurface3"
           }`}
         />
       </button>
@@ -687,6 +692,7 @@ function HostScreenInner() {
   const [hostMode, setHostMode] = useState<HostMode | null>(null);
   // Voir le commentaire sur HOST_PLAYER_ID_STORAGE_KEY plus haut.
   const [hostPlayerId, setHostPlayerId] = useState<string | null>(null);
+  const [hostJoinError, setHostJoinError] = useState<string | null>(null);
   const [hostJoinSkipped, setHostJoinSkipped] = useState(false);
   const [hostView, setHostView] = useState<"admin" | "buzzer">("admin");
   const [joinHostFormOpen, setJoinHostFormOpen] = useState(false);
@@ -1362,11 +1368,49 @@ function HostScreenInner() {
       const player = await joinRoomAsHost(room.id, name.trim() || "Hôte", hostPlayerAccount?.id ?? null);
       setHostPlayerId(player.id);
       setJoinHostFormOpen(false);
+      setHostJoinError(null);
     } catch (e: any) {
-      setError(e?.message ?? "Impossible de te connecter comme joueur sur cet écran.");
+      if (e instanceof PseudoTakenError) {
+        // Pseudo déjà pris par un joueur : on reste sur le choix, avec le
+        // formulaire ouvert pour en saisir un autre.
+        setHostJoinError(`${e.message} Choisis-en un autre.`);
+        setHostNameDraft("");
+        setJoinHostFormOpen(true);
+      } else {
+        setError(e?.message ?? "Impossible de te connecter comme joueur sur cet écran.");
+      }
     } finally {
       setJoiningAsHost(false);
     }
+  };
+
+  // Passage en "Maître du jeu" alors que l'hôte s'est inscrit comme joueur
+  // (en "Tout le monde participe") : il verrait toutes les réponses, il ne
+  // peut donc pas rester joueur. Confirmation, puis retrait de sa ligne
+  // joueur (migration 0028, refusé côté serveur si une manche a déjà été
+  // jouée). S'il repasse ensuite en "Tout le monde participe", la question
+  // "Tu joues aussi ?" lui est reposée (hostJoinResolved redevient false).
+  const handleChooseGamemaster = async () => {
+    if (hostPlayerId) {
+      const ok = await confirmDialog({
+        title: "Passer en Maître du jeu ?",
+        message:
+          "En Maître du jeu, tu vois tous les titres à l’avance : tu seras retiré des joueurs de cette partie.",
+        confirmLabel: "Me retirer et passer en Maître du jeu",
+      });
+      if (!ok) return;
+      try {
+        await removeHostPlayer(hostPlayerId);
+      } catch (e: any) {
+        setError(e?.message ?? "Impossible de te retirer des joueurs.");
+        return;
+      }
+      setHostPlayerId(null);
+      setHostJoinSkipped(false);
+      setHostJoinError(null);
+      setHostView("admin");
+    }
+    setHostMode("gamemaster");
   };
 
   // Équivalent de onBuzz côté /play (voir play/page.tsx), mais pour le
@@ -1497,9 +1541,12 @@ function HostScreenInner() {
   const handleRestartGame = async () => {
     if (!room) return;
     if (
-      !window.confirm(
-        "Redémarrer la partie ? Les scores et l'historique actuels seront remis à zéro (les joueurs restent connectés)."
-      )
+      !(await confirmDialog({
+        title: "Redémarrer la partie ?",
+        message: "Les scores et l’historique actuels seront remis à zéro. Les joueurs restent connectés.",
+        confirmLabel: "Redémarrer",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -1524,9 +1571,11 @@ function HostScreenInner() {
 
   const handleStartNewGame = async () => {
     if (
-      !window.confirm(
-        "Lancer une nouvelle partie ? La partie en cours sera terminée pour tout le monde (les scores et badges sont enregistrés)."
-      )
+      !(await confirmDialog({
+        title: "Lancer une nouvelle partie ?",
+        message: "La partie en cours sera terminée pour tout le monde. Les scores et badges sont enregistrés.",
+        confirmLabel: "Nouvelle partie",
+      }))
     ) {
       return;
     }
@@ -2079,13 +2128,13 @@ function HostScreenInner() {
               <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
+                  className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <CheckCircle2 className="w-5 h-5 text-fg" /> Artiste trouvé
+                  <CheckCircle2 className="w-5 h-5" /> Artiste trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-inkSurface border-2 border-fg flex-1 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 shadow-sticker-sm"
+                  className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
                   <XCircle className="w-5 h-5" /> Toujours pas
                 </button>
@@ -2094,13 +2143,13 @@ function HostScreenInner() {
               <div className="flex gap-4 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
+                  className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <CheckCircle2 className="w-5 h-5 text-fg" /> Titre trouvé
+                  <CheckCircle2 className="w-5 h-5" /> Titre trouvé
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-inkSurface border-2 border-fg flex-1 text-danger hover:bg-danger/10 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center justify-center gap-2 shadow-sticker-sm"
+                  className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
                   <XCircle className="w-5 h-5" /> Toujours pas
                 </button>
@@ -2109,25 +2158,25 @@ function HostScreenInner() {
               <div className="grid grid-cols-2 gap-3 w-full max-w-md">
                 <button
                   onClick={() => handleJudge(true, false)}
-                  className="bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
+                  className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <Music className="w-4 h-4 text-fg" /> Titre seul (+1)
+                  <Music className="w-4 h-4" /> Titre seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(false, true)}
-                  className="bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
+                  className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
-                  <Mic className="w-4 h-4 text-fg" /> Artiste seul (+1)
+                  <Mic className="w-4 h-4" /> Artiste seul (+1)
                 </button>
                 <button
                   onClick={() => handleJudge(true, true)}
-                  className="bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
+                  className="bg-sage text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
                   <CheckCircle2 className="w-4 h-4" /> Les deux (+2)
                 </button>
                 <button
                   onClick={() => handleJudge(false, false)}
-                  className="bg-inkSurface border-2 border-fg text-danger hover:bg-danger/10 transition px-4 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 shadow-sticker-sm"
+                  className="bg-danger text-white px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
                 >
                   <XCircle className="w-4 h-4" /> Aucun (-1)
                 </button>
@@ -2160,7 +2209,7 @@ function HostScreenInner() {
 
             <div className="flex flex-col md:flex-row gap-4 w-full">
               <button
-                onClick={() => setHostMode("gamemaster")}
+                onClick={handleChooseGamemaster}
                 className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
               >
                 <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
@@ -2265,7 +2314,8 @@ function HostScreenInner() {
               appareil. À décider maintenant : ça ne pourra plus être changé une fois la partie
               commencée.
             </p>
-            {hostPlayerAccount ? (
+            {hostJoinError && <p className="text-danger text-sm font-bold text-center">{hostJoinError}</p>}
+            {hostPlayerAccount && !joinHostFormOpen ? (
               // Hôte connecté (Compte joueur déjà utilisé pour les
               // cosmétiques) : pseudo déjà connu, inutile de le redemander
               // — un seul clic inscrit directement l'hôte avec son pseudo
@@ -2321,8 +2371,14 @@ function HostScreenInner() {
 
         {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && (
           <button
-            onClick={() => {
-              if (window.confirm("Se déconnecter de Spotify pour connecter un autre compte ?")) {
+            onClick={async () => {
+              if (
+                await confirmDialog({
+                  title: "Se déconnecter de Spotify ?",
+                  message: "Tu pourras ensuite connecter un autre compte Spotify.",
+                  confirmLabel: "Déconnecter",
+                })
+              ) {
                 spotifyPlayer.disconnect();
               }
             }}
@@ -2576,12 +2632,21 @@ function HostScreenInner() {
                   </span>
                 )}
               </span>
-              <button
-                onClick={() => setHostMode(null)}
-                className="text-sm text-inkMuted hover:text-fg underline transition"
-              >
-                Changer de mode
-              </button>
+              {/* Le mode ne se change que pendant la préparation : une fois
+                  la première manche jouée, passer de "Tout le monde
+                  participe" à "Maître du jeu" (ou l'inverse) en cours de
+                  route fausserait la partie (l'hôte joueur verrait les
+                  réponses, ou un maître du jeu deviendrait joueur). */}
+              {gameStarted ? (
+                <span className="text-xs text-inkMuted font-bold">Mode verrouillé pendant la partie</span>
+              ) : (
+                <button
+                  onClick={() => setHostMode(null)}
+                  className="text-sm text-inkMuted hover:text-fg underline transition"
+                >
+                  Changer de mode
+                </button>
+              )}
             </div>
 
             {/* Score cible et morceaux max fusionnés en une seule ligne

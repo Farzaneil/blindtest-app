@@ -768,6 +768,18 @@ export async function joinRoomAsHost(
   displayName: string,
   accountId?: string | null
 ): Promise<Player> {
+  // Mêmes règles que joinRoomByCode (bug remonté : l'hôte pouvait s'ajouter
+  // avec un pseudo déjà pris, et donc apparaître deux fois) : un compte déjà
+  // présent dans la partie retrouve sa ligne, un pseudo déjà pris est refusé.
+  const { data: existingPlayers } = await supabase.from("players").select("*").eq("room_id", roomId);
+  const existing = (existingPlayers as Player[] | null) ?? [];
+  if (accountId) {
+    const mine = existing.find((p) => p.account_id === accountId);
+    if (mine) return mine;
+  }
+  const homonym = existing.find((p) => normalizePseudo(p.display_name) === normalizePseudo(displayName));
+  if (homonym) throw new PseudoTakenError(displayName, homonym.id, roomId);
+
   const { data, error } = await supabase
     .from("players")
     .insert({
@@ -780,11 +792,35 @@ export async function joinRoomAsHost(
     .select()
     .single();
 
+  if (error?.code === UNIQUE_VIOLATION) throw await pseudoTakenFromDb(roomId, displayName);
   if (error || !data) {
     throw new Error("Impossible de te connecter comme joueur sur cet écran, réessaie.");
   }
 
   return data as Player;
+}
+
+/**
+ * Retire la ligne joueur de l'hôte (passage en "Maître du jeu" pendant la
+ * préparation, voir migration 0028). Refusé côté serveur si une manche a
+ * déjà été jouée.
+ */
+export async function removeHostPlayer(playerId: string): Promise<void> {
+  const { error } = await supabase.rpc("remove_host_player", { p_player_id: playerId });
+  if (error) throw new Error("Impossible de te retirer des joueurs, réessaie.");
+}
+
+// Code Postgres "unique_violation" : pseudo déjà pris, détecté par l'index
+// players_room_pseudo_unique (migration 0028) quand deux joueurs valident le
+// même pseudo au même moment.
+const UNIQUE_VIOLATION = "23505";
+
+async function pseudoTakenFromDb(roomId: string, displayName: string): Promise<PseudoTakenError> {
+  const { data } = await supabase.from("players").select("id, display_name").eq("room_id", roomId);
+  const homonym = ((data as { id: string; display_name: string }[] | null) ?? []).find(
+    (p) => normalizePseudo(p.display_name) === normalizePseudo(displayName)
+  );
+  return new PseudoTakenError(displayName, homonym?.id ?? "", roomId);
 }
 
 /** Comparaison de pseudos insensible à la casse et aux espaces autour. */
@@ -891,9 +927,9 @@ export async function joinRoomByCode(
   }
 
   // Pseudo déjà utilisé dans CETTE partie (casse et espaces ignorés) :
-  // vérifié côté client avant l'insertion. Pas de contrainte d'unicité en
-  // base, donc deux joueurs validant le même pseudo à la même seconde
-  // pourraient encore passer — acceptable entre amis.
+  // vérifié ici pour un message immédiat, et garanti en base par l'index
+  // players_room_pseudo_unique (migration 0028) en cas de validations
+  // simultanées.
   const { data: existingPlayers } = await supabase
     .from("players")
     .select("*")
@@ -927,6 +963,7 @@ export async function joinRoomByCode(
     .select()
     .single();
 
+  if (playerError?.code === UNIQUE_VIOLATION) throw await pseudoTakenFromDb(room.id, displayName);
   if (playerError || !player) {
     throw new Error("Impossible de rejoindre la partie, réessaie.");
   }
