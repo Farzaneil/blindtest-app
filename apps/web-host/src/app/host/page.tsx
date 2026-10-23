@@ -2237,65 +2237,9 @@ function HostScreenInner() {
               </button>
             </div>
 
-            {/* Score cible optionnel : permet de charger une grosse playlist
-                (100+ morceaux) sans que la partie soit interminable, en la
-                terminant dès qu'un joueur atteint ce score plutôt que
-                d'attendre la fin de la file d'attente. Vide = comportement
-                historique (jusqu'à la fin de la playlist). Réglable aussi
-                plus tard depuis le panneau playlist (voir plus bas). */}
-            <div className="relative w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-5 py-4 flex flex-col gap-2 shadow-sticker">
-              <label htmlFor="target-score" className="text-sm font-bold text-inkMuted flex items-center gap-1.5">
-                <Target className="w-4 h-4" /> Score à atteindre pour gagner (optionnel)
-              </label>
-              <input
-                id="target-score"
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={targetScore ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    setTargetScore(null);
-                    return;
-                  }
-                  const parsed = Number.parseInt(raw, 10);
-                  setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                }}
-                placeholder="Illimité (jusqu'à la fin de la playlist)"
-                className="bg-inkSurface2 border-2 border-inkBorder focus:border-fg rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
-              />
-              <p className="text-xs text-inkMuted">
-                Laisse vide pour jouer jusqu’à la fin de la playlist. Sinon, la partie se termine
-                dès qu’un joueur atteint ce score.
-              </p>
-
-              <label htmlFor="max-rounds" className="text-sm font-bold text-inkMuted mt-2 flex items-center gap-1.5">
-                <Hash className="w-4 h-4" /> Nombre de morceaux max (optionnel)
-              </label>
-              <input
-                id="max-rounds"
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={maxRounds ?? ""}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    setMaxRounds(null);
-                    return;
-                  }
-                  const parsed = Number.parseInt(raw, 10);
-                  setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                }}
-                placeholder="Toute la playlist"
-                className="bg-inkSurface2 border-2 border-inkBorder focus:border-fg rounded-xl px-4 py-2 text-sm appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
-              />
-              <p className="text-xs text-inkMuted">
-                Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce
-                nombre de morceaux a été joué. Cumulable avec le score cible ci-dessus.
-              </p>
-            </div>
+            {/* Score cible et nombre de morceaux max : réglés après le choix
+                du mode, dans "Réglages de partie" du panneau playlist (le
+                bloc qui les doublait ici a été retiré). */}
           </div>
         )}
 
