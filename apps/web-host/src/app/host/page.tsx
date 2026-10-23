@@ -1388,6 +1388,25 @@ function HostScreenInner() {
     }
   };
 
+  // L'hôte s'est inscrit comme joueur invité ("Hôte"), puis s'est connecté
+  // à son compte joueur sur cet écran : on rattache automatiquement sa
+  // ligne joueur au compte et elle prend son pseudo (route serveur, qui lit
+  // le compte depuis le cookie de session). Une seule tentative par joueur.
+  const hostPlayerRow = hostPlayerId ? players.find((p) => p.id === hostPlayerId) ?? null : null;
+  const linkTriedForRef = useRef<string | null>(null);
+  const hostAccountId = hostPlayerAccount?.id ?? null;
+  const hostRowNeedsLink = !!hostPlayerRow && !hostPlayerRow.account_id;
+  useEffect(() => {
+    if (!hostAccountId || !hostPlayerId || !hostRowNeedsLink) return;
+    if (linkTriedForRef.current === hostPlayerId) return;
+    linkTriedForRef.current = hostPlayerId;
+    fetch("/api/player-account/link-host-player", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerId: hostPlayerId }),
+    }).catch(() => {});
+  }, [hostAccountId, hostPlayerId, hostRowNeedsLink]);
+
   // Passage en "Maître du jeu" alors que l'hôte s'est inscrit comme joueur
   // (en "Tout le monde participe") : il verrait toutes les réponses, il ne
   // peut donc pas rester joueur. Confirmation, puis retrait de sa ligne
@@ -1403,12 +1422,17 @@ function HostScreenInner() {
         confirmLabel: "Me retirer et passer en Maître du jeu",
       });
       if (!ok) return;
+      const removedId = hostPlayerId;
       try {
-        await removeHostPlayer(hostPlayerId);
+        await removeHostPlayer(removedId);
       } catch (e: any) {
         setError(e?.message ?? "Impossible de te retirer des joueurs.");
         return;
       }
+      // Bug remonté : la suppression n'est pas toujours relayée en temps
+      // réel (les événements DELETE ignorent le filtre room_id), le nom
+      // restait affiché et "Lancer" restait possible sans aucun joueur.
+      setPlayers((prev) => prev.filter((p) => p.id !== removedId));
       setHostPlayerId(null);
       setHostJoinSkipped(false);
       setHostJoinError(null);
