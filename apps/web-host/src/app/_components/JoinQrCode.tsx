@@ -17,13 +17,27 @@ import { QRCodeSVG } from "qrcode.react";
  * sombre de l'app se scanne mal (les lecteurs attendent des modules foncés
  * sur fond clair, avec une zone calme autour).
  */
+/**
+ * Adresse publique de prod. Les autres adresses *.vercel.app (déploiement
+ * précis, branche, aperçu) sont protégées par la connexion Vercel : un QR
+ * qui y pointe envoyait les joueurs sur "Log in to Vercel". On renvoie donc
+ * toujours vers l'adresse publique depuis un domaine Vercel.
+ * NEXT_PUBLIC_SITE_URL permet de la changer (futur nom de domaine).
+ */
+const PUBLIC_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://blindtest-app-web-host.vercel.app").replace(/\/$/, "");
+
+function joinOrigin(): string {
+  const { origin, hostname } = window.location;
+  return hostname.endsWith(".vercel.app") ? PUBLIC_SITE_URL : origin;
+}
+
 export function JoinQrCode({ code }: { code: string }) {
   // Calculée après montage : window n'existe pas au rendu serveur.
   const [joinUrl, setJoinUrl] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setJoinUrl(`${window.location.origin}/play?code=${encodeURIComponent(code)}`);
+    setJoinUrl(`${joinOrigin()}/play?code=${encodeURIComponent(code)}`);
   }, [code]);
 
   return (
