@@ -312,6 +312,8 @@ function HostBuzzerView({
   onBackToAdmin,
   equippedCosmetic,
   team = null,
+  roundAttempts,
+  teamStandings,
 }: {
   round: Round | null;
   players: Player[];
@@ -323,6 +325,8 @@ function HostBuzzerView({
   onBuzz: () => void;
   onBackToAdmin: () => void;
   equippedCosmetic: CosmeticDefinition;
+  roundAttempts: RoundAttempt[];
+  teamStandings: ReturnType<typeof computeTeamStandings>;
 }) {
   const alreadyBuzzed =
     round?.status === "buzzed" || round?.status === "revealed" || round?.status === "scored";
@@ -403,7 +407,7 @@ function HostBuzzerView({
               <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
-          {somethingAlreadyFound && (
+          {somethingAlreadyFound && !answerRevealed && (
             <p className="text-sm text-inkMuted text-center">
               Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
                 .filter(Boolean)
@@ -412,6 +416,9 @@ function HostBuzzerView({
             </p>
           )}
           <RoundTimer timeLeft={timeLeft} />
+          {/* Fin de manche : plus de buzzer (plus personne ne peut buzzer),
+              même écran que les joueurs (/play) : réponse + classement. */}
+          {!answerRevealed && (
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
@@ -468,6 +475,7 @@ function HostBuzzerView({
             )}
             </span>
           </button>
+          )}
           {alreadyBuzzed && (
             <p className={`text-xl font-bold text-center text-fg`}>
               {iWon
@@ -499,6 +507,16 @@ function HostBuzzerView({
                 {round.title} — {round.artist}
               </p>
             </div>
+          )}
+          {answerRevealed && teamStandings.length > 0 && <TeamScoreCards standings={teamStandings} />}
+          {answerRevealed && (
+            <AnimatedScoreboard
+              players={players}
+              meId={hostPlayerId}
+              variant="phone"
+              bonuses={roundBonuses(roundAttempts, round)}
+              className="w-full max-h-96 overflow-y-auto"
+            />
           )}
         </>
       )}
@@ -1910,6 +1928,8 @@ function HostScreenInner() {
           onBackToAdmin={() => setHostView("admin")}
           equippedCosmetic={hostEquippedCosmetic}
           team={teamOfPlayer(hostPlayerId)}
+          roundAttempts={roundAttempts}
+          teamStandings={teamStandings}
         />
       </main>
     );
