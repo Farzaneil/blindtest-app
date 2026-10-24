@@ -1128,7 +1128,8 @@ function BuzzerView({
                                         BUZZÉ !
                   </span>
                 ) : (
-                  "BUZZÉ"
+                  // Manche close par le timer, sans aucun buzz.
+                  round.buzzed_by_player_id ? "BUZZÉ" : "TERMINÉ"
                 )
               ) : fullyBlocked ? (
                 "BLOQUÉ"
