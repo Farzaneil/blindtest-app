@@ -69,6 +69,9 @@ import {
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { confirmDialog } from "../_components/ConfirmDialog";
+import { DeezerPlaylistPicker } from "../_components/DeezerPlaylistPicker";
+import { getDeezerPreviewUrl, isDeezerTrackId } from "../../lib/deezer";
+import { usePreviewPlayer } from "../../lib/usePreviewPlayer";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
@@ -172,6 +175,7 @@ const MAX_ROUNDS_STORAGE_KEY = "blindtest_host_max_rounds";
 const HOST_PLAYER_ID_STORAGE_KEY = "blindtest_host_player_id";
 const HOST_JOIN_SKIPPED_STORAGE_KEY = "blindtest_host_join_skipped";
 const HOST_VIEW_STORAGE_KEY = "blindtest_host_view";
+const MUSIC_SOURCE_STORAGE_KEY = "blindtest_music_source";
 
 function readStoredJSON<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -747,6 +751,41 @@ function HostScreenInner() {
   // File d'attente : les morceaux d'indice < queueIndex ont déjà été joués,
   // ceux à partir de queueIndex restent à venir.
   const [queue, setQueue] = useState<spotify.SpotifyTrack[]>([]);
+  // Source musicale (prototype Deezer) : "deezer" = extraits de 30 s via
+  // l'API publique Deezer, sans compte ni Premium (par défaut) ;
+  // "spotify" = morceaux complets via le lecteur Spotify (Premium, comptes
+  // autorisés uniquement en mode développement Spotify). Préférence
+  // mémorisée sur l'appareil (pas liée à une partie).
+  const [musicSource, setMusicSource] = useState<"deezer" | "spotify">("deezer");
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(MUSIC_SOURCE_STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (v === "spotify" || v === "deezer") setMusicSource(v);
+    } catch {
+      // stockage indisponible : on garde Deezer
+    }
+  }, []);
+  // Spotify n'est proposé qu'aux comptes autorisés (voir
+  // api/host-features) : pour tous les autres, Deezer uniquement.
+  const [spotifyAllowed, setSpotifyAllowed] = useState(false);
+  const hostAccountIdForFeatures = hostPlayerAccount?.id ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/host-features")
+      .then((r) => r.json())
+      .then((d: { spotify?: boolean }) => {
+        if (!cancelled) setSpotifyAllowed(d.spotify === true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [hostAccountIdForFeatures]);
+  const effectiveMusicSource: "deezer" | "spotify" = spotifyAllowed ? musicSource : "deezer";
+  const preview = usePreviewPlayer();
+  // Source du morceau en cours de lecture (pause/reprise au bon endroit).
+  const activeSourceRef = useRef<"deezer" | "spotify" | null>(null);
   const [queueIndex, setQueueIndex] = useState(0);
   const [buildingPlaylist, setBuildingPlaylist] = useState(true);
   const [myPlaylists, setMyPlaylists] = useState<spotify.SpotifyPlaylistSummary[] | null>(null);
@@ -972,6 +1011,11 @@ function HostScreenInner() {
   // le tout premier buzz.
   useEffect(() => {
     const pauseKey = round?.id && round.started_at ? `${round.id}:${round.started_at}` : null;
+    if (round?.status === "buzzed" && pauseKey && pauseKey !== pausedForRoundId.current && activeSourceRef.current === "deezer") {
+      pausedForRoundId.current = pauseKey;
+      preview.pause();
+      return;
+    }
     if (
       round?.status === "buzzed" &&
       pauseKey &&
@@ -985,7 +1029,7 @@ function HostScreenInner() {
         // morceau continue mais le buzz est déjà résolu côté base.
       });
     }
-  }, [round, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+  }, [round, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef, preview]);
 
   // En mode "Maître du jeu", le titre/artiste restent affichés en
   // permanence (voir plus bas) : le clic manuel "Révéler la réponse"
@@ -1054,7 +1098,8 @@ function HostScreenInner() {
       // pendant l'affichage des scores jusqu'à la manche suivante — voir
       // l'effet de reprise ci-dessous). Couvre aussi la dernière manche
       // terminée par expiration du timer, qui ne coupe plus le son à 0.
-      if (spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+      preview.pause();
+      if (activeSourceRef.current === "spotify" && spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
         spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {});
       }
       finishRoom(room.id).catch(() => {});
@@ -1068,7 +1113,7 @@ function HostScreenInner() {
     } else if (!over && finishedRoomRef.current) {
       finishedRoomRef.current = false;
     }
-  }, [room, isGameOverNow, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+  }, [room, isGameOverNow, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef, preview]);
 
   // Reprise de la musique après un buzz, là où il l'avait coupée :
   // - mode "Maître du jeu" : dès que la manche est clôturée (passage
@@ -1103,11 +1148,15 @@ function HostScreenInner() {
       (prev.status === "buzzed" || (!everyonePlays && prev.status === "revealed"));
     if (!revealedInEveryonePlays && !closedAfterBuzz) return;
     if (isGameOverNow) return;
+    if (activeSourceRef.current === "deezer") {
+      preview.resume().catch(() => {});
+      return;
+    }
     if (!spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current) return;
     spotify.resumePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch((e: any) => {
       setError(e?.message ?? "Impossible de relancer le morceau côté Spotify.");
     });
-  }, [round, hostMode, isGameOverNow, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef]);
+  }, [round, hostMode, isGameOverNow, spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef, preview]);
 
   // Timer visuel de la manche en cours : calculé à partir de round.started_at
   // (horodatage serveur) plutôt qu'un simple compteur local, pour rester
@@ -1260,14 +1309,27 @@ function HostScreenInner() {
   };
 
   const launchRound = async (track: spotify.SpotifyTrack) => {
-    if (!room || !spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current) return;
+    if (!room) return;
+    const fromDeezer = isDeezerTrackId(track.sourceTrackId);
+    if (!fromDeezer && (!spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current)) {
+      setError("Ce morceau vient de Spotify : connecte Spotify (source « Spotify ») pour le jouer.");
+      return;
+    }
     try {
-      const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current);
-      if (!accessToken) {
-        setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
-        return;
+      if (fromDeezer) {
+        // Extrait de 30 s : URL redemandée à chaque manche (elle expire).
+        const url = await getDeezerPreviewUrl(track.sourceTrackId);
+        await preview.play(url);
+        activeSourceRef.current = "deezer";
+      } else {
+        const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current!);
+        if (!accessToken) {
+          setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
+          return;
+        }
+        await spotify.playTrackOnHostDevice(track.sourceTrackId, spotifyPlayer.deviceId!, accessToken);
+        activeSourceRef.current = "spotify";
       }
-      await spotify.playTrackOnHostDevice(track.sourceTrackId, spotifyPlayer.deviceId, accessToken);
       const newRound = await startRoundWithTrack(
         room.id,
         {
@@ -1317,6 +1379,7 @@ function HostScreenInner() {
     // gesture" qu'iOS Safari exige avant d'autoriser l'audio — voir le
     // commentaire dans useSpotifyPlayer.ts.
     spotifyPlayer.activateElement();
+    preview.prime();
     setLaunchingRound(true);
 
     // Mode équipes : personne ne doit jouer "hors équipe" — les joueurs qui
@@ -1545,7 +1608,9 @@ function HostScreenInner() {
     const newTitleFound = round.title_found || titleFound;
     const newArtistFound = round.artist_found || artistFound;
     const willResume = !blindMode && !(newTitleFound && newArtistFound);
-    if (willResume && spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+    if (willResume && activeSourceRef.current === "deezer") {
+      preview.resume().catch(() => {});
+    } else if (willResume && spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
       try {
         await spotify.resumePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current);
       } catch (e: any) {
@@ -1609,7 +1674,8 @@ function HostScreenInner() {
     }
     // Termine vraiment l'ancienne partie (écran de fin chez les joueurs,
     // stats/badges attribués) au lieu de la laisser ouverte en base.
-    if (spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
+    preview.pause();
+    if (activeSourceRef.current === "spotify" && spotifyPlayer.deviceId && spotifyPlayer.accessTokenRef.current) {
       spotify.pausePlayback(spotifyPlayer.deviceId, spotifyPlayer.accessTokenRef.current).catch(() => {});
     }
     if (room && room.status !== "finished") await endHostGame(room.id);
@@ -2340,7 +2406,54 @@ function HostScreenInner() {
           </div>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && (
+        {/* Choix de la source musicale : uniquement pendant la préparation,
+            et seulement pour les comptes autorisés à utiliser Spotify
+            (spotifyAllowed). Tous les autres sont sur Deezer, sans choix. */}
+        {spotifyAllowed && canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && !gameStarted && (
+          <div role="group" aria-label="Source musicale" className="flex flex-wrap items-center justify-center gap-2 bg-inkSurface border-[3px] border-fg rounded-2xl shadow-sticker-sm px-4 py-2.5">
+            <span className="font-extrabold text-sm mr-1">Musique :</span>
+            {([
+              { id: "deezer", label: "Deezer", hint: "extraits 30 s, sans compte" },
+              { id: "spotify", label: "Spotify", hint: "morceaux complets, Premium" },
+            ] as const).map((src) => (
+              <button
+                key={src.id}
+                type="button"
+                aria-pressed={effectiveMusicSource === src.id}
+                onClick={async () => {
+                  if (effectiveMusicSource === src.id) return;
+                  const others = upcomingQueue.filter((t) => isDeezerTrackId(t.sourceTrackId) !== (src.id === "deezer"));
+                  if (
+                    others.length > 0 &&
+                    !(await confirmDialog({
+                      title: `Passer sur ${src.label} ?`,
+                      message: `Les ${others.length} morceaux de l’autre source seront retirés de la file d’attente.`,
+                      confirmLabel: `Passer sur ${src.label}`,
+                    }))
+                  ) {
+                    return;
+                  }
+                  if (others.length > 0) {
+                    setQueue((q) => [...q.slice(0, queueIndex), ...q.slice(queueIndex).filter((t) => isDeezerTrackId(t.sourceTrackId) === (src.id === "deezer"))]);
+                  }
+                  setMusicSource(src.id);
+                  try {
+                    window.localStorage.setItem(MUSIC_SOURCE_STORAGE_KEY, src.id);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                className={`rounded-xl border-2 border-fg px-3 py-1.5 text-sm font-bold transition ${
+                  effectiveMusicSource === src.id ? "bg-sage shadow-sticker-sm" : "bg-inkSurface text-inkMuted hover:text-fg"
+                }`}
+              >
+                {src.label} <span className="font-medium text-xs opacity-80">· {src.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "ready" && (
           <button
             onClick={async () => {
               if (
@@ -2359,11 +2472,11 @@ function HostScreenInner() {
           </button>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "checking" && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "checking" && (
           <p className="text-inkMuted">Vérification de la connexion Spotify…</p>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "disconnected" && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "disconnected" && (
           <div className="flex flex-col items-center gap-2">
             <button
               onClick={spotifyPlayer.connect}
@@ -2382,7 +2495,7 @@ function HostScreenInner() {
           </div>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "connecting_player" && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "connecting_player" && (
           <div className="flex flex-col items-center gap-3">
             <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
             {/* Bug remonté : cet écran restait parfois bloqué ici
@@ -2420,7 +2533,7 @@ function HostScreenInner() {
           </div>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && gameOver && !buildingPlaylist && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && gameOver && !buildingPlaylist && (
           <div className="relative flex flex-col items-center gap-6 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
             <EndCeremony
               title={
@@ -2533,7 +2646,7 @@ function HostScreenInner() {
           </div>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && !gameOver && !buildingPlaylist && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && !gameOver && !buildingPlaylist && (
           <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
             {launchingRound ? (
               <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
@@ -2570,7 +2683,7 @@ function HostScreenInner() {
           </div>
         )}
 
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && spotifyPlayer.state === "ready" && buildingPlaylist && (
+        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && buildingPlaylist && (
           <div className="relative w-full flex flex-col gap-7 text-left bg-inkSurface2 border border-inkBorder rounded-2xl p-7 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
             <div className="flex justify-between items-center">
               <span className="text-sm text-inkMuted flex items-center gap-1.5">
@@ -2751,7 +2864,7 @@ function HostScreenInner() {
                 manuelle et la génération par genre ont été retirées, seul
                 l'import de playlist Spotify reste comme méthode d'ajout de
                 morceaux. */}
-            {playlistsQuotaCooldownSeconds > 0 && (
+            {effectiveMusicSource === "spotify" && playlistsQuotaCooldownSeconds > 0 && (
               <div className="flex flex-col gap-2 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
                 <p className="flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -2776,6 +2889,17 @@ function HostScreenInner() {
                   la génération, ne peut donc plus progresser pour de
                   nouvelles parties — sa définition et la progression déjà
                   acquise par les joueurs restent inchangées. */}
+              {effectiveMusicSource === "deezer" ? (
+                <div className="flex flex-col gap-3 bg-inkSurface3 border-2 border-fg rounded-2xl p-4 min-h-[220px] min-w-0">
+                  <DeezerPlaylistPicker
+                    onImport={(tracks) => {
+                      // Mélangé, comme l'import Spotify (l'hôte qui joue ne
+                      // doit pas deviner l'ordre des manches).
+                      setQueue((q) => [...q, ...shuffle(tracks)]);
+                    }}
+                  />
+                </div>
+              ) : (
               <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
                 <p className="text-sm text-inkMuted">
                   Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
@@ -2820,6 +2944,7 @@ function HostScreenInner() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* File d'attente : toujours visible avec le bouton de
                   lancement juste dessous, pour ne jamais avoir à scroller

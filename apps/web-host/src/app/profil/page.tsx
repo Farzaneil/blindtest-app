@@ -386,7 +386,7 @@ function ReglagesPanel({
         ) : (
           <div className="flex flex-col gap-2 bg-danger/10 border border-danger/30 rounded-xl px-4 py-3 max-w-md">
             <p className="text-xs text-fg">
-              Cette action supprime définitivement ton compte joueur (pseudo, avatar, connexion Spotify liée). Tes
+              Cette action supprime définitivement ton compte joueur (pseudo, avatar, adresse e-mail). Tes
               parties déjà jouées restent visibles pour les autres joueurs, mais sans être rattachées à ton compte.
               Impossible à annuler.
             </p>
@@ -493,7 +493,7 @@ function BadgesPanel({ accountId }: { accountId: string }) {
   return (
     <div className="flex flex-col gap-6">
       <ComingSoonNote>
-        Les badges se débloquent en fin de partie (voir Réglages pour la connexion Spotify) — reviens ici après avoir
+        Les badges se débloquent en fin de partie — reviens ici après avoir
         joué pour voir ta progression grimper.
       </ComingSoonNote>
       {BADGE_CATEGORIES.map((category) => {

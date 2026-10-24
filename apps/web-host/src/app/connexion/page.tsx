@@ -2,33 +2,23 @@
 
 export const dynamic = "force-dynamic";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Mail, MailCheck } from "lucide-react";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
 
 /**
- * Écran de connexion joueur — visuel repris de la maquette validée
- * (maquette_comptes_espace_joueur.html, section 1). Spotify est le seul
- * provider actif ; Deezer/Apple Music/YouTube Music sont affichés grisés
- * "Bientôt" pour poser l'attente du multi-provider sans attendre d'avoir
- * ces intégrations branchées (voir cadrage_comptes_recompenses_rgpd.md,
- * section 1).
+ * Écran de connexion joueur : lien magique par e-mail (voir
+ * api/player-auth/email et api/player-auth/confirm). Plus de connexion via
+ * un compte de musique (Spotify limitait le nombre de comptes autorisés).
  *
  * `next` (où revenir une fois connecté, ou en cliquant "Continuer en
- * invité") est repris tel quel du point d'entrée qui a mené ici (voir
- * PlayerAccountCorner) et repropagé jusqu'au callback OAuth via un cookie
- * côté serveur (voir api/player-auth/login).
+ * invité") est repris du point d'entrée qui a mené ici (voir
+ * PlayerAccountCorner) et transmis dans le lien envoyé par e-mail.
  *
- * Le contenu réel est dans ConnexionForm, séparé du composant exporté par
- * défaut et enveloppé dans <Suspense> : useSearchParams() dans un composant
- * client DOIT être sous une frontière Suspense, sinon `next build` échoue
- * avec "useSearchParams() should be wrapped in a suspense boundary" au
- * moment de générer les pages — même avec `dynamic = "force-dynamic"` sur
- * la page, qui ne dispense pas de cette règle. Repéré au premier `next
- * build` réel de ce fichier (jusqu'ici seulement testé via `npm run dev`,
- * qui ne fait pas cette vérification).
+ * Contenu dans ConnexionForm sous <Suspense> : useSearchParams() l'exige
+ * au build (`next build`).
  */
 export default function ConnexionPage() {
   return (
@@ -39,91 +29,108 @@ export default function ConnexionPage() {
 }
 
 function ConnexionForm() {
-  // Même garde-fou que /host (voir useForceLoopbackHost) : les cookies
-  // PKCE posés ici (voir api/player-auth/login) doivent être relisibles au
-  // retour du callback Spotify, qui n'existe qu'en 127.0.0.1 (policy
-  // Spotify depuis fin 2025) — sans ce redirect immédiat, arriver ici via
-  // "localhost" cassait la connexion joueur avec "État OAuth invalide",
-  // exactement le bug déjà connu et corrigé côté hôte.
+  // Les cookies posés sur "localhost" sont invisibles depuis "127.0.0.1" :
+  // même hôte partout (voir useForceLoopbackHost) pour que la session
+  // ouverte par le lien soit bien relue ensuite.
   useForceLoopbackHost();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/";
-  const error = searchParams.get("error");
+  const urlError = searchParams.get("error");
+
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(urlError);
+
+  const send = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/player-auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, next }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Envoi impossible, réessaie.");
+      setSentTo(email.trim());
+    } catch (e: any) {
+      setError(e?.message ?? "Envoi impossible, réessaie.");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-4 p-6 bg-page">
-      <div className="relative w-full max-w-sm bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-7 flex flex-col gap-4 shadow-sticker">
-
+      <div className="relative w-full max-w-sm bg-inkSurface border-[3px] border-fg rounded-2xl p-7 flex flex-col gap-4 shadow-sticker">
         <div className="text-center">
-          <p className="text-2xl font-bold font-display text-fg">Connecte-toi</p>
+          <p className="text-2xl font-display text-fg">Connecte-toi</p>
           <p className="text-sm text-inkMuted mt-1">
             Sauvegarde tes stats, débloque des badges, grimpe au classement.
           </p>
         </div>
 
         {error && (
-          <p className="text-danger text-xs text-center bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
+          <p className="text-danger text-sm font-bold text-center bg-inkSurface border-2 border-danger rounded-lg px-3 py-2">
             {error}
           </p>
         )}
 
-        <a
-          href={`/api/player-auth/login?next=${encodeURIComponent(next)}`}
-          className="bg-[#1DB954] text-[#111111] hover:brightness-105 transition rounded-xl py-3 font-bold flex items-center justify-center gap-2 border-[3px] border-fg shadow-sticker"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="10" />
-            <path d="M7 10c3-1 7-1 10 1" stroke="#1DB954" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-            <path d="M7.5 13c2.5-.8 6-.6 8.5.8" stroke="#1DB954" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-            <path d="M8 16c2-.6 4.5-.4 6.5.8" stroke="#1DB954" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-          </svg>
-          Continuer avec Spotify
-        </a>
-
-        <div className="flex flex-col gap-2">
-          <button
-            disabled
-            className="relative bg-inkSurface border-2 border-dashed border-fg/40 text-fg/70 rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" className="text-deezer">
-              <rect x="2" y="14" width="3" height="6" fill="currentColor" />
-              <rect x="7" y="10" width="3" height="10" fill="currentColor" />
-              <rect x="12" y="6" width="3" height="14" fill="currentColor" />
-              <rect x="17" y="10" width="3" height="10" fill="currentColor" />
-            </svg>
-            Deezer
-            <span className="absolute right-3 bg-inkSurface3 text-inkMuted text-[11px] font-semibold px-2 py-0.5 rounded-full">
-              Bientôt
+        {sentTo ? (
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="w-14 h-14 rounded-full bg-good border-[3px] border-fg shadow-sticker-sm flex items-center justify-center -rotate-6">
+              <MailCheck className="w-7 h-7" strokeWidth={2.5} />
             </span>
-          </button>
-          <button
-            disabled
-            className="relative bg-inkSurface border-2 border-dashed border-fg/40 text-fg/70 rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
+            <p className="font-display text-lg">Regarde tes e-mails !</p>
+            <p className="text-sm text-inkMuted">
+              Un lien de connexion a été envoyé à <span className="font-bold text-fg">{sentTo}</span>. Ouvre-le
+              <span className="font-bold text-fg"> sur cet appareil</span> pour te connecter ici.
+            </p>
+            <p className="text-xs text-inkMuted">Rien reçu ? Regarde dans les spams, ou</p>
+            <button
+              type="button"
+              onClick={() => setSentTo(null)}
+              className="text-sm font-bold underline hover:text-fg transition"
+            >
+              renvoyer un lien
+            </button>
+          </div>
+        ) : (
+          <form
+            className="flex flex-col gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send();
+            }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-appleMusic">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-            Apple Music
-            <span className="absolute right-3 bg-inkSurface3 text-inkMuted text-[11px] font-semibold px-2 py-0.5 rounded-full">
-              Bientôt
-            </span>
-          </button>
-          <button
-            disabled
-            className="relative bg-inkSurface border-2 border-dashed border-fg/40 text-fg/70 rounded-xl py-3 font-bold flex items-center justify-center gap-2 cursor-not-allowed"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" className="text-ytMusic">
-              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.6" />
-              <polygon points="10,8.5 16,12 10,15.5" fill="currentColor" />
-            </svg>
-            YouTube Music
-            <span className="absolute right-3 bg-inkSurface3 text-inkMuted text-[11px] font-semibold px-2 py-0.5 rounded-full">
-              Bientôt
-            </span>
-          </button>
-        </div>
+            <label className="flex items-center gap-2 bg-inkSurface border-2 border-fg rounded-xl px-3 py-3">
+              <Mail className="w-5 h-5 text-inkMuted shrink-0" />
+              <span className="sr-only">Adresse e-mail</span>
+              <input
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="ton@email.fr"
+                className="flex-1 min-w-0 bg-transparent outline-none font-medium"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={sending || !email.trim()}
+              className="bg-sage text-fg border-[3px] border-fg shadow-sticker rounded-xl py-3 font-display text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50"
+            >
+              {sending ? "Envoi…" : "Recevoir mon lien de connexion"}
+            </button>
+            <p className="text-xs text-inkMuted text-center">
+              Pas de mot de passe : on t’envoie un lien, un clic et c’est bon. Premier passage ? Ton compte est créé
+              automatiquement.
+            </p>
+          </form>
+        )}
 
         <Link href={next} className="text-sm text-inkMuted hover:text-fg underline transition self-center mt-1">
           Continuer en invité

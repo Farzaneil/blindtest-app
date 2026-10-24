@@ -28,9 +28,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Non connecté." }, { status: 401 });
   }
 
+  // Utilisateur Supabase Auth lié (connexion par e-mail, migration 0029) :
+  // supprimé aussi, pour ne garder aucune trace de l'adresse e-mail.
+  const { data: account } = await supabaseAdmin
+    .from("player_accounts")
+    .select("auth_user_id")
+    .eq("id", accountId)
+    .maybeSingle();
+
   const { error } = await supabaseAdmin.from("player_accounts").delete().eq("id", accountId);
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
+  }
+
+  if (account?.auth_user_id) {
+    await supabaseAdmin.auth.admin.deleteUser(account.auth_user_id).catch(() => {});
   }
 
   const response = NextResponse.json({ ok: true });
