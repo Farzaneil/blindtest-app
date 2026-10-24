@@ -39,12 +39,13 @@ import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
  * bouton à part, pour rester cliquable sans naviguer.
  */
 /**
- * `scroll` : le bouton reste en haut de la page et défile avec elle (écran
- * hôte, où il passait sinon par-dessus le contenu en faisant défiler).
- * Le parent doit alors être en position relative.
+ * `inline` : le bouton prend sa place en haut de la page, dans le flux
+ * (calé à droite d'un parent en flex colonne), et défile avec elle — écran
+ * hôte, où une position fixe ou superposée chevauchait l'encart du code de
+ * partie sur téléphone.
  */
-export function PlayerAccountCorner({ scroll = false }: { scroll?: boolean } = {}) {
-  const pos = scroll ? "absolute" : "fixed";
+export function PlayerAccountCorner({ inline = false }: { inline?: boolean } = {}) {
+  const pos = inline ? "relative self-end" : "fixed top-4 right-4";
   useForceLoopbackHost();
   const pathname = usePathname();
   const { account, loading, refresh } = usePlayerAccount();
@@ -60,7 +61,7 @@ export function PlayerAccountCorner({ scroll = false }: { scroll?: boolean } = {
   }, [pathname]);
 
   if (loading) {
-    return <div className={`${pos} top-4 right-4 z-20 h-8 w-32 rounded-full bg-inkSurface2 animate-pulse`} />;
+    return <div className={`${pos} z-20 h-8 w-32 rounded-full bg-inkSurface2 animate-pulse`} />;
   }
 
   if (!account) {
@@ -68,7 +69,7 @@ export function PlayerAccountCorner({ scroll = false }: { scroll?: boolean } = {
       <Link
         href={`/connexion?next=${encodeURIComponent((pathname || "/") + search)}`}
         title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
-        className={`${pos} top-4 right-4 z-20 bg-inkSurface2 border border-inkBorder hover:border-fg transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-fg inline-flex items-center gap-1.5`}
+        className={`${pos} z-20 bg-inkSurface2 border border-inkBorder hover:border-fg transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-fg inline-flex items-center gap-1.5`}
       >
         <UserCircle2 className="w-3.5 h-3.5" /> Compte joueur
       </Link>
@@ -78,7 +79,7 @@ export function PlayerAccountCorner({ scroll = false }: { scroll?: boolean } = {
   return (
     <div
       title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
-      className={`${pos} top-4 right-4 z-20 flex items-center gap-2 bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-full pl-1 pr-3 py-1`}
+      className={`${pos} z-20 flex items-center gap-2 bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-full pl-1 pr-3 py-1`}
     >
       <Link href="/profil" className="flex items-center gap-2 min-w-0">
         <PlayerAvatar
