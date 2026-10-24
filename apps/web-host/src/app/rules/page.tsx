@@ -1,172 +1,135 @@
-import Link from "next/link";
-import { ChevronLeft, Music2, Gamepad2, Trophy, Clock, Dice5, Zap, TrendingUp, Flame, XCircle, UserPlus } from "lucide-react";
+import {
+  Clock,
+  Dice5,
+  Flame,
+  Gamepad2,
+  Music2,
+  QrCode,
+  Sparkles,
+  Target,
+  TrendingUp,
+  Trophy,
+  Users,
+  XCircle,
+  Zap,
+} from "lucide-react";
+import { InfoCard, InfoItem, InfoPage, Pill } from "../_components/InfoPage";
 
 export const metadata = { title: "Règles du jeu" };
 
 /**
- * Page statique expliquant les règles du jeu — utile à partager avant une
- * soirée pour que tout le monde comprenne les modes, le score de base et
- * les bonus/malus sans avoir à les réexpliquer à voix haute à chaque fois.
- * Composant serveur, pas d'interactivité au-delà des liens.
- *
- * Migrée vers la direction visuelle "minimal premium sombre" v3 (voir /,
- * /host, /play — même refonte) : palette ink/sage, icônes lucide au lieu
- * des emoji, cartes à bandelette de couleur. Contenu remis à jour en même
- * temps (les bonus/malus n'existaient pas lors de la première rédaction).
+ * Règles du jeu, à partager avant une soirée. Contenu aligné sur le
+ * comportement réel (seuils bonus/malus : migrations 0017-0019, joker :
+ * JOKER_ROUND_PROBABILITY dans lib/rooms.ts, équipes : 0025, progression :
+ * lib/badges.ts et lib/cosmetics.tsx). Gabarit commun : _components/InfoPage.
  */
 export default function RulesPage() {
   return (
-    <main className="flex flex-col items-center min-h-screen gap-8 p-6 md:p-10 bg-page">
-      <div className="w-full max-w-2xl text-center">
-        <Link
-          href="/"
-          className="text-sm text-inkMuted hover:text-fg transition inline-flex items-center gap-1"
-        >
-          <ChevronLeft className="w-3.5 h-3.5" /> Accueil
-        </Link>
-        <p className="text-3xl md:text-4xl font-black text-fg mt-4 font-display">Règles du jeu</p>
-      </div>
+    <InfoPage
+      current="/rules"
+      title="Règles du jeu"
+      intro="Un écran hôte diffuse la musique, chaque joueur buzze depuis son téléphone. Rien à installer."
+    >
+      <InfoCard icon={Music2} title="Le principe">
+        <p>
+          L’hôte lance un extrait. Dès que tu penses connaître le titre et/ou l’artiste, tu buzzes : le
+          premier buzz coupe la musique et te donne la parole pour répondre à voix haute. L’hôte juge ta
+          réponse.
+        </p>
+      </InfoCard>
 
-      <div className="w-full max-w-2xl flex flex-col gap-5">
-        <section className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
-          <p className="text-lg font-bold text-fg mb-3 font-display flex items-center gap-2">
-            <Music2 className="w-5 h-5" /> Le principe
-          </p>
-          <p className="text-inkMuted">
-            L’hôte lance un morceau depuis Spotify. Les joueurs buzzent depuis leur téléphone dès
-            qu’ils pensent connaître le titre et/ou l’artiste. Le premier à buzzer coupe le son et
-            a la parole pour donner sa réponse à voix haute.
-          </p>
-        </section>
+      <InfoCard icon={QrCode} title="Rejoindre une partie" tone="c2">
+        <p>
+          Scanne le QR code affiché par l’hôte, ou ouvre la page « Rejoindre » et tape le code à 6
+          caractères. Choisis un pseudo (il doit être unique dans la partie), et c’est parti.
+        </p>
+        <p className="text-sm text-inkMuted">
+          Tu as fermé l’onglet ou changé de téléphone ? Reviens avec le même pseudo : avec un compte, tu
+          retrouves ta place automatiquement ; en invité, l’hôte valide ton retour et tu récupères ton
+          score.
+        </p>
+      </InfoCard>
 
-        <section className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
-          <p className="text-lg font-bold text-fg mb-4 font-display flex items-center gap-2">
-            <Gamepad2 className="w-5 h-5" /> Deux modes de jeu
-          </p>
-          <div className="flex flex-col gap-4">
-            <div>
-              <p className="font-bold font-display">Maître du jeu</p>
-              <p className="text-inkMuted">
-                Une personne gère la partie (playlist, manches) sans jouer elle-même : elle voit
-                tous les titres à l’avance. Utile en soirée avec quelqu’un qui anime.
-              </p>
-            </div>
-            <div>
-              <p className="font-bold font-display">Tout le monde participe</p>
-              <p className="text-inkMuted">
-                Les morceaux de la file d’attente restent masqués (juste “Morceau 1”, “Morceau
-                2”…) pour que personne ne se spoile, y compris l’hôte s’il joue aussi.
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-inkBorder flex items-start gap-2">
-            <UserPlus className="w-4 h-4 text-inkMuted shrink-0 mt-0.5" />
-            <p className="text-sm text-inkMuted">
-              En mode “Tout le monde participe”, l’hôte peut choisir de jouer aussi sur le même
-              écran, avant le lancement de la première manche : il devient alors un joueur noté
-              comme les autres, avec un buzzer sur son propre écran.
-            </p>
-          </div>
-        </section>
+      <InfoCard icon={Gamepad2} title="Deux modes de jeu">
+        <InfoItem title="Maître du jeu">
+          Une personne anime sans jouer : elle voit tous les titres à l’avance et juge les réponses.
+        </InfoItem>
+        <InfoItem title="Tout le monde participe">
+          Les morceaux restent masqués (« Morceau 1 », « Morceau 2 »…), y compris pour l’hôte, qui peut
+          jouer aussi avec un buzzer sur son propre écran.
+        </InfoItem>
+        <p className="text-sm text-inkMuted">Le mode est choisi avant de lancer la partie et ne change plus ensuite.</p>
+      </InfoCard>
 
-        <section className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
-          <p className="text-lg font-bold text-fg mb-4 font-display flex items-center gap-2">
-            <Trophy className="w-5 h-5" /> Le score de base
-          </p>
-          <div className="flex flex-wrap gap-2 mb-4">
-            <span className="rounded-full bg-sage text-sageOn font-display font-bold text-sm px-4 py-1.5 border-2 border-fg shadow-sticker-sm">
-              +2 titre et artiste
-            </span>
-            <span className="rounded-full bg-info text-infoOn font-display font-bold text-sm px-4 py-1.5 border-2 border-fg shadow-sticker-sm">
-              +1 un seul des deux
-            </span>
-            <span className="rounded-full bg-danger text-white font-display font-bold text-sm px-4 py-1.5 border-2 border-fg shadow-sticker-sm">
-              -1 aucun des deux
-            </span>
-          </div>
-          <p className="text-inkMuted">
-            En mode <span className="font-bold">Maître du jeu</span>, tant que titre et artiste ne
-            sont pas tous les deux trouvés, la musique reprend là où elle s’était arrêtée pour
-            laisser une autre chance — le joueur qui vient de répondre doit attendre qu’un autre
-            buzze avant de pouvoir retenter. En mode{" "}
-            <span className="font-bold">Tout le monde participe</span>, la manche se termine dans
-            tous les cas dès le premier buzz. Le score peut descendre en négatif.
-          </p>
-        </section>
+      <InfoCard icon={Users} title="En solo ou en équipes" tone="c2">
+        <p>
+          En équipes, l’hôte répartit les joueurs (glisser-déposer). Chacun buzze depuis son téléphone,
+          et le score de l’équipe est la somme des points de ses membres. Les séries (bonus et malus)
+          comptent pour toute l’équipe.
+        </p>
+      </InfoCard>
 
-        <section className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
-          <p className="text-lg font-bold text-amberStrong mb-4 font-display flex items-center gap-2">
-            <Dice5 className="w-5 h-5" /> Bonus et malus
-          </p>
-          <p className="text-inkMuted mb-4">
-            L’hôte peut activer ou désactiver chacun de ces réglages à tout moment pendant la
-            partie (tous activés par défaut) :
-          </p>
-          <div className="flex flex-col gap-4">
-            <div className="flex items-start gap-3">
-              <Dice5 className="w-4 h-4 text-amberStrong shrink-0 mt-1" />
-              <div>
-                <p className="font-bold font-display">Manche joker</p>
-                <p className="text-inkMuted text-sm">
-                  Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse
-                  complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1).
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Zap className="w-4 h-4 text-fg shrink-0 mt-1" />
-              <div>
-                <p className="font-bold font-display">Bonus vitesse</p>
-                <p className="text-inkMuted text-sm">
-                  +1 point si la réponse complète (titre + artiste) est buzzée en moins de 2
-                  secondes.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <TrendingUp className="w-4 h-4 text-fg shrink-0 mt-1" />
-              <div>
-                <p className="font-bold font-display">Bonus remontada</p>
-                <p className="text-inkMuted text-sm">
-                  +1 point si tu réponds juste alors que tu es strictement dernier·ère au
-                  classement, avec plus de 5 points d’écart avec l’avant-dernier.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Flame className="w-4 h-4 text-danger shrink-0 mt-1" />
-              <div>
-                <p className="font-bold font-display">Malus série</p>
-                <p className="text-inkMuted text-sm">
-                  3 bonnes réponses d’affilée par la même personne : son buzzer est retardé de 5s,
-                  puis 10s, puis 15s au tour suivant, tant que personne d’autre n’a répondu juste.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <XCircle className="w-4 h-4 text-danger shrink-0 mt-1" />
-              <div>
-                <p className="font-bold font-display">Malus buzzer bloqué</p>
-                <p className="text-inkMuted text-sm">
-                  3 premiers-buzz ratés d’affilée par la même personne : son buzzer est
-                  complètement bloqué à la manche suivante.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+      <InfoCard icon={Trophy} title="Le score" tone="gold">
+        <div className="flex flex-wrap gap-2">
+          <Pill tone="c1">+2 titre et artiste</Pill>
+          <Pill tone="c2">+1 un seul des deux</Pill>
+          <Pill tone="danger">-1 rien de bon</Pill>
+        </div>
+        <p>
+          En <span className="font-bold">Maître du jeu</span>, tant que titre et artiste ne sont pas
+          tous les deux trouvés, la musique reprend là où elle s’était arrêtée : les autres peuvent
+          tenter leur chance (celui qui vient de répondre attend qu’un autre ait buzzé). En{" "}
+          <span className="font-bold">Tout le monde participe</span>, la manche s’arrête après la
+          première réponse. Le score peut devenir négatif.
+        </p>
+      </InfoCard>
 
-        <section className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl p-6 shadow-sticker">
-          <p className="text-lg font-bold text-fg mb-3 font-display flex items-center gap-2">
-            <Clock className="w-5 h-5" /> Le temps
-          </p>
-          <p className="text-inkMuted">
-            Chaque manche dure 30 secondes. Si personne n’a buzzé à la fin du compte à rebours, la
-            réponse s’affiche et la manche se termine sans gagnant. Le temps de jugement d’une
-            réponse n’est jamais décompté du budget de 30 secondes.
-          </p>
-        </section>
-      </div>
-    </main>
+      <InfoCard icon={Clock} title="Le temps" tone="c2">
+        <p>
+          Chaque extrait dure 30 secondes, avec un compte à rebours sur l’écran de l’hôte et sur ton
+          téléphone. Il se fige pendant qu’une réponse est jugée. Si personne n’a buzzé à la fin, la
+          réponse s’affiche et la manche se termine sans points.
+        </p>
+      </InfoCard>
+
+      <InfoCard icon={Target} title="Fin de partie">
+        <p>
+          Par défaut, on joue toute la playlist. L’hôte peut aussi fixer un score cible (le premier qui
+          l’atteint gagne) et/ou un nombre maximum de morceaux. À la fin : podium, buzzeur le plus
+          rapide et quelques distinctions.
+        </p>
+      </InfoCard>
+
+      <InfoCard icon={Dice5} title="Bonus et malus" tone="gold">
+        <p className="text-sm text-inkMuted">Tous activés par défaut, l’hôte peut les couper à tout moment.</p>
+        <InfoItem icon={Dice5} title="Manche joker">
+          Environ 1 manche sur 10 : points doublés dans les deux sens (+4 pour une réponse complète, -2
+          pour une mauvaise).
+        </InfoItem>
+        <InfoItem icon={Zap} title="Bonus vitesse">
+          +1 point pour une réponse complète buzzée en moins de 2 secondes.
+        </InfoItem>
+        <InfoItem icon={TrendingUp} title="Bonus remontada">
+          +1 point pour une bonne réponse quand tu es seul·e dernier·ère, à plus de 5 points de
+          l’avant-dernier.
+        </InfoItem>
+        <InfoItem icon={Flame} title="Malus série">
+          3 bonnes réponses d’affilée : ton buzzer est retardé de 5 s, puis 10 s, puis 15 s, jusqu’à ce
+          que quelqu’un d’autre réponde juste.
+        </InfoItem>
+        <InfoItem icon={XCircle} title="Malus buzzer bloqué">
+          3 premiers buzz ratés d’affilée : ton buzzer est bloqué pendant la manche suivante.
+        </InfoItem>
+      </InfoCard>
+
+      <InfoCard icon={Sparkles} title="Avec un compte joueur" tone="good">
+        <p>
+          Facultatif, il suffit d’une adresse e-mail. Tes parties te rapportent de l’XP (ton score de fin
+          de partie, plus un bonus à chaque palier de badge). Tu montes de niveau, tu débloques des
+          badges, des skins de buzzer et des effets d’avatar, et tu retrouves tes stats et ton historique
+          dans ton profil.
+        </p>
+      </InfoCard>
+    </InfoPage>
   );
 }
