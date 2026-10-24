@@ -56,6 +56,7 @@ import {
 import { AwardCards, TeamDot, TeamRecapTable, TeamResultBanner, TeamScoreCards } from "../_components/Teams";
 import { TeamSetupPanel } from "../_components/TeamSetupPanel";
 import { RejoinRequestsBanner } from "../_components/RejoinRequestsBanner";
+import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
 import { withRanks, formatOrdinal, podiumRowClasses } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
@@ -374,6 +375,7 @@ function HostBuzzerView({
   const isLockedOut = lockoutRemainingSeconds > 0;
 
   const canBuzz = round?.status === "playing" && !sending && !isLocked && !fullyBlocked && !isLockedOut;
+  const timeLeft = roundTimeLeft(round, now);
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
@@ -411,6 +413,7 @@ function HostBuzzerView({
               {" — à vous de jouer pour le reste !"}
             </p>
           )}
+          <RoundTimer timeLeft={timeLeft} />
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
@@ -440,20 +443,19 @@ function HostBuzzerView({
                 {equippedCosmetic.icon({ size: 140 })}
               </span>
             )}
-            {/* Skin à motif : le texte passe dans une étiquette blanche pour
-                rester lisible sur le dessin. */}
+            {/* Même étiquette blanche "BUZZ" / "BUZZÉ !" quel que soit le skin,
+                lisible sur les unis comme sur les motifs. */}
             <span
               className={`relative inline-flex items-center justify-center ${
-                (canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.art
-                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1.5 shadow-sticker-sm"
+                canBuzz || (alreadyBuzzed && iWon)
+                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1 shadow-sticker-sm whitespace-nowrap -rotate-3"
                   : ""
               }`}
             >
             {alreadyBuzzed ? (
               iWon ? (
-                <span className="inline-flex items-center gap-2 text-3xl">
-                  <CheckCircle2 className="w-7 h-7 shrink-0" strokeWidth={2.75} />
-                  BUZZÉ !
+                <span className="inline-flex items-center gap-2 text-3xl whitespace-nowrap">
+                                    BUZZÉ !
                 </span>
               ) : (
                 "BUZZÉ"

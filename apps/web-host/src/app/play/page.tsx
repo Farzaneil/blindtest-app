@@ -16,10 +16,8 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, Trophy, Zap, Flame, CheckCircle2, Dice5, Check, Timer } from "lucide-react";
-
-/** Durée d'une manche, identique à l'écran hôte (app/host/page.tsx). */
-const ROUND_DURATION_SECONDS = 30;
+import { ArrowLeft, Trophy, Zap, Flame, Dice5, Check } from "lucide-react";
+import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
 import {
   joinRoomByCode,
   getJoinInfoByCode,
@@ -701,23 +699,7 @@ function BuzzerView({
     now !== null && unlockedAtMs ? Math.max(0, Math.ceil((unlockedAtMs - now) / 1000)) : 0;
   const isLockedOut = lockoutRemainingSeconds > 0;
 
-  // Compte à rebours de la manche (30 s de musique), même calcul que côté
-  // hôte : temps déjà joué avant cette reprise (elapsed_seconds) + temps
-  // écoulé depuis started_at. Figé (masqué) dès qu'un joueur a buzzé.
-  const timeLeft =
-    now !== null && round?.status === "playing" && round.started_at
-      ? // Bornes : l'horloge du téléphone peut être légèrement décalée de
-        // celle de l'hôte (qui pose started_at).
-        Math.min(
-          ROUND_DURATION_SECONDS,
-          Math.max(
-          0,
-          Math.ceil(
-            ROUND_DURATION_SECONDS - ((round.elapsed_seconds ?? 0) + (now - new Date(round.started_at).getTime()) / 1000)
-          )
-        )
-        )
-      : null;
+  const timeLeft = roundTimeLeft(round, now);
 
   const canBuzz = round?.status === "playing" && !sending && !isLocked && !fullyBlocked && !isLockedOut;
 
@@ -1101,24 +1083,7 @@ function BuzzerView({
               {" — à vous de jouer pour le reste !"}
             </p>
           )}
-          {timeLeft !== null && (
-            <div className="w-56 flex flex-col items-center gap-1.5" aria-live="off">
-              <span
-                className={`inline-flex items-center gap-1.5 font-display text-2xl tabular-nums bg-inkSurface border-[3px] border-fg rounded-full px-4 py-0.5 shadow-sticker-sm ${
-                  timeLeft <= 5 ? "text-danger" : "text-fg"
-                }`}
-              >
-                <Timer className="w-5 h-5" strokeWidth={2.75} />
-                {timeLeft}s
-              </span>
-              <span className="block w-full h-3 bg-inkSurface border-[3px] border-fg rounded-full overflow-hidden">
-                <span
-                  className={`block h-full transition-[width] duration-300 ease-linear ${timeLeft <= 5 ? "bg-danger" : "bg-good"}`}
-                  style={{ width: `${(timeLeft / ROUND_DURATION_SECONDS) * 100}%` }}
-                />
-              </span>
-            </div>
-          )}
+          <RoundTimer timeLeft={timeLeft} />
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
@@ -1148,20 +1113,19 @@ function BuzzerView({
                 {equippedCosmetic.icon({ size: 140 })}
               </span>
             )}
-            {/* Skin à motif : le texte passe dans une étiquette blanche pour
-                rester lisible sur le dessin. */}
+            {/* Même étiquette blanche "BUZZ" / "BUZZÉ !" quel que soit le skin,
+                lisible sur les unis comme sur les motifs. */}
             <span
               className={`relative inline-flex items-center justify-center ${
-                (canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.art
-                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1.5 shadow-sticker-sm"
+                canBuzz || (alreadyBuzzed && iWon)
+                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1 shadow-sticker-sm whitespace-nowrap -rotate-3"
                   : ""
               }`}
             >
               {alreadyBuzzed ? (
                 iWon ? (
-                  <span className="inline-flex items-center gap-2 text-3xl">
-                    <CheckCircle2 className="w-7 h-7 shrink-0" strokeWidth={2.75} />
-                    BUZZÉ !
+                  <span className="inline-flex items-center gap-2 text-3xl whitespace-nowrap">
+                                        BUZZÉ !
                   </span>
                 ) : (
                   "BUZZÉ"
