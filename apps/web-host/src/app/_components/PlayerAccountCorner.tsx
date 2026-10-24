@@ -38,7 +38,13 @@ import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
  * réglages/stats/badges/historique/classement) — seul "Déconnexion" reste un
  * bouton à part, pour rester cliquable sans naviguer.
  */
-export function PlayerAccountCorner() {
+/**
+ * `scroll` : le bouton reste en haut de la page et défile avec elle (écran
+ * hôte, où il passait sinon par-dessus le contenu en faisant défiler).
+ * Le parent doit alors être en position relative.
+ */
+export function PlayerAccountCorner({ scroll = false }: { scroll?: boolean } = {}) {
+  const pos = scroll ? "absolute" : "fixed";
   useForceLoopbackHost();
   const pathname = usePathname();
   const { account, loading, refresh } = usePlayerAccount();
@@ -54,7 +60,7 @@ export function PlayerAccountCorner() {
   }, [pathname]);
 
   if (loading) {
-    return <div className="fixed top-4 right-4 z-20 h-8 w-32 rounded-full bg-inkSurface2 animate-pulse" />;
+    return <div className={`${pos} top-4 right-4 z-20 h-8 w-32 rounded-full bg-inkSurface2 animate-pulse`} />;
   }
 
   if (!account) {
@@ -62,7 +68,7 @@ export function PlayerAccountCorner() {
       <Link
         href={`/connexion?next=${encodeURIComponent((pathname || "/") + search)}`}
         title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
-        className="fixed top-4 right-4 z-20 bg-inkSurface2 border border-inkBorder hover:border-fg transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-fg inline-flex items-center gap-1.5"
+        className={`${pos} top-4 right-4 z-20 bg-inkSurface2 border border-inkBorder hover:border-fg transition rounded-full pl-3 pr-3.5 py-1.5 text-xs font-semibold text-inkMuted hover:text-fg inline-flex items-center gap-1.5`}
       >
         <UserCircle2 className="w-3.5 h-3.5" /> Compte joueur
       </Link>
@@ -72,7 +78,7 @@ export function PlayerAccountCorner() {
   return (
     <div
       title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
-      className="fixed top-4 right-4 z-20 flex items-center gap-2 bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-full pl-1 pr-3 py-1"
+      className={`${pos} top-4 right-4 z-20 flex items-center gap-2 bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-full pl-1 pr-3 py-1`}
     >
       <Link href="/profil" className="flex items-center gap-2 min-w-0">
         <PlayerAvatar

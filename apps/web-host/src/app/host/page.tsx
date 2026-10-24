@@ -1918,8 +1918,8 @@ function HostScreenInner() {
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
-      <PlayerAccountCorner />
+    <main className="relative flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
+      <PlayerAccountCorner scroll />
       <RejoinRequestsBanner
         requests={rejoinRequests}
         players={players}

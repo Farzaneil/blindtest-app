@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Search } from "lucide-react";
+import { Check, Plus, Search } from "lucide-react";
 import {
   featuredDeezerPlaylists,
   getDeezerPlayableCount,
@@ -237,8 +237,10 @@ export function DeezerPlaylistPicker({
                   <span className="w-12 h-12 rounded-lg border-2 border-fg bg-inkSurface3 shrink-0" />
                 )}
                 <span className="flex-1 min-w-0">
-                  <span className="block font-bold truncate">{p.title}</span>
-                  <span className="block text-xs text-inkMuted truncate">
+                  <span className="block font-bold leading-tight line-clamp-2 break-words" title={p.title}>
+                    {p.title}
+                  </span>
+                  <span className="block mt-0.5 text-xs text-inkMuted truncate">
                     {count === undefined ? (
                       <span className="animate-pulse">… morceaux</span>
                     ) : count === "error" ? (
@@ -256,18 +258,25 @@ export function DeezerPlaylistPicker({
                   type="button"
                   onClick={() => importPlaylist(p)}
                   disabled={disabled || importingId !== null || empty}
-                  className={`shrink-0 border-2 border-fg shadow-sticker-sm rounded-xl px-3 py-1.5 text-sm font-bold whitespace-nowrap disabled:opacity-50 ${
+                  aria-label={done ? `${p.title} : ${done} morceaux ajoutés` : `Importer ${p.title}`}
+                  // Téléphone : bouton compact (icône seule) pour laisser la
+                  // place au titre de la playlist ; libellé complet dès sm.
+                  className={`shrink-0 inline-flex items-center justify-center gap-1 min-w-[40px] min-h-[40px] border-2 border-fg shadow-sticker-sm rounded-xl px-2 sm:px-3 py-1.5 text-sm font-bold whitespace-nowrap disabled:opacity-50 ${
                     done ? "bg-good" : "bg-inkSurface"
                   }`}
                 >
                   {importingId === p.id ? (
-                    "Import…"
+                    <span className="animate-pulse">…</span>
                   ) : done ? (
-                    <span className="inline-flex items-center gap-1">
-                      <Check className="w-4 h-4" /> {done} ajoutés
-                    </span>
+                    <>
+                      <Check className="w-4 h-4" strokeWidth={3} />
+                      <span className="hidden sm:inline">{done} ajoutés</span>
+                    </>
                   ) : (
-                    "+ Importer"
+                    <>
+                      <Plus className="w-5 h-5 sm:w-4 sm:h-4" strokeWidth={3} />
+                      <span className="hidden sm:inline">Importer</span>
+                    </>
                   )}
                 </button>
               </VisibleRow>
