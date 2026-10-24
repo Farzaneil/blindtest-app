@@ -1,570 +1,519 @@
 # Blindtest App
 
-Une appli pour faire des blind tests entre potes sans avoir besoin de quelqu'un dédié
-au lancement des sons : les téléphones (ou ordis) des joueurs servent de buzzer, un
-écran "hôte" (laptop projeté sur une TV, ordi, ou même un téléphone) diffuse le son via Spotify,
-affiche le code de partie, les joueurs connectés, qui a buzzé en premier et
-l'historique des manches.
+Une appli pour faire des blind tests entre potes sans personne dédiée au lancement
+des sons. Les téléphones des joueurs servent de buzzer. Un écran « hôte » (laptop
+projeté sur une TV, ordi ou même téléphone) diffuse la musique, affiche le code de
+partie et un QR code, les joueurs, qui a buzzé en premier et le classement.
 
-Projet perso (premier projet d'appli), pensé pour apprendre en s'amusant — pas un
-produit commercial. Voir `docs/architecture/blueprint.docx` pour le contexte initial
-complet (concept, DA, roadmap, business plan) ; ce README documente l'état **réel** du
-code, qui a pas mal évolué depuis ce document de départ.
+Projet perso, pas encore commercialisé. `docs/architecture/blueprint.docx` contient
+le cadrage initial (concept, DA, roadmap, business plan). Ce README décrit l'état
+**réel** du code, qui a beaucoup évolué depuis.
 
-## État actuel (à jour)
+Prod : **https://blindtest-app-web-host.vercel.app**
 
-**Le MVP est jouable, déployé, et testé de bout en bout avec de vraies personnes sur
-des réseaux différents.** Concrètement, ce qui marche aujourd'hui :
+## Sommaire
 
-- Un hôte ouvre l'écran web, obtient un code de partie à 6 caractères. Un refresh ou
-  un retour arrière navigateur ne casse plus la partie en cours (elle est retrouvée
-  via `sessionStorage`) — un bouton "↻ Nouvelle partie" permet d'en redémarrer une
-  explicitement si besoin.
-- Des joueurs rejoignent depuis leur téléphone (navigateur, pas d'appli à installer)
-  avec ce code + un pseudo.
-- L'hôte se connecte à son compte Spotify Premium, construit une playlist (recherche
-  manuelle morceau par morceau, import en masse d'une de ses playlists Spotify
-  existantes, et/ou génération automatique par genre + époque + nombre de morceaux —
-  voir « Génération de playlist par genre » plus bas), réordonnable à la main par
-  glisser-déposer avant de lancer la partie.
-- **Deux modes de jeu**, choisis une fois en tout début de partie :
-  - **Maître du jeu** : l'hôte gère la partie mais ne joue pas, il voit tous les
-    titres à l'avance (utile en soirée avec quelqu'un qui anime).
-  - **Tout le monde participe** : l'hôte joue aussi, les morceaux de la file
-    d'attente restent masqués (juste "Morceau 1", "Morceau 2"…) pour ne pas se
-    spoiler lui-même.
-- L'hôte lance une manche → le son se joue sur son ordi, avec un compte à rebours de
-  30 secondes affiché.
-- Les joueurs buzzent depuis leur téléphone ; le premier à buzzer est déterminé de
-  façon fiable côté serveur (pas de course possible même si deux buzz arrivent à
-  quelques millisecondes d'écart) ; le son se coupe automatiquement et le timer se
-  fige pendant que l'hôte juge la réponse.
-- L'hôte révèle la réponse (automatique en mode Maître du jeu puisqu'il la connaît
-  déjà ; via un clic explicite en mode Tout le monde participe, pour ne pas se la
-  spoiler avant d'avoir buzzé lui-même) puis juge ce qui a été trouvé : titre seul,
-  artiste seul, les deux, ou rien.
-  - **+2 points** si titre et artiste sont trouvés → manche terminée, on enchaîne.
-  - **+1 point** si un seul des deux est trouvé, **-1 point** si rien n'est trouvé —
-    en mode Maître du jeu, la manche reprend alors exactement là où la musique
-    s'était arrêtée pour laisser une autre chance (le joueur qui vient de répondre
-    est temporairement bloqué jusqu'au buzz suivant d'un autre joueur), avec un
-    historique de chaque tentative conservé ; en mode Tout le monde participe, la
-    manche se termine dans tous les cas dès le premier buzz.
-  - Si personne ne buzze avant la fin des 30 secondes, la réponse s'affiche et la
-    manche se termine sans gagnant.
-  - Le score peut descendre en négatif (pas de plancher à 0).
-- Classement en temps réel avec gestion des égalités (deux joueurs à égalité
-  partagent le même rang), affiché aux joueurs (pseudo, score, position) et à l'hôte.
-- Historique replié des manches déjà jouées, affiché en ordre décroissant (la
-  dernière manche jouée en haut), avec le détail de chaque tentative (qui a buzzé,
-  quoi trouvé, combien de points) pour les manches à rallonge.
-- **Écran de fin de partie enrichi**, affiché aussi bien côté hôte que côté joueurs
-  dès que la file d'attente est épuisée : podium visuel des 3 premiers, buzzeur le
-  plus rapide (uniquement parmi les réponses complètes titre + artiste), manche
-  ayant généré le plus de tentatives, en plus du classement complet.
-- **Site navigable** : page d'accueil neutre (`/`) qui permet de choisir "Créer une
-  partie" (`/host`) ou "Rejoindre une partie" (`/play`), plus deux pages statiques
-  `/rules` (règles du jeu) et `/about` (contexte du projet, roadmap).
-- Testé en conditions réelles : hôte + plusieurs joueurs sur des réseaux différents
-  (pas besoin d'être sur le même wifi), **y compris entièrement depuis des
-  téléphones** (hôte et joueurs), via l'app déployée sur Vercel.
+- [Ce que fait l'app aujourd'hui](#ce-que-fait-lapp-aujourdhui)
+- [Comment jouer](#comment-jouer)
+- [Sources de musique](#sources-de-musique)
+- [Comptes joueurs, progression et cosmétiques](#comptes-joueurs-progression-et-cosmétiques)
+- [Design « Arcade autocollants »](#design--arcade-autocollants-)
+- [Le jeu, techniquement](#le-jeu-techniquement)
+- [Architecture / stack](#architecture--stack)
+- [Sécurité / RLS](#sécurité--rls)
+- [Démarrer en local](#démarrer-en-local)
+- [Déploiement (Vercel)](#déploiement-vercel)
+- [Qualité / CI](#qualité--ci)
+- [Conventions Git](#conventions-git)
+- [Roadmap](#roadmap)
 
-Ce qui **ne marche pas encore** / n'est pas fait :
+## Ce que fait l'app aujourd'hui
 
-- **Appli mobile native (Expo)** : le code existe (`apps/mobile`) et reproduit la
-  logique rejoindre + buzzer (pas les évolutions récentes des règles/modes de jeu),
-  mais n'a jamais été validée de bout en bout — bloquée sur des soucis de toolchain
-  natif (CocoaPods / Ruby / libyaml) côté compilation iOS. Mise de côté
-  volontairement : le buzzer web (`/play`, accessible depuis n'importe quel
-  navigateur mobile) remplit déjà ce rôle et a été testé en conditions réelles.
-- Pas de mode équipe, pas de thèmes/playlists pré-construites, pas de génération de
-  playlist par IA, pas de mode réponse vocale (tout ça était prévu dans le blueprint
-  initial mais pas commencé).
-- Pas de vraie authentification (voir section RLS / sécurité plus bas — c'est une
-  limite assumée pour cette phase "entre potes").
-- La file d'attente n'est pas persistée côté serveur (table `playlists` du schéma
-  prévue mais pas branchée) : elle vit en mémoire côté hôte + `sessionStorage`, donc
-  ne survit qu'à un refresh de la même partie, pas à une réutilisation entre parties
-  distinctes.
+**Jouable, déployée et testée en conditions réelles** : hôte et joueurs sur des
+réseaux différents, y compris tout depuis des téléphones.
 
-## Comment jouer (procédure exacte)
+**Mise en place d'une partie**
+- L'hôte crée une partie et reçoit un code à 6 caractères, avec un QR code à scanner.
+- La partie survit à un refresh. L'accueil affiche « Partie en cours » avec deux
+  choix : *Reprendre*, ou *Nouvelle partie*, qui termine l'ancienne pour tout le
+  monde, après confirmation.
+- Les joueurs rejoignent depuis leur navigateur (rien à installer) avec le code et un
+  pseudo. Le pseudo est unique dans une partie.
+- Un joueur qui a perdu sa place (onglet fermé, changement de téléphone) la reprend :
+  - **connecté à un compte** : automatiquement ;
+  - **invité** : par une demande que l'hôte accepte ou refuse. Il retrouve alors son
+    score, son équipe et ses stats.
 
-`/` est une page d'accueil neutre : elle propose "Créer une partie" (→ `/host`) ou
-"Rejoindre une partie" (→ `/play`), plus des liens vers `/rules` (règles) et `/about`
-(contexte du projet). Confirmé fonctionnel aussi bien sur ordinateur que sur
-téléphone, côté hôte comme côté joueurs (voir "Mobile" plus bas).
+**Modes**
+- **Maître du jeu** : l'hôte anime sans jouer et voit les titres à l'avance.
+- **Tout le monde participe** : l'hôte peut aussi jouer sur son écran. La file est
+  alors masquée (« Morceau 1 », « Morceau 2 »…) et la réponse ne s'affiche qu'au clic.
+  Si l'hôte repasse en Maître du jeu pendant la préparation, son joueur est retiré
+  (après confirmation).
+- Le mode est **verrouillé** une fois la partie lancée.
+- **Mode équipes** : on répartit les joueurs par glisser-déposer. Chaque équipe a sa
+  couleur.
 
-**En ligne (recommandé, pas besoin d'être sur le même réseau) :**
+**Une manche**
+- Le morceau se joue chez l'hôte, avec un compte à rebours de 30 s.
+- Le premier buzz est tranché côté serveur, sans course possible. La musique se coupe
+  et le timer se fige pendant le jugement.
+- L'hôte juge la réponse : titre, artiste, les deux ou rien, avec des boutons colorés
+  **+2 / +1 / -1**.
+  - **Maître du jeu** : une réponse partielle relance la musique là où elle s'était
+    arrêtée. Le joueur qui vient de répondre reste bloqué jusqu'au buzz de quelqu'un
+    d'autre.
+  - **Tout le monde participe** : la manche se termine dès le premier jugement.
+- Si personne ne buzze en 30 s, la réponse s'affiche et la manche se termine sans
+  gagnant.
+- Le score peut être négatif.
 
-- Hôte : ouvre `https://blindtest-app-web-host.vercel.app/host`, connecte-toi à
-  Spotify (compte Premium requis, voir plus bas), choisis un mode de jeu, construis ta
-  playlist, note le code affiché.
-- Joueurs : chacun ouvre `https://blindtest-app-web-host.vercel.app/play`, entre le
-  code + un pseudo.
+**Bonus / malus** (chacun activable ou non, par partie)
+- **Bonus vitesse** : +1 pour une réponse complète en moins de 2 s.
+- **Bonus remontada** : +1 si le joueur est strictement dernier, à plus de 5 points de
+  l'avant-dernier.
+- **Manche joker** : environ 1 manche sur 10, points de base doublés dans les deux sens.
+- **Malus série gagnante** : le détenteur d'une série d'au moins 3 bonnes réponses
+  buzze en différé.
+- **Malus série perdante** : après 3 erreurs d'affilée, le joueur est bloqué la
+  manche suivante.
 
-**En local (pour développer) :**
+**Fin de manche et fin de partie**
+- Le classement s'anime entre les manches : scores qui défilent, joueurs qui
+  échangent leurs places, égalités partagées.
+- L'historique des manches est replié, avec le détail de chaque tentative.
+- **Cérémonie de fin**, côté hôte comme côté joueurs : podium avec avatars, confettis,
+  buzzeur le plus rapide, manche la plus disputée.
+- Pages annexes : `/rules`, `/about` et `/confidentialite`, plus un bandeau cookies
+  (l'analytics est prévu mais pas branché, `ANALYTICS_ENABLED = false`).
 
-- Hôte : `http://localhost:3000/host` (redirige automatiquement vers `127.0.0.1`,
-  requis pour que la connexion Spotify fonctionne — voir "Pourquoi 127.0.0.1 et pas
-  localhost" plus bas).
-- Joueurs : `http://localhost:3000/play` dans d'autres onglets, ou depuis un autre
-  appareil sur le même réseau via `http://<IP locale de l'hôte>:3000/play`.
+**Pas fait / mis de côté**
+- **App mobile native (`apps/mobile`, Expo)** : jamais validée de bout en bout, à
+  cause de soucis de toolchain iOS. Elle est en retard sur les règles actuelles. Le
+  buzzer web la remplace très bien.
+- **Amis** : fonctionnalité prévue.
+- **Domaine propre et e-mails** : les mails de connexion arrivent souvent en spams
+  pour l'instant.
+- **Vérifications légales** (Deezer notamment) : à faire avant toute
+  commercialisation.
 
-Une partie est retrouvée automatiquement au rechargement de la page hôte (stockée en
-`sessionStorage`) : pour repartir de zéro (nouveau code, scores remis à zéro), utiliser
-le bouton "↻ Nouvelle partie" plutôt que de recharger la page.
+## Comment jouer
+
+`/` est l'accueil : *Créer une partie* (`/host`), *Rejoindre une partie* (`/play`),
+choix du fond (jaune, ciel ou lilas) et accès au compte joueur.
+
+- **En ligne** :
+  - Hôte : `https://blindtest-app-web-host.vercel.app/host`. Choisis un mode,
+    construis la playlist, puis montre le code ou le QR code.
+  - Joueurs : `/play`, avec le code et un pseudo, ou en scannant le QR code.
+- **En local** :
+  - Hôte : `http://localhost:3000/host`. La page redirige vers `127.0.0.1`, voir
+    [plus bas](#pourquoi-127001-et-pas-localhost).
+  - Joueurs : d'autres onglets, ou un autre appareil sur le même réseau via
+    `http://<IP locale>:3000/play`.
+
+## Sources de musique
+
+### Deezer (par défaut, sans compte)
+
+- **Fonctionnement** : on cherche ou on importe une **playlist publique Deezer**, et
+  le jeu utilise les extraits de 30 s fournis par l'API publique. Ni compte ni clé
+  pour l'hôte.
+- **Code** :
+  - `lib/deezer.ts` (types et appels client) ;
+  - routes proxy `api/deezer/{search,featured,playlist/[id],track/[id]}` qui passent
+    par `lib/deezerServer.ts`, car l'API Deezer n'autorise pas le CORS ;
+  - choix de la playlist dans `_components/DeezerPlaylistPicker.tsx`.
+- **Lecture** : `lib/usePreviewPlayer.ts`, un seul élément `<audio>` avec
+  pause/reprise. Un lien d'extrait expire : il est donc rafraîchi via
+  `api/deezer/track/[id]` juste avant de jouer.
+- ⚠️ Vérifier les conditions d'utilisation de Deezer avant toute exploitation
+  commerciale.
+
+### Spotify (réservé à certains comptes)
+
+La source Spotify n'est proposée qu'aux joueurs connectés dont l'e-mail figure dans
+la variable `SPOTIFY_HOST_EMAILS`, une liste séparée par des virgules (voir
+`api/host-features` et `isSpotifyAllowedEmail` dans `lib/playerEmailAuth.ts`). Pour
+tous les autres, elle est masquée. En mode développeur, l'app Spotify n'accepte de
+toute façon que 5 utilisateurs de test.
+
+- **Premium obligatoire.** Les `preview_url` ont été supprimées pour les apps créées
+  après le 27/11/2024. Seule la lecture complète via le **Web Playback SDK** reste
+  possible, et elle exige Premium. Le SDK crée un appareil Spotify Connect dans
+  l'onglet de l'hôte.
+- **Un seul lecteur partagé.** Il est stocké sur `window` (`useSpotifyPlayer.ts`), ce
+  qui évite l'erreur « device not found » quand on quitte puis revient sur `/host`.
+  *Réessayer* déconnecte le lecteur, attend, le recrée, et propose de recharger la
+  page.
+- **Deux appels distincts** :
+  - `playTrackOnHostDevice`, avec un body `{ uris, position_ms }`, démarre un morceau
+    du début ;
+  - `resumePlayback`, sans body, reprend exactement là où la lecture s'était arrêtée.
+  Un appel avec body relance toujours le morceau à zéro.
+- **Connexion OAuth PKCE**, sans Client Secret. Les tokens sont stockés en cookies
+  httpOnly. Après l'aller-retour OAuth, on revient bien sur `/host`.
+- **Import de playlist** : uniquement les playlists dont l'hôte est propriétaire ou
+  collaborateur (changements d'API de février 2026, sinon erreur 403). Les morceaux
+  sont mélangés une seule fois, à l'import.
+- **Génération par genre et époque** : à partir de listes d'artistes curées à la main
+  (`packages/game-logic/src/genrePresets.ts`). Le champ `popularity` et les endpoints
+  de recommandation ont été retirés par Spotify en février 2026.
+- **Quota (erreur 429)** : un coupe-circuit est partagé entre appareils via Supabase,
+  avec un délai qui double à chaque nouveau refus. Voir `lib/spotifyQuotaLock.ts` et
+  les migrations 0012-0013.
+
+## Comptes joueurs, progression et cosmétiques
+
+### Connexion par e-mail
+
+- **Principe** : un e-mail avec **un lien magique et un code à 6 chiffres** (Supabase
+  Auth), sans mot de passe. Le compte est créé au premier passage.
+- **Flux** :
+  - `api/player-auth/email` envoie l'e-mail. Le « code verifier » PKCE est gardé dans
+    un cookie httpOnly `player_magic_verifier`.
+  - `api/player-auth/confirm` traite le lien.
+  - `api/player-auth/verify-code` traite le code saisi à la main.
+- **Comptes** : `lib/playerEmailAccount.ts` (`findOrCreateAccountForEmail`). La
+  session de jeu est notre propre cookie signé `player_session` (HMAC
+  `PLAYER_SESSION_SECRET`, 180 jours), lu par `api/player-auth/me`.
+- **Origine des liens** : l'origine est lue depuis l'en-tête `host` (`requestOrigin`),
+  ce qui évite le piège `localhost` / `127.0.0.1` dans les liens envoyés.
+- **Rattachement** : un joueur invité, ou le joueur de l'hôte, est rattaché au compte
+  dès la connexion (`api/player-account/link-host-player`).
+- **Ancien code** : les routes `api/player-auth/login` et `callback` (connexion
+  joueur via Spotify) sont l'ancien système. Elles ne sont plus proposées dans l'UI.
+
+### Avatars « La Bande-Son »
+
+- **Les avatars** : 12 personnages musicaux, tous gratuits, chacun avec sa couleur de
+  rond. Les invités reçoivent un avatar déterminé par le hash de leur pseudo.
+  Fichiers : `lib/avatars.tsx` (sans `"use client"`, car importé côté serveur) et
+  `_components/AvatarPicker.tsx`.
+- **Effets spéciaux** (`lib/avatarExtras.ts`) : effet anime (niveau 5), or
+  (10 victoires), couronne (Éclair or), lunettes étoile (Curateur argent), chapeaux
+  saisonniers (Halloween, Noël, été).
+
+### Profil (`/profil`)
+
+L'en-tête affiche l'avatar (cliquable pour le changer), le niveau, les parties et
+victoires, et la barre d'XP. Cinq onglets :
+
+- **Réglages** : pseudo, skin du buzzer, fond, compte (données, suppression).
+- **Stats** : chiffres clés, forme du moment (10 dernières parties), records.
+- **Badges** : paliers obtenus, prochain objectif, médailles par catégorie.
+- **Historique** : parties groupées par mois, filtre Victoires.
+- **Classement** : les comptes déjà croisés en partie, avec podium et avatars.
+
+### Badges et XP
+
+- **17 badges à 3 paliers** (bronze / argent / or), soit 51 paliers, en 4 catégories :
+  Performance en jeu, Assiduité, Social, Côté hôte. Définitions dans `lib/badges.ts`.
+- **Calcul** : en fin de partie par `award_game_rewards` (migration 0021).
+- **XP gagnée** : le score final de la partie (jamais négatif), plus +10 / +25 / +50
+  par palier bronze / argent / or débloqué. 100 XP par niveau.
+
+### Skins du buzzer
+
+- **Catalogue** : 53 skins en 7 familles (Couleurs, Musique, Motifs, Arcade, Fête,
+  Gourmand, Fiertés), tous dans `lib/cosmetics.tsx`.
+- **Déblocage** : **les règles sont centralisées** dans `isCosmeticUnlocked(def, { xp,
+  badges })` et calculées à la volée à partir de l'XP et des paliers de badges. La
+  même fonction sert au profil (cadenas et conditions affichées) et au serveur
+  (`api/player-account/equip-cosmetic`). Pour changer une règle, on ne modifie que ce
+  fichier : ni migration, ni table à remplir.
+- **Affichage** : un skin à motif reçoit une pastille blanche sous le libellé du
+  buzzer, pour rester lisible.
+
+## Design « Arcade autocollants »
+
+- **Couleurs** : 3 fonds (jaune, ciel, lilas), choisis au hasard à la première visite
+  puis mémorisés (`lib/theme.ts`, script inline dans `<head>` pour éviter tout
+  flash). Chaque fond définit les variables `--bg`, `--c1`, `--c2` et `--tint`.
+- **Tokens Tailwind** : `sage` = c1, `info` = c2. Les surfaces (`inkSurface`,
+  `inkSurface2`) sont blanches, `inkSurface3` = tint.
+- **Style autocollant** : contours noirs épais et ombres `shadow-sticker`
+  (`-sm` / `-lg`).
+- **Composants** :
+  - buzzer en relief 3D ;
+  - `ConfirmDialog` (remplace `window.confirm`) ;
+  - interrupteurs en relief ;
+  - `ScoreAnimations.tsx` (`AnimatedScoreboard`, `CountUp`, `Confetti`,
+    `EndCeremony`).
+- **Maquettes de référence** : canvas Claude « Blindtest — Refonte Arcade » (pages
+  joueur, hôte, infos, avatars, profil v2).
 
 ## Le jeu, techniquement
 
-### Modèle de données (voir `supabase/migrations/`)
+### Modèle de données (`supabase/migrations/`)
 
-Pas de table "hosts" séparée : l'hôte est juste le navigateur qui a créé la `room` et
-s'est connecté à Spotify dessus. Les tables principales :
+- **`rooms`** : une partie (code, statut `lobby` / `in_progress` / `finished`, mode
+  solo / équipe, réglages bonus/malus).
+- **`players`** : un joueur dans une room (pseudo, score, équipe, séries, avatar,
+  `account_id` éventuel, `is_host` si c'est l'hôte qui joue).
+- **`teams`** : les équipes d'une room et leur couleur.
+- **`rounds`** : une manche, c'est-à-dire un morceau.
+  - Cycle de vie : `pending → playing → buzzed → revealed → scored`. En Maître du jeu,
+    une réponse partielle fait repasser la manche de `revealed` à `playing`.
+  - Colonnes : `title_found` / `artist_found`, `locked_player_id`,
+    `elapsed_seconds`, `is_joker`, mode dénormalisé.
+- **`buzzes`** : chaque tentative de buzz, horodatée côté serveur.
+- **`round_attempts`** : une ligne par tentative jugée (points, bonus, temps de
+  réaction).
+- **`rejoin_requests`** : demandes de reprise de place des invités.
+- **Comptes** :
+  - `player_accounts` : e-mail non lisible publiquement, pseudo, XP, avatar ;
+  - `player_badge_progress` et `player_badge_unlocks` ;
+  - `player_cosmetics`, qui ne sert plus qu'au skin équipé ;
+  - fonction `get_player_leaderboard`.
+- **Autres** : `spotify_quota_locks` (verrou de quota partagé).
 
-- `rooms` : une partie (code, statut lobby/in_progress/finished).
-- `players` : un joueur ayant rejoint une room (pseudo, score, device_id).
-- `rounds` : une manche = un morceau. Cycle de vie du statut :
-  `pending → playing → buzzed → revealed → scored` — avec un cas particulier en mode
-  Maître du jeu : une manche `revealed` jugée comme incomplète (titre ou artiste
-  seulement) repasse à `playing` plutôt que `scored`, pour laisser une autre chance de
-  buzzer. `rounds` porte aussi `title_found`/`artist_found` (cumulatifs sur la durée
-  de la manche), `locked_player_id` (dernier joueur jugé, bloqué jusqu'au prochain
-  buzz d'un autre joueur) et `elapsed_seconds` (temps de jeu réel déjà écoulé avant le
-  "stint" en cours, pour que le timer se fige pendant qu'on juge une réponse).
-- `buzzes` : chaque tentative de buzz (pas juste le gagnant), horodatée côté serveur.
-- `round_attempts` : une ligne par tentative **jugée** (pas chaque buzz brut) —
-  qui a buzzé, titre/artiste trouvés ou non, points attribués. Alimente le panneau
-  d'historique détaillé côté hôte.
-- `teams`, `playlists`, `answers` : présentes dans le schéma pour des features futures
-  (mode équipe, playlists pré-construites, réponse écrite/vocale) mais pas encore
-  utilisées par le code actuel.
+### Résolution du buzz (0002, étendue par 0008, 0009 et 0017)
 
-### Résolution du buzz (voir `supabase/migrations/0002_buzz_resolution.sql`, étendu par `0008` et `0009`)
+Le trigger `resolve_buzz_winner` fait un `UPDATE … WHERE status = 'playing'` à chaque
+insert dans `buzzes`. Seul le premier insert validé gagne, grâce au verrou de ligne.
+Le trigger exclut aussi le joueur `locked_player_id`, applique les malus de série et
+fige `elapsed_seconds` au moment exact du buzz.
 
-Plutôt que de laisser le client décider "qui a buzzé en premier" (source de bugs si
-deux buzz arrivent presque en même temps), un trigger Postgres
-(`resolve_buzz_winner`) fait une `UPDATE ... WHERE status = 'playing'` à chaque insert
-dans `buzzes` : seul le premier insert à valider sa transaction gagne, grâce au verrou
-de ligne pris par la clause `WHERE`. Le trigger exclut en plus le joueur actuellement
-`locked_player_id` (mode Maître du jeu, réponse partielle) et incrémente
-`elapsed_seconds` au moment exact du buzz gagnant, pour que le timer visuel côté hôte
-reste exact même après plusieurs reprises sur la même manche.
+### Jugement (0006, 0008, 0017-0019)
 
-### Révélation et validation de la réponse (voir `0006_reveal_round.sql`, `0008_partial_answers.sql`, `0009_timer_pause_on_buzz.sql`)
-
-- `reveal_round(round_id)` fait passer une manche `buzzed` → `revealed`. Appelé
-  automatiquement côté client en mode Maître du jeu (le titre est déjà affiché en
-  permanence, un clic manuel n'apporterait rien) ; appelé manuellement par l'hôte en
-  mode Tout le monde participe (il ne doit pas voir la réponse avant d'avoir cliqué,
-  au cas où il joue lui-même).
-- `resolve_round_attempt(round_id, title_found, artist_found, force_end)` (RPC
-  appelée depuis `resolveRoundAttempt()` dans `rooms.ts`) calcule les points (2 / 1 /
-  -1), crédite le joueur, insère une ligne dans `round_attempts`, puis soit clôture la
-  manche (`scored`) si titre + artiste sont acquis ou si `force_end` est vrai (mode
-  Tout le monde participe), soit la fait repartir en `playing` (mode Maître du jeu,
-  réponse incomplète) en réinitialisant `started_at` pour que le budget de 30 secondes
-  ne décompte pas le temps passé à juger.
-- `timeout_round(round_id)` clôture une manche `playing → scored` sans gagnant si le
-  timer côté hôte arrive à 0 avant qu'un joueur ne buzze.
+- `reveal_round` fait passer la manche de `buzzed` à `revealed`. C'est automatique en
+  Maître du jeu, et se fait au clic en Tout le monde participe.
+- `resolve_round_attempt(round_id, title_found, artist_found, force_end)` calcule les
+  points (2 / 1 / -1, doublés en joker, plus les bonus), met à jour les séries et
+  insère la tentative. Ensuite, soit elle clôture la manche, soit elle la relance.
+- `timeout_round` clôture la manche sans gagnant.
 
 ### Temps réel
 
-Tout passe par **Supabase Realtime** (`postgres_changes`) : les tables `players`,
-`rounds`, `buzzes` et **`round_attempts`** doivent être ajoutées à la publication
-`supabase_realtime`. Piège rencontré et corrigé (`0010_round_attempts_realtime.sql`) :
-ajouter une nouvelle table au schéma ne suffit pas, il faut aussi explicitement
-l'ajouter à cette publication (par SQL ou via Database → Replication dans le dashboard
-Supabase) — sans quoi ses lignes s'insèrent bien en base mais le client ne reçoit
-jamais l'événement qui le préviendrait, et l'UI qui en dépend (ici : l'historique
-détaillé) reste figée sur son état initial.
+Tout passe par **Supabase Realtime** (`postgres_changes`). Chaque table écoutée par
+le client doit être ajoutée à la publication `supabase_realtime` : créer la table ne
+suffit pas. Sinon, les lignes s'insèrent mais l'UI ne bouge pas (piège corrigé dans
+0010 pour `round_attempts`). Côté `/play`, un listener `visibilitychange` relance tous
+les abonnements au retour au premier plan, car un websocket tué en veille n'est pas
+toujours signalé.
 
-### Intégration Spotify (voir `packages/api-clients/src/spotify.ts` et `apps/web-host/src/lib/spotifyAuth.ts`)
+### Mobile web (`/play`)
 
-Points importants, vérifiés en 2026 :
-
-- **Compte Spotify Premium obligatoire côté hôte.** Spotify a supprimé l'accès aux
-  extraits gratuits de 30s (`preview_url`) pour toute app créée après le 27/11/2024 —
-  il n'y a plus moyen de contourner ça, seule la lecture complète via un SDK officiel
-  fonctionne, et ce SDK exige Premium.
-- **Web Playback SDK** : crée un "device" Spotify Connect directement dans l'onglet du
-  navigateur de l'hôte. Le son sort de l'ordi de l'hôte, pas besoin d'enceinte
-  connectée en Bluetooth.
-- **Deux appels de lecture distincts** : `playTrackOnHostDevice` (avec un body
-  `{ uris, position_ms }`) démarre un morceau depuis le début, utilisé pour chaque
-  nouvelle manche ; `resumePlayback` (sans body) reprend la lecture exactement là où
-  elle avait été mise en pause, utilisé quand une manche reprend après une réponse
-  partielle en mode Maître du jeu — ne pas confondre les deux, un appel avec body
-  relance toujours le morceau depuis zéro.
-- **Auth : Authorization Code Flow + PKCE**, pas de Client Secret utilisé (ni stocké
-  côté serveur). Tokens (access + refresh) stockés en cookies `httpOnly`, pas en base.
-  Une seule session Spotify active à la fois (celle de l'hôte).
-- **Recherche** : `GET /v1/search`, avec le token utilisateur obtenu via PKCE.
-- Plusieurs endpoints Spotify (recommendations, audio-features, audio-analysis,
-  related-artists, featured-playlists) sont dépréciés pour les nouvelles apps depuis
-  nov. 2024 — ne pas construire de logique dessus.
-- Avant validation "Extended Quota Mode" par Spotify, l'app Spotify Developer est
-  limitée à 5 utilisateurs de test en Developer Mode (largement suffisant pour jouer
-  entre potes).
-- **Import de playlists : uniquement celles dont l'hôte est propriétaire ou
-  collaborateur.** Depuis les changements API de février 2026, Spotify ne renvoie le
-  contenu (`GET /playlists/{id}/tracks`) que pour ces cas-là ; toute autre playlist (y
-  compris une playlist simplement suivie, ou une playlist éditoriale Spotify comme
-  Découvertes de la semaine) renvoie un 403 Forbidden. Vérifié (juillet 2026) : il
-  n'existe aucun contournement officiel ni connu de la communauté développeurs pour ce
-  point précis. Pour importer une playlist construite avec des amis sans en être
-  l'auteur, la solution est de la rendre collaborative et de s'y faire ajouter comme
-  collaborateur (pas juste "suivre") — l'app gère déjà ce cas. Les morceaux importés
-  sont mélangés aléatoirement (Fisher-Yates) une seule fois, à l'import — pas
-  remélangés à chaque reprise de partie (piège rencontré : remélanger à chaque clic
-  sur "manche suivante" écrasait silencieusement tout réordonnancement manuel fait
-  par l'hôte via glisser-déposer).
-
-- **Génération de playlist par genre + époque + nombre de morceaux.** L'hôte choisit
-  un genre (ou "Tous les genres"), une époque (par décennie, ou "Toutes années") et
-  un nombre de morceaux souhaité ; l'app pioche aléatoirement des artistes dans une
-  liste curée pour ce genre, cherche leurs morceaux via `GET /v1/search`
-  (`artist:"Nom" year:2000-2009`), et complète la file avec un mélange aléatoire des
-  résultats trouvés. Pensé pour un hôte qui joue lui-même : personne, pas même celui
-  qui génère la playlist, ne sait à l'avance quels morceaux vont sortir.
-  - **Pourquoi des listes d'artistes curées à la main plutôt qu'une recherche
-    Spotify directe par genre** : depuis les changements API de février 2026, le
-    champ `popularity` a été retiré des objets Track/Artist/Album (donc plus aucun
-    moyen de trier "par morceau connu"), et les endpoints qui auraient pu servir de
-    raccourci (`/recommendations`, `/artists/{id}/top-tracks`,
-    `/browse/categories/*`) ont été supprimés. Reste le filtre `genre:` de
-    `GET /v1/search`, mais il tague les artistes avec des micro-genres très
-    précis (« disco house », « chanson française »...) qui ne collent pas à des
-    catégories larges comme « variétés » ou « disco » telles qu'on les pense pour
-    une soirée. Partir d'artistes qu'on sait soi-même représentatifs d'un genre
-    garantit des morceaux reconnaissables.
-  - Socle de genres fourni par défaut (facile à étendre dans
-    `packages/game-logic/src/genrePresets.ts`, une clé = une liste d'artistes, aucun
-    autre changement de code nécessaire) : Variétés françaises, Rap français,
-    Disco / Funk, Pop/Rock, Dance / Électro, Rock, R&B / Soul, Rap US,
-    Reggaeton / Latino.
-  - Si la file obtenue est plus courte que demandé (artiste sans résultat pour
-    l'époque choisie, etc.), l'app le signale et propose d'élargir l'époque ou de
-    repasser sur "Tous les genres".
-
-### Mobile
-
-Confirmé par des tests réels : **hôte et joueurs fonctionnent bien depuis un
-téléphone**, lecture Spotify comprise (Web Playback SDK). Les craintes documentées
-plus tôt dans ce README sur Safari iOS (autoplay bloqué, device qui disparaît, son
-qui sort par le mauvais haut-parleur) sont des bugs connus et documentés côté
-Spotify/WebKit en général, mais ne se sont pas révélés bloquants en usage réel sur ce
-projet — à garder en tête comme points de vigilance si un problème apparaît sur un
-téléphone/OS particulier, pas comme une limite structurelle de l'app.
-
-Renforcements apportés côté `/play` (le buzzer, écran le plus utilisé sur téléphone) :
-
-- **Zones sûres / encoche** : `viewport-fit: "cover"` (voir `layout.tsx`) +
-  paddings `env(safe-area-inset-*)`, pour que le bouton buzz et les liens du bas ne
-  passent jamais sous l'encoche/île dynamique ou la barre de gestes en bas d'écran.
-  Zoom par pincement désactivé (`maximumScale: 1`), inutile ici et gênant sur un
-  écran plein écran.
-- **Écran qui reste allumé** (Wake Lock API, feature-detect + échec silencieux si
-  absente) : évite de rater un buzz parce que le téléphone s'est mis en veille
-  pendant l'attente d'une manche. Redemandé automatiquement au retour au premier
-  plan, le système le libérant quand l'onglet passe en arrière-plan.
-- **Vibration au buzz** (Android ; ignorée silencieusement sur iOS Safari, qui
-  n'implémente pas l'API Vibration) : retour haptique immédiat au tap, avant même la
-  réponse du serveur.
-- **Re-synchronisation au réveil du téléphone** : un onglet en arrière-plan trop
-  longtemps (écran verrouillé, changement d'appli) peut voir son websocket Realtime
-  tué sans que le SDK Supabase ne le signale. Un listener `visibilitychange` force un
-  désabonnement/réabonnement complet de tous les canaux au retour au premier plan,
-  plutôt que de faire confiance à la reconnexion automatique.
-
-Si l'hôte veut jouer sur son propre téléphone en plus d'animer, le mode "Tout le
-monde participe" reste la bonne option : il ouvre `/play` sur son téléphone comme
-n'importe quel autre joueur, en parallèle de `/host` (sur le même appareil ou un
-autre).
+- Zones sûres de l'encoche (`viewport-fit: cover` et `env(safe-area-inset-*)`).
+- Zoom désactivé.
+- Wake Lock pour que l'écran reste allumé.
+- Vibration au buzz, sur Android uniquement.
+- Re-synchronisation au réveil du téléphone.
 
 ### Pourquoi 127.0.0.1 et pas localhost
 
-L'URI de redirection OAuth Spotify doit être enregistrée exactement dans le dashboard
-développeur, et Spotify exige `127.0.0.1` plutôt que `localhost` depuis fin 2025. Or
-les cookies posés sur `localhost` sont invisibles depuis `127.0.0.1` (le navigateur les
-traite comme deux origines différentes) — ce qui cassait la connexion Spotify de façon
-assez peu intuitive (`state mismatch`) si on testait sur `localhost`. Un garde-fou
-(`useForceLoopbackHost`, utilisé dans `host/page.tsx` et `spotify-test/page.tsx`) redirige
-automatiquement vers `127.0.0.1` si jamais la page est ouverte via `localhost`, pour ne
-plus jamais retomber dans ce piège. Cette redirection ne s'applique qu'en local ; en
-prod (un vrai domaine HTTPS) elle ne fait rien.
+Spotify exige `127.0.0.1` dans les URI de redirection. Or, les cookies posés sur
+`localhost` sont invisibles depuis `127.0.0.1`, ce qui provoquait des « state
+mismatch » ou des « verifier manquant ». `useForceLoopbackHost` redirige donc
+automatiquement vers `127.0.0.1` en local (sur `/host`, `/connexion`, `/spotify-test`).
+En prod, il ne fait rien.
 
 ## Architecture / stack
 
-- `apps/web-host/` — Next.js 16 (App Router, Turbopack) : **l'appli réellement
-  utilisée aujourd'hui** (écran hôte, page joueur `/play`, connexion Spotify).
-- `apps/mobile/` — Expo (React Native) : écrit mais jamais validé de bout en bout,
-  mis de côté (voir "État actuel").
-- `packages/game-logic/` — génération de code de room, scoring, résolution de buzz,
-  matching de réponse : TypeScript partagé entre web-host et mobile.
-- `packages/ui/` — design system partagé (tokens couleur/typo), embryonnaire.
-- `packages/api-clients/` — wrappers API musique. `spotify.ts` est complet (recherche,
-  lecture, reprise de lecture, import de playlist). `youtube.ts` / `deezer.ts` sont
-  des stubs non utilisés.
-- `supabase/migrations/` — schéma Postgres + RLS + fonctions, versionné et numéroté :
-  - `0001_init` : schéma de base + RLS activée (deny-all par défaut)
-  - `0002_buzz_resolution` : trigger de résolution atomique du buzz
-  - `0003_dev_policies` : policies RLS permissives (phase prototype)
-  - `0004_rls_hardening` : durcissement (colonnes restreintes, fonctions
-    SECURITY DEFINER) — voir la section Sécurité plus bas
-  - `0005_resolve_round` : RPC de validation de réponse + attribution du score
-    (remplacée depuis par `resolve_round_attempt`, voir `0008`)
-  - `0006_reveal_round` : étape de révélation explicite avant validation
-  - `0007_round_timeout_and_history` : timeout de manche + `was_correct` pour
-    l'historique
-  - `0008_partial_answers` : réponses partielles (titre/artiste seul), reprise de
-    manche, verrouillage de buzzer, table `round_attempts`
-  - `0009_timer_pause_on_buzz` : `elapsed_seconds`, timer qui se fige pendant le
-    jugement d'une réponse
-  - `0010_round_attempts_realtime` : ajout de `round_attempts` à la publication
-    Realtime (voir "Temps réel" plus haut)
-  - `0011_reaction_seconds` : temps de réaction par tentative
-    (`round_attempts.reaction_seconds`), pour le "buzzeur le plus rapide" de l'écran
-    de fin de partie enrichi — uniquement calculé sur les tentatives à 2 points
-    (titre + artiste trouvés), pour qu'une réponse fausse ou partielle rapide ne
-    puisse pas remporter ce titre
-- `docs/architecture/` — document de conception initial (`blueprint.docx`).
-- `.github/workflows/ci.yml` — lint + typecheck des deux apps sur push/PR.
+- **`apps/web-host/`** : l'app réellement utilisée. Next.js 16 (App Router,
+  Turbopack), React 19, Tailwind 3, Supabase JS, lucide-react, qrcode.react.
+- **`apps/mobile/`** : Expo, mis de côté.
+- **`packages/game-logic/`** : code de room, scoring, résolution de buzz,
+  correspondance des réponses, presets de genres.
+- **`packages/api-clients/`** : `spotify.ts`, complet. `deezer.ts` et `youtube.ts`
+  sont des stubs : le vrai client Deezer est dans `apps/web-host/src/lib`.
+- **`packages/ui/`** : tokens (embryonnaire).
+- **`supabase/migrations/`** : schéma, RLS et fonctions, numérotés.
+- **`.github/workflows/ci.yml`** : lint et typecheck à chaque push ou PR.
 
-### apps/web-host en détail
+### Migrations
 
-- `src/app/page.tsx` — page d'accueil (composant serveur, pas de logique) : deux
-  liens "Créer une partie" / "Rejoindre une partie" + liens vers `/rules` et
-  `/about`.
-- `src/app/host/page.tsx` — écran hôte (anciennement à la racine `/`) : code de
-  partie, joueurs, choix du mode de jeu, construction de playlist (recherche + import
-  + glisser-déposer), lancement de manche, timer, jugement de la réponse, historique
-  (ordre décroissant), écran de fin de partie enrichi (podium, stats).
-- `src/app/play/page.tsx` — écran joueur : rejoindre par code + pseudo, bouton buzz,
-  pseudo/score/classement permanents, nom du premier buzzeur, réponse révélée
-  uniquement une fois la manche réellement terminée, même écran de fin de partie
-  enrichi que côté hôte. Voir aussi la section "Mobile" plus bas (wake lock,
-  vibration, zones sûres, re-synchronisation au réveil du téléphone).
-- `src/app/rules/page.tsx` / `src/app/about/page.tsx` — pages statiques (règles du
-  jeu, contexte du projet + roadmap condensée), composants serveur sans logique.
-- `src/app/spotify-test/page.tsx` — page de validation isolée de la connexion Spotify
-  (utile pour déboguer l'auth sans dépendre d'une partie en cours).
-- `src/app/api/spotify/login/route.ts` — démarre le flow OAuth PKCE, pose les cookies
-  verifier/state.
-- `src/app/api/spotify/callback/route.ts` — échange le code contre les tokens, pose
-  les cookies de session.
-- `src/app/api/spotify/token/route.ts` — renvoie un access token valide au client
-  (refresh automatique si besoin).
-- `src/app/api/spotify/logout/route.ts` — supprime les cookies de session Spotify.
-- `src/lib/rooms.ts` — toutes les fonctions Supabase : créer/rejoindre une room,
-  s'abonner aux joueurs/manches/historique/tentatives/statut de la room en temps
-  réel, lancer une manche, buzzer, révéler, juger une tentative, clôturer par
-  timeout, marquer une partie terminée/reprise (`finishRoom`/`resumeRoom`, pour
-  déclencher l'écran de fin de partie côté joueurs).
-- `src/lib/ranking.ts` — classement partagé (rangs avec égalités) entre écran hôte et
-  écran joueur, pour qu'ils affichent toujours exactement le même classement.
-- `src/lib/spotifyAuth.ts` — fonctions pures PKCE (génération verifier/challenge/state,
-  échange de code, refresh) ; pas de cookies ici, c'est chaque route qui les manipule
-  directement.
-- `src/lib/useSpotifyPlayer.ts` — hook : connexion au Web Playback SDK, expose device
-  id + access token + état de connexion.
-- `src/lib/useForceLoopbackHost.ts` — garde-fou localhost → 127.0.0.1 (voir plus haut).
-- `src/lib/supabase.ts` — client Supabase (clé anon, lit les variables d'env).
+| # | Contenu |
+|---|---|
+| 0001 | Schéma de base, RLS en refus par défaut |
+| 0002 | Trigger de résolution atomique du buzz |
+| 0003 / 0004 | Policies prototype, puis durcissement (GRANT ciblés, fonctions SECURITY DEFINER) |
+| 0005-0007 | Validation, révélation, timeout de manche |
+| 0008 / 0009 | Réponses partielles, `round_attempts`, timer figé au buzz |
+| 0010 | `round_attempts` dans la publication Realtime |
+| 0011 | Temps de réaction (buzzeur le plus rapide) |
+| 0012 / 0013 | Verrou de quota Spotify partagé, avec délai croissant |
+| 0014 | Redémarrer une partie (scores remis à zéro, mêmes joueurs) |
+| 0015 / 0016 | L'hôte peut jouer ; mode dénormalisé sur les manches |
+| 0017-0019 | Bonus/malus, réglages par partie, seuils ajustés |
+| 0020 | Comptes joueurs |
+| 0021 | Badges et XP (`award_game_rewards`) |
+| 0022 | Cosmétiques (skin équipé) |
+| 0023 | Classement des joueurs rencontrés |
+| 0024 | Pseudo personnalisé conservé |
+| 0025 / 0027 | Mode équipes, couleurs d'équipe |
+| 0026 | Demandes de reprise de place |
+| 0028 | Retrait du joueur de l'hôte, pseudo unique par room |
+| 0029 | Connexion par e-mail (`email`, `auth_user_id`) |
+| 0030 | Avatars (comptes et joueurs) |
+| 0031 | Classement avec avatars |
 
-## Sécurité / RLS — limites assumées
+### `apps/web-host/src` en bref
 
-**Il n'y a pas d'authentification réelle** (Supabase Auth n'est pas branché). Les
-joueurs sont identifiés par un `device_id` généré côté client, non vérifié. C'est un
-choix assumé pour cette phase "prototype entre amis" (voir les commentaires en tête de
-`0003_dev_policies.sql`), pas un oubli — mais il faut en avoir conscience avant
-d'envisager d'ouvrir l'app à des inconnus :
+- **Pages** :
+  - `app/page.tsx` (accueil) ;
+  - `host/` (écran hôte) ;
+  - `play/` (buzzer) ;
+  - `connexion/` (e-mail et code) ;
+  - `profil/` (espace joueur) ;
+  - `rules/`, `about/`, `confidentialite/` ;
+  - `spotify-test/` (débogage de la connexion Spotify).
+- **`app/_components/`** :
+  - `AvatarPicker`, `SkinSwatch`, `ThemePicker` ;
+  - `ConfirmDialog`, `ScoreAnimations` ;
+  - `TeamSetupPanel`, `Teams` ;
+  - `DeezerPlaylistPicker`, `JoinQrCode` ;
+  - `HomeActions`, `PlayerAccountCorner`, `RejoinRequestsBanner` ;
+  - `CookieConsentBanner`.
+- **`app/api/`** :
+  - `deezer/*` (proxy) ;
+  - `spotify/*` (OAuth de l'hôte, token, logout) ;
+  - `player-auth/*` (e-mail, confirm, verify-code, me, logout) ;
+  - `player-account/*` (pseudo, avatar, skin, liaison du joueur de l'hôte,
+    suppression) ;
+  - `host-features` (Spotify autorisé ou non).
+- **`lib/`** :
+  - `rooms.ts` : toutes les opérations de partie et abonnements Realtime ;
+  - `hostSession.ts` : partie en cours de l'onglet ;
+  - `ranking.ts`, `teams.ts`, `buzzLockout.ts` ;
+  - `badges.ts`, `cosmetics.tsx`, `avatars.tsx`, `avatarExtras.ts` ;
+  - hooks `usePlayer*` (compte, badges, cosmétiques, stats, classement, badges
+    fraîchement débloqués) ;
+  - `useSpotifyPlayer.ts`, `usePreviewPlayer.ts` ;
+  - `spotifyAuth.ts`, `playerAuth.ts`, `playerEmailAuth.ts`,
+    `playerEmailAccount.ts` ;
+  - `supabase.ts` (clé anon) et `supabaseAdmin.ts` (`service_role`, serveur
+    uniquement) ;
+  - `theme.ts`, `analyticsConsent.ts`.
 
-- N'importe qui connaissant le code d'une partie peut la rejoindre.
-- Un client techniquement curieux pourrait appeler les routes Supabase directement
-  (avec la clé anon, publique par nature) plutôt que de passer par l'interface.
+## Sécurité / RLS
 
-Ceci dit, `0004_rls_hardening.sql` réduit déjà pas mal la surface : plus aucune policy
-`UPDATE` ouverte sur `players` ou `rounds` (un client ne peut plus modifier le score de
-quelqu'un d'autre ou trafiquer le statut d'une manche directement) ; les colonnes
-insérables sont restreintes via des `GRANT` ciblés (impossible de s'auto-déclarer hôte,
-de truquer un score à la création, ou de falsifier l'horodatage d'un buzz) ; les seules
-transitions d'état encore possibles passent par des fonctions Postgres
-`SECURITY DEFINER` (`resolve_buzz_winner`, `reveal_round`, `resolve_round_attempt`,
-`timeout_round`) qui ne font qu'une chose précise chacune. `round_attempts` a une
-policy `select` permissive (lecture libre) puisque le client la lit directement pour
-l'historique, sans passer par une RPC — mais aucune policy `insert`/`update` ouverte,
-seule la fonction `resolve_round_attempt` peut y écrire. À faire avant une vraie
-ouverture au public : brancher Supabase Auth (même anonyme) et réécrire les policies
-pour restreindre "appartenir à sa propre room / son propre player".
+- **Toutes les écritures sensibles** passent par des fonctions Postgres
+  `SECURITY DEFINER`, chacune limitée à une seule opération. Aucune policy `UPDATE`
+  n'est ouverte sur `players` ou `rounds`, et les colonnes insérables sont
+  restreintes par des `GRANT`.
+- **Les données de compte** (e-mail, XP, badges) ne sont écrites que par les routes
+  serveur, avec la clé `service_role`. L'e-mail n'est jamais lisible publiquement.
+- **Limite assumée** : en partie, les joueurs invités sont identifiés par un
+  `device_id` côté client, non vérifié. N'importe qui connaissant le code peut
+  rejoindre. Avant une ouverture large au public, il faudra restreindre les policies
+  au joueur et à la room de l'utilisateur authentifié.
+- **Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY`** avec un préfixe `NEXT_PUBLIC_`.
+  Ne jamais committer `.env.local`.
 
 ## Démarrer en local
 
-Prérequis : Node.js 18+, un compte [Supabase](https://supabase.com) (gratuit), un
-compte [Spotify Developer](https://developer.spotify.com/dashboard) (gratuit, **et un
-compte Spotify Premium** pour tester la lecture), un navigateur Chrome de préférence
-(testé et fiable ; Safari a des comportements différents avec les cookies sur IP
-littérale en local, voir "Pourquoi 127.0.0.1 et pas localhost" plus haut).
+Prérequis : Node.js 18+, un projet Supabase gratuit, et Chrome de préférence.
+L'app Spotify Developer et un compte Premium ne sont nécessaires que pour tester la
+source Spotify.
 
-Étapes :
-
-1. Installer les dépendances de tout le monorepo : `npm install`
-2. Lancer l'écran hôte web (http://localhost:3000, redirige vers 127.0.0.1) :
-   `npm run web-host`
-3. (Optionnel, non maintenu activement) l'app mobile Expo : `npm run mobile`
+```bash
+npm install
+cp apps/web-host/.env.example apps/web-host/.env.local   # puis remplir
+npm run web-host                                          # http://localhost:3000
+```
 
 ### Variables d'environnement
 
-Un modèle commenté est fourni : copie-le puis remplis les valeurs.
-
-```bash
-cp apps/web-host/.env.example apps/web-host/.env.local
-```
-
-`apps/web-host/.env.local` n'est jamais commité (voir `.gitignore`). Les 7 variables
-sont nécessaires :
-
-| Variable | Où la trouver | Secrète ? |
+| Variable | Rôle / où la trouver | Secrète ? |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → Data API → Project URL (sans `/` final) | Non |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Project Settings → API Keys → `anon` | Non |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Project Settings → API Keys → `service_role` | **Oui** |
-| `SPOTIFY_CLIENT_ID` | Spotify Developer Dashboard → ton app → Settings | Non |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Project Settings → Data API (sans `/` final) | Non |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → API Keys → `anon` | Non |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → API Keys → `service_role` (serveur uniquement) | **Oui** |
+| `PLAYER_SESSION_SECRET` | Signe le cookie `player_session` : `openssl rand -hex 32` | **Oui** |
+| `SPOTIFY_HOST_EMAILS` | E-mails autorisés à utiliser Spotify, séparés par des virgules | Non |
+| `SPOTIFY_CLIENT_ID` | Spotify Developer Dashboard (pas de Client Secret, flow PKCE) | Non |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` | Non |
-| `SPOTIFY_PLAYER_REDIRECT_URI` | `http://127.0.0.1:3000/api/player-auth/callback` | Non |
-| `PLAYER_SESSION_SECRET` | À générer : `openssl rand -hex 32` | **Oui** |
+| `SPOTIFY_PLAYER_REDIRECT_URI` | Pour l'ancienne connexion joueur via Spotify, plus utilisée dans l'UI | Non |
 
-Pas de `SPOTIFY_CLIENT_SECRET` nécessaire (flow PKCE).
-
-Pièges rencontrés :
-
-- **Ne jamais préfixer une clé secrète par `NEXT_PUBLIC_`** : ce préfixe l'envoie dans
-  le JavaScript du navigateur. `SUPABASE_SERVICE_ROLE_KEY` contourne toutes les règles
-  RLS et doit rester côté serveur.
-- Les variables ne sont lues qu'au démarrage : relancer `npm run web-host` après
-  chaque modification de `.env.local`.
-- Sur Vercel, les variables marquées *Sensitive* ne sont plus lisibles ni copiables.
-  Pour une nouvelle machine, récupérer la clé `service_role` dans Supabase et générer
-  un nouveau `PLAYER_SESSION_SECRET` local (il peut différer de celui de prod).
-- Erreur `TypeError: Load failed` / `fetch failed` au chargement : URL Supabase
-  incorrecte, ou projet Supabase mis en pause après inactivité (offre gratuite) →
-  le restaurer depuis le dashboard Supabase.
-- Les fichiers commençant par un point sont masqués dans le Finder : `Cmd + Maj + .`
-  pour les afficher.
+Pièges :
+- Les variables ne sont lues qu'au démarrage : relancer après chaque modification.
+- Une erreur `fetch failed` ou `Load failed` signifie une URL Supabase fausse, ou un
+  projet gratuit mis en pause (à restaurer depuis le dashboard).
+- Sur Vercel, les variables *Sensitive* ne sont plus lisibles. Pour une nouvelle
+  machine, récupérer la `service_role` dans Supabase et générer un secret de session
+  local.
+- Dans le Finder, `Cmd + Maj + .` affiche les fichiers cachés.
 
 ### Configuration Supabase
 
-1. Crée un projet sur [supabase.com](https://supabase.com).
-2. Dans SQL Editor, exécute dans l'ordre les fichiers de `supabase/migrations/`
-   (0001 → 0024). Chaque fichier est commenté pour expliquer ce qu'il fait.
-3. Dans Database → Publications → `supabase_realtime`, vérifie que les tables
-   `players`, `rounds`, `buzzes`, `rooms` et `round_attempts` sont bien activées
-   (la migration `0010` le fait déjà pour `round_attempts` par SQL, mais un nouveau
-   projet Supabase créé de zéro peut nécessiter de vérifier les autres tables à la
-   main — piège rencontré et documenté dans l'historique du repo : sans ça,
-   l'interface hôte ne se met pas à jour en temps réel).
+1. **Migrations** : exécuter les fichiers de `supabase/migrations/` dans l'ordre
+   (0001 → 0031), dans le SQL Editor. Une migration committée n'est **pas**
+   appliquée automatiquement : il faut aussi la coller dans le SQL Editor. Attention,
+   la base locale et la prod sont la même base.
+2. **Realtime** : vérifier que `players`, `rounds`, `buzzes`, `rooms`,
+   `round_attempts`, `teams` et `rejoin_requests` sont dans la publication
+   `supabase_realtime` (Database → Publications).
+3. **Auth**, pour la connexion par e-mail :
+   - **Providers** : Email activé, OTP à **6 chiffres**.
+   - **URL Configuration** : Site URL = l'URL de prod. Ajouter aux Redirect URLs
+     `https://blindtest-app-web-host.vercel.app/api/player-auth/confirm**` et
+     `http://127.0.0.1:3000/api/player-auth/confirm**`.
+   - **Email Templates** (Magic Link) : afficher le lien et le code `{{ .Token }}`.
+   - **SMTP** : Brevo, configuré dans Auth → SMTP Settings. Le SMTP intégré de
+     Supabase est trop limité en volume. Prévoir un domaine propre (par exemple avec
+     Resend) avant le lancement, pour sortir des spams.
 
-### Configuration Spotify Developer
+### Configuration Spotify Developer (optionnelle)
 
-1. Crée une app sur le [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Dans Settings → Redirect URIs, ajoute `http://127.0.0.1:3000/api/spotify/callback`
-   et `http://127.0.0.1:3000/api/player-auth/callback` (et les équivalents de prod si
-   tu déploies, voir plus bas).
-3. Copie le Client ID dans `.env.local` (pas besoin du Client Secret).
+Ajouter aux Redirect URIs `http://127.0.0.1:3000/api/spotify/callback` et son
+équivalent de prod. Copier le Client ID dans `.env.local`.
 
 ## Déploiement (Vercel)
 
-L'app est déployée sur Vercel (offre Hobby, gratuite pour un usage personnel/non
-commercial) : **https://blindtest-app-web-host.vercel.app**
+1. Importer le repo avec **Root Directory = `apps/web-host`**.
+2. Renseigner les variables ci-dessus, avec les URI de redirection en
+   `https://blindtest-app-web-host.vercel.app/...`. Marquer comme *Sensitive*
+   `SUPABASE_SERVICE_ROLE_KEY` et `PLAYER_SESSION_SECRET`.
+3. **Un push sur `main` déploie la prod.**
 
-Pour redéployer ou recréer le déploiement :
-
-1. Sur [vercel.com](https://vercel.com), importe le repo GitHub, avec **Root
-   Directory = `apps/web-host`** (monorepo — Vercel doit savoir où trouver l'app
-   Next.js).
-2. Renseigne les 7 variables d'environnement (mêmes noms qu'en local, sauf les deux
-   URI de redirection qui doivent pointer vers le domaine Vercel réel :
-   `https://blindtest-app-web-host.vercel.app/api/spotify/callback` et
-   `https://blindtest-app-web-host.vercel.app/api/player-auth/callback`). Marquer
-   `SUPABASE_SERVICE_ROLE_KEY` et `PLAYER_SESSION_SECRET` comme *Sensitive*.
-3. Ajoute ces mêmes URL dans les Redirect URIs du Spotify Developer Dashboard (en plus
-   de celles en `127.0.0.1`, garder les quatre).
-4. Deploy.
-
-Les cookies de session Spotify sont automatiquement en `secure: true` en production
-(HTTPS) et `secure: false` en local (HTTP) — géré via
-`process.env.NODE_ENV === "production"` dans les routes `api/spotify/*`.
+Les cookies sont en `secure: true` en production, détecté via `NODE_ENV`.
 
 ## Qualité / CI
 
-- **ESLint** (config flat, ESLint 9) : `eslint-config-next` pour web-host,
-  `eslint-config-expo` pour mobile.
-- **TypeScript strict** sur les deux apps (`npm run typecheck --workspace=apps/...`).
-- **GitHub Actions** (`.github/workflows/ci.yml`) : lint + typecheck des deux apps à
-  chaque push/PR sur `develop` et `main`.
-
-Commandes utiles :
-
-- `npm run lint --workspace=apps/web-host`
-- `npm run typecheck --workspace=apps/web-host`
-- `npm run lint --workspace=apps/mobile`
-- `npm run typecheck --workspace=apps/mobile`
-
-Avant tout commit sur ce projet, valider dans l'ordre : lint, typecheck, puis un
-build de production (`rm -rf .next && npx next build` dans `apps/web-host`) — le
-build échoue dans un environnement sans `.env.local` (message `supabaseUrl is
-required` au moment du prerendering de `/`), c'est attendu et sans rapport avec le
-code : sur la machine de dev (avec de vraies variables d'environnement), il passe.
+- ESLint 9 (config flat, `eslint-config-next`) et TypeScript strict.
+- GitHub Actions : lint et typecheck de `web-host` et `mobile` sur `develop` et `main`.
+- Commandes :
+  - `npm run lint --workspace=apps/web-host`
+  - `npm run typecheck --workspace=apps/web-host`
+- Avant un merge sur `main` : lint, typecheck, et si possible un build
+  (`rm -rf .next && npx next build` dans `apps/web-host`). Le build échoue sans
+  `.env.local` (`supabaseUrl is required`) : c'est attendu.
+- Règles de lint à connaître :
+  - `react-hooks/set-state-in-effect` ;
+  - pas de lecture de ref pendant le rendu ;
+  - apostrophes typographiques (’) dans le texte JSX.
 
 ## Conventions Git
 
-- `main` : branche stable, mise à jour après validation d'un palier (merge depuis
-  `develop`).
-- `develop` : branche de travail au quotidien.
-- `feature/<nom>` : optionnel, pour une fonctionnalité isolée avant de merger dans
-  `develop`.
-- Commits au format [Conventional Commits](https://www.conventionalcommits.org/) :
-  `feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`.
-- Repo hébergé sur un compte GitHub **personnel**, distinct du compte professionnel
-  utilisé sur cette même machine (config git locale au repo, pas globale — voir
-  `git config --local -l` si besoin de vérifier).
-- Toute migration SQL doit être à la fois committée dans `supabase/migrations/` **et**
-  collée manuellement dans Supabase → SQL Editor : committer le fichier seul ne
-  l'applique pas à la base.
+- `develop` est la branche de travail. On merge dans `main` puis on pousse, ce qui
+  déploie.
+- Commits au format [Conventional Commits](https://www.conventionalcommits.org/) de
+  préférence (`feat:`, `fix:`…).
+- Repo sur un compte GitHub **personnel** : la config git est locale au repo, pas
+  globale.
+- Une migration SQL doit être committée **et** exécutée à la main dans Supabase.
 
-## Roadmap (mis à jour)
+## Roadmap
 
-Complété par rapport au plan initial (`docs/architecture/blueprint.docx`) :
+✅ **Fait**
+- Buzzer temps réel atomique.
+- Deux modes de jeu, réponses partielles, timer figé.
+- Mode équipes, bonus/malus réglables.
+- Deezer par défaut, Spotify réservé à certains comptes.
+- Reprise de partie et de place.
+- Comptes par e-mail.
+- Avatars et effets, badges et XP, 53 skins de buzzer.
+- Profil v2 (stats, historique, classement).
+- Refonte « Arcade autocollants » : animations de score, cérémonie de fin.
+- Déploiement Vercel et CI.
 
-- ✅ Mécanique buzzer temps réel (résolution atomique, testée sous charge normale).
-- ✅ Intégration Spotify complète (recherche, import de playlist, lecture, pause
-  et reprise automatiques).
-- ✅ Boucle de jeu complète : deux modes de jeu, réponses partielles avec reprise de
-  manche, système de score 2/1/-1, timer 30s qui se fige pendant le jugement,
-  historique détaillé, classement avec égalités.
-- ✅ Persistance de la partie en cours (survit à un refresh / retour arrière).
-- ✅ Déploiement public (Vercel), jouable à distance entre plusieurs réseaux.
-- ✅ CI (lint + typecheck), policies RLS durcies dans la limite du raisonnable sans
-  auth.
-- ✅ Site navigable (accueil, `/host`, `/play`, `/rules`, `/about`) plutôt que deux
-  écrans isolés.
-- ✅ Écran de fin de partie enrichi (podium, buzzeur le plus rapide, manche la plus
-  disputée), identique côté hôte et côté joueurs.
-- ✅ Robustesse mobile web sur `/play` (zones sûres/encoche, écran qui reste allumé,
-  vibration au buzz sur Android, re-synchronisation au réveil du téléphone) —
-  confirmée fiable par des tests réels, hôte et joueurs, lecture Spotify comprise.
-- ✅ Génération de playlist par genre + époque + nombre de morceaux, à partir de
-  listes d'artistes curées (contournement du retrait de `popularity` et des
-  endpoints de recommandation par Spotify, février 2026).
-
-Pas encore fait, par ordre de valeur perçue :
-
-- Historique des parties passées (scores finaux, date) — pour l'instant tout est
-  perdu à la fermeture de l'onglet une fois une partie terminée.
-- Mode équipe, thèmes/playlists pré-construites.
-- Persister la file d'attente côté serveur pour la réutiliser d'une partie à l'autre.
-- Reprendre l'app mobile native (si le confort d'une vraie app installable est
-  souhaité un jour — pas indispensable, le buzzer web fonctionne bien, y compris sur
-  téléphone).
-- DA / polish visuel à continuer d'affiner (la base "arcade néon" est posée, mais
-  certains écrans mériteraient encore du travail).
-- Authentification réelle + policies RLS restreintes par utilisateur, si l'app devait
-  s'ouvrir au-delà d'un cercle d'amis de confiance.
+🔜 **Prochaines étapes**
+- Redéfinir les règles de déblocage des skins (`lib/cosmetics.tsx`).
+- Fonctionnalité **amis**, avec un classement entre amis.
+- Domaine propre et e-mails transactionnels (Resend) avant le lancement.
+- Volet légal : Deezer, CGU, RGPD (une page `/confidentialite` existe déjà).
+- Style de jeu dans les stats (il faudrait stocker plus de données).
+- Persister les playlists côté serveur pour les réutiliser d'une partie à l'autre.
+- App mobile native, seulement si le besoin d'une app installable se confirme.
