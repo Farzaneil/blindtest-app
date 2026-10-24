@@ -18,7 +18,7 @@ import { HomeActions } from "./_components/HomeActions";
 export default function HomePage() {
   return (
     <main className="relative flex flex-col items-center justify-center min-h-screen gap-8 px-4 pt-24 pb-16 sm:py-16 text-center bg-page">
-      <PlayerAccountCorner />
+      <PlayerAccountCorner scroll />
 
       <div className="flex flex-col items-center gap-5">
         <div className="relative flex flex-col items-center">

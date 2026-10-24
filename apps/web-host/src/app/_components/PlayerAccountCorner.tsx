@@ -44,8 +44,10 @@ import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
  * hôte, où une position fixe ou superposée chevauchait l'encart du code de
  * partie sur téléphone.
  */
-export function PlayerAccountCorner({ inline = false }: { inline?: boolean } = {}) {
-  const pos = inline ? "relative self-end" : "fixed top-4 right-4";
+export function PlayerAccountCorner({ inline = false, scroll = false }: { inline?: boolean; scroll?: boolean } = {}) {
+  // `scroll` : en haut à droite de la page (parent en position relative),
+  // défile avec elle au lieu de flotter par-dessus le contenu (accueil).
+  const pos = inline ? "relative self-end" : scroll ? "absolute top-4 right-4" : "fixed top-4 right-4";
   useForceLoopbackHost();
   const pathname = usePathname();
   const { account, loading, refresh } = usePlayerAccount();
