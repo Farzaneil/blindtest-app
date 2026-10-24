@@ -1935,6 +1935,986 @@ function HostScreenInner() {
     );
   }
 
+  // Hôte qui joue aussi : retour au buzzer depuis la vue admin, placé dans
+  // l'encart de la manche (jugement / manche suivante), là où l'hôte a les
+  // yeux pendant la partie.
+  const backToBuzzerButton = hostPlayerId ? (
+    <button
+      onClick={() => setHostView("buzzer")}
+      className="bg-inkSurface text-fg transition-transform hover:-translate-y-0.5 px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
+    >
+      <Gamepad2 className="w-4 h-4" /> Revenir à mon buzzer
+    </button>
+  ) : null;
+
+  // Partie lancée : l'encart de la manche (jugement, manche suivante) passe
+  // en haut de l'écran, la carte du code de partie (+ QR) en bas.
+  const codeCard = (
+    <div className="text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-10 py-6 shadow-sticker">
+      <p className="text-sm uppercase tracking-[0.3em] text-inkMuted mb-1">
+        Rejoignez la partie avec le code
+      </p>
+      <p className="text-4xl sm:text-6xl font-bold tracking-widest text-fg font-display">{room.code}</p>
+      {showJoinQr && (
+        <div className="mt-4">
+          <JoinQrCode code={room.code} />
+        </div>
+      )}
+      <div className="flex justify-center gap-4 mt-3">
+        <button
+          onClick={() => setShowJoinQr((s) => !s)}
+          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+        >
+          <QrCode className="w-3.5 h-3.5" /> {showJoinQr ? "Masquer le QR code" : "QR code"}
+        </button>
+        <Link
+          href="/"
+          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Accueil
+        </Link>
+        <button
+          onClick={handleStartNewGame}
+          className="text-xs text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
+        >
+          <RefreshCw className="w-3.5 h-3.5" /> Nouvelle partie
+        </button>
+      </div>
+    </div>
+  );
+
+  const roundPanel = (
+    <div className="w-full max-w-6xl text-center">
+      {!canStartRound && round?.status === "playing" && (
+        <div className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow shadow-sticker">
+          {round.is_joker && (
+            <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full mb-3">
+              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+            </span>
+          )}
+          <p className="text-2xl font-bold flex items-center justify-center gap-2">
+            <Music2 className="w-6 h-6 text-fg" /> Manche en cours — en attente d’un buzz…
+          </p>
+          {!blindMode && (
+            <p className="text-lg text-inkMuted mt-1">
+              {round.title} — {round.artist}
+            </p>
+          )}
+          {(round.title_found || round.artist_found) && (
+            <p className="text-lg text-inkMuted mt-2">
+              {round.title_found ? `Titre trouvé : ${round.title}` : "Titre encore à trouver"}
+              {" · "}
+              {round.artist_found ? `Artiste trouvé : ${round.artist}` : "Artiste encore à trouver"}
+            </p>
+          )}
+          {timeLeft !== null && (
+            <p className="text-4xl sm:text-5xl font-bold mt-4 text-fg tabular-nums font-display">{timeLeft}s</p>
+          )}
+          {backToBuzzerButton}
+        </div>
+      )}
+      {!canStartRound && round?.status === "buzzed" && (
+        <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+          {round.is_joker && (
+            <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+            </span>
+          )}
+          {winner && (
+            <WinnerStamp key={winner.id} stampKey={`${round.id}:${winner.id}`} player={winner} />
+          )}
+          <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
+            <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+          </p>
+          {teamOfPlayer(winner?.id) && (
+            <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
+              <TeamDot color={teamColor(teamOfPlayer(winner?.id))} /> {teamOfPlayer(winner?.id)?.name}
+            </p>
+          )}
+          {!blindMode && (
+            <p className="text-lg text-inkMuted">
+              {round.title} — {round.artist}
+            </p>
+          )}
+          {(round.title_found || round.artist_found) && (
+            <p className="text-sm text-inkMuted">
+              Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+                .filter(Boolean)
+                .join(" et ")}
+            </p>
+          )}
+          {blindMode ? (
+            <>
+              <p className="text-sm text-inkMuted">
+                Laisse-le/la donner sa réponse à voix haute, puis révèle le titre.
+              </p>
+              <button
+                onClick={handleReveal}
+                disabled={revealing}
+                className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
+              >
+                <Eye className="w-5 h-5" /> {revealing ? "..." : "Révéler la réponse"}
+              </button>
+            </>
+          ) : (
+            <p className="text-sm text-inkMuted">
+              Laisse-le/la donner sa réponse à voix haute…
+            </p>
+          )}
+          {backToBuzzerButton}
+        </div>
+      )}
+      {!canStartRound && round?.status === "revealed" && (
+        <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+          {round.is_joker && (
+            <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
+              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+            </span>
+          )}
+          {winner && (
+            <WinnerStamp key={winner.id} stampKey={`${round.id}:${winner.id}`} player={winner} />
+          )}
+          <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
+            <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
+          </p>
+          {teamOfPlayer(winner?.id) && (
+            <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
+              <TeamDot color={teamColor(teamOfPlayer(winner?.id))} /> {teamOfPlayer(winner?.id)?.name}
+            </p>
+          )}
+          <p className="text-lg text-inkMuted">
+            {round.title} — {round.artist}
+          </p>
+          {round.title_found && !round.artist_found ? (
+            <div className="flex gap-4 w-full max-w-md">
+              <button
+                onClick={() => handleJudge(false, true)}
+                className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-5 h-5" /> Artiste trouvé
+              </button>
+              <button
+                onClick={() => handleJudge(false, false)}
+                className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-5 h-5" /> Toujours pas
+              </button>
+            </div>
+          ) : !round.title_found && round.artist_found ? (
+            <div className="flex gap-4 w-full max-w-md">
+              <button
+                onClick={() => handleJudge(true, false)}
+                className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-5 h-5" /> Titre trouvé
+              </button>
+              <button
+                onClick={() => handleJudge(false, false)}
+                className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-5 h-5" /> Toujours pas
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 w-full max-w-md">
+              <button
+                onClick={() => handleJudge(true, false)}
+                className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <Music className="w-4 h-4" /> Titre seul (+1)
+              </button>
+              <button
+                onClick={() => handleJudge(false, true)}
+                className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <Mic className="w-4 h-4" /> Artiste seul (+1)
+              </button>
+              <button
+                onClick={() => handleJudge(true, true)}
+                className="bg-sage text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Les deux (+2)
+              </button>
+              <button
+                onClick={() => handleJudge(false, false)}
+                className="bg-danger text-white px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-4 h-4" /> Aucun (-1)
+              </button>
+            </div>
+          )}
+          {backToBuzzerButton}
+        </div>
+      )}
+
+      {isUnresolvedTimeout && round && (
+        <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+          <p className="text-3xl font-bold text-danger">Personne n’a buzzé à temps</p>
+          <p className="text-lg text-inkMuted">
+            La réponse était :{" "}
+            <span className="font-bold text-fg">
+              {round.title} — {round.artist}
+            </span>
+          </p>
+          <button
+            onClick={() => setAcknowledgedTimeoutRoundId(round.id)}
+            className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold border-2 border-fg shadow-sticker-sm"
+          >
+            Continuer
+          </button>
+          {backToBuzzerButton}
+        </div>
+      )}
+
+      {canStartRound && !modeChosen && !isUnresolvedTimeout && (
+        <div className="flex flex-col items-center gap-6">
+          <p className="text-2xl font-bold">Comment veux-tu jouer cette partie ?</p>
+
+          <div className="flex flex-col md:flex-row gap-4 w-full">
+            <button
+              onClick={handleChooseGamemaster}
+              className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
+            >
+              <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
+                <Mic2 className="w-5 h-5 text-fg" /> Maître du jeu
+              </p>
+              <p className="text-sm text-inkMuted">
+                Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
+                les titres à l’avance.
+              </p>
+            </button>
+            <button
+              onClick={() => setHostMode("player")}
+              className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
+            >
+              <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
+                <Headphones className="w-5 h-5 text-fg" /> Tout le monde participe
+              </p>
+              <p className="text-sm text-inkMuted">
+                Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
+                révélés seulement pour valider une réponse.
+              </p>
+            </button>
+          </div>
+
+          {/* Score cible et nombre de morceaux max : réglés après le choix
+              du mode, dans "Réglages de partie" du panneau playlist (le
+              bloc qui les doublait ici a été retiré). */}
+        </div>
+      )}
+
+      {/* "Tu joues aussi sur cet écran ?" : uniquement en mode "Tout le
+          monde participe" (blindMode), et uniquement avant que la
+          question soit tranchée (hostJoinResolved) — décision prise une
+          seule fois, avant de lancer la première manche (sinon le
+          premier morceau démarrerait avant que l'hôte ait eu la chance
+          de s'inscrire comme joueur). Tous les blocs suivants (connexion
+          Spotify, construction de playlist…) restent masqués tant que ce
+          n'est pas résolu. */}
+      {canStartRound && modeChosen && blindMode && !hostJoinResolved && !isUnresolvedTimeout && (
+        <div className="relative flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-6 shadow-sticker">
+          <p className="text-lg font-bold text-fg text-center flex items-center gap-2">
+            <Gamepad2 className="w-5 h-5 text-fg" /> Tu joues aussi sur cet écran ?
+          </p>
+          <p className="text-sm text-inkMuted text-center">
+            Transforme cet écran en buzzer pour toi entre les manches, sans besoin d’un autre
+            appareil. À décider maintenant : ça ne pourra plus être changé une fois la partie
+            commencée.
+          </p>
+          {hostJoinError && <p className="text-danger text-sm font-bold text-center">{hostJoinError}</p>}
+          {hostPlayerAccount && !joinHostFormOpen ? (
+            // Hôte connecté (Compte joueur déjà utilisé pour les
+            // cosmétiques) : pseudo déjà connu, inutile de le redemander
+            // — un seul clic inscrit directement l'hôte avec son pseudo
+            // ET son account_id (voir handleJoinAsHost).
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => handleJoinAsHost(hostPlayerAccount.pseudo)}
+                disabled={joiningAsHost}
+                className="flex-1 bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm"
+              >
+                {joiningAsHost ? "..." : `Oui, je joue (en tant que ${hostPlayerAccount.pseudo})`}
+              </button>
+              <button
+                onClick={() => setHostJoinSkipped(true)}
+                className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted border-fg shadow-sticker-sm"
+              >
+                Non, je gère juste le jeu
+              </button>
+            </div>
+          ) : !joinHostFormOpen ? (
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setJoinHostFormOpen(true)}
+                className="flex-1 bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm"
+              >
+                Oui, je joue
+              </button>
+              <button
+                onClick={() => setHostJoinSkipped(true)}
+                className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted border-fg shadow-sticker-sm"
+              >
+                Non, je gère juste le jeu
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-2 w-full">
+              <input
+                value={hostNameDraft}
+                onChange={(e) => setHostNameDraft(e.target.value)}
+                className="min-w-0 flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-fg outline-none transition rounded-xl px-3 py-2 text-fg"
+              />
+              <button
+                onClick={() => handleJoinAsHost(hostNameDraft)}
+                disabled={joiningAsHost || hostNameDraft.trim().length === 0}
+                className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap border-2 border-fg shadow-sticker-sm"
+              >
+                <UserPlus className="w-4 h-4" /> {joiningAsHost ? "..." : "Confirmer"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Choix de la source musicale : uniquement pendant la préparation,
+          et seulement pour les comptes autorisés à utiliser Spotify
+          (spotifyAllowed). Tous les autres sont sur Deezer, sans choix. */}
+      {spotifyAllowed && canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && !gameStarted && (
+        <div role="group" aria-label="Source musicale" className="flex flex-wrap items-center justify-center gap-2 bg-inkSurface border-[3px] border-fg rounded-2xl shadow-sticker-sm px-4 py-2.5">
+          <span className="font-extrabold text-sm mr-1">Musique :</span>
+          {([
+            { id: "deezer", label: "Deezer", hint: "extraits 30 s, sans compte" },
+            { id: "spotify", label: "Spotify", hint: "morceaux complets, Premium" },
+          ] as const).map((src) => (
+            <button
+              key={src.id}
+              type="button"
+              aria-pressed={effectiveMusicSource === src.id}
+              onClick={async () => {
+                if (effectiveMusicSource === src.id) return;
+                const others = upcomingQueue.filter((t) => isDeezerTrackId(t.sourceTrackId) !== (src.id === "deezer"));
+                if (
+                  others.length > 0 &&
+                  !(await confirmDialog({
+                    title: `Passer sur ${src.label} ?`,
+                    message: `Les ${others.length} morceaux de l’autre source seront retirés de la file d’attente.`,
+                    confirmLabel: `Passer sur ${src.label}`,
+                  }))
+                ) {
+                  return;
+                }
+                if (others.length > 0) {
+                  setQueue((q) => [...q.slice(0, queueIndex), ...q.slice(queueIndex).filter((t) => isDeezerTrackId(t.sourceTrackId) === (src.id === "deezer"))]);
+                }
+                setMusicSource(src.id);
+                try {
+                  window.localStorage.setItem(MUSIC_SOURCE_STORAGE_KEY, src.id);
+                } catch {
+                  // ignore
+                }
+              }}
+              className={`rounded-xl border-2 border-fg px-3 py-1.5 text-sm font-bold transition ${
+                effectiveMusicSource === src.id ? "bg-sage shadow-sticker-sm" : "bg-inkSurface text-inkMuted hover:text-fg"
+              }`}
+            >
+              {src.label} <span className="font-medium text-xs opacity-80">· {src.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "ready" && (
+        <button
+          onClick={async () => {
+            if (
+              await confirmDialog({
+                title: "Se déconnecter de Spotify ?",
+                message: "Tu pourras ensuite connecter un autre compte Spotify.",
+                confirmLabel: "Déconnecter",
+              })
+            ) {
+              spotifyPlayer.disconnect();
+            }
+          }}
+          className="text-xs text-inkMuted hover:text-danger underline transition self-end -mb-2 inline-flex items-center gap-1"
+        >
+          <LogOut className="w-3.5 h-3.5" /> Déconnecter Spotify (changer de compte)
+        </button>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "checking" && (
+        <p className="text-inkMuted">Vérification de la connexion Spotify…</p>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "disconnected" && (
+        <div className="flex flex-col items-center gap-2">
+          <button
+            onClick={spotifyPlayer.connect}
+            className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold border-2 border-fg shadow-sticker-sm"
+          >
+            Se connecter à Spotify pour préparer une playlist
+          </button>
+          {/* Distincte du "Compte joueur" (voir PlayerAccountCorner, coin
+              supérieur droit) : ici on connecte Spotify pour lancer la
+              musique (Web Playback SDK, nécessite Premium), pas pour
+              identifier l'hôte en tant que joueur — retour utilisateur
+              direct, les deux étaient confondues quand l'hôte joue aussi. */}
+          <p className="text-xs text-inkMuted text-center max-w-xs">
+            Connexion technique pour lancer la musique — différente du &laquo; Compte joueur &raquo; en haut à droite.
+          </p>
+        </div>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "connecting_player" && (
+        <div className="flex flex-col items-center gap-3">
+          <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
+          {/* Bug remonté : cet écran restait parfois bloqué ici
+              indéfiniment (veille de l'ordinateur, coupure réseau
+              passagère...), seul un rechargement complet de la page en
+              sortait. spotifyPlayer.stuckTooLong (voir useSpotifyPlayer.ts)
+              s'arme après 12s sans succès : on propose alors de réessayer
+              sans quitter la page, plutôt que de laisser l'hôte deviner
+              qu'il doit recharger. */}
+          {spotifyPlayer.stuckTooLong && (
+            <div className="flex flex-col items-center gap-2">
+              <p className="text-xs text-inkMuted/70 text-center max-w-xs">
+                Ça prend plus longtemps que prévu.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <button
+                  onClick={spotifyPlayer.reconnect}
+                  className="bg-inkSurface border-2 hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 border-fg shadow-sticker-sm"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Réessayer
+                </button>
+                {/* Après un premier essai raté : le rechargement reste le
+                    recours le plus sûr (la partie est conservée). */}
+                {spotifyPlayer.reconnectAttempts > 0 && (
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="bg-sage text-fg border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Recharger la page (la partie est gardée)
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && gameOver && !buildingPlaylist && (
+        <div className="relative flex flex-col items-center gap-6 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+          <EndCeremony
+            title={
+              <>
+                <Trophy className="w-10 h-10 text-fg" />
+                {/* Pas de nom ici : le gagnant est révélé par le podium
+                    juste après (sinon le titre gâcherait la surprise). */}
+                {targetScoreReached ? (
+                  <p className="text-2xl font-bold text-fg text-center font-display">
+                    Score cible de {targetScore} points atteint !
+                  </p>
+                ) : maxRoundsReached ? (
+                  <p className="text-2xl font-bold text-fg text-center font-display">
+                    Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte
+                  </p>
+                ) : (
+                  <p className="text-2xl font-bold text-fg font-display">Playlist terminée</p>
+                )}
+              </>
+            }
+            podium={
+              teamMode
+                ? podiumFrom(teamStandings, (st) => ({ id: st.team.id, name: st.team.name, score: st.score, color: teamColor(st.team) }))
+                : podiumFrom(rankedPlayers, (p) => ({ id: p.id, name: p.display_name, score: p.score, avatar: avatarForPlayer(p) }))
+            }
+          >
+            {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
+                tableau par équipe avec MVP, distinctions) à la place du
+                podium individuel. */}
+            {teamMode && (
+              <div className="w-full flex flex-col gap-5">
+                <TeamResultBanner standings={teamStandings} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {teamStandings.map((st) => (
+                    <TeamRecapTable key={st.team.id} standing={st} stats={playerStats} />
+                  ))}
+                </div>
+                <AwardCards
+                  awards={teamAwards}
+                  teamOf={(p) => {
+                    const t = teamOfPlayer(p.id);
+                    return t ? { color: teamColor(t) } : null;
+                  }}
+                />
+              </div>
+            )}
+            {!teamMode && (fastestAttempt || mostContestedCount > 1) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
+                {fastestAttempt && (
+                  <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
+                    <p className="text-xs text-inkMuted flex items-center gap-1"><Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide</p>
+                    <p className="text-sm font-bold text-fg">
+                      {fastestPlayer?.display_name ?? "Joueur"} —{" "}
+                      {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
+                    </p>
+                  </div>
+                )}
+                {mostContestedRound && mostContestedCount > 1 && (
+                  <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
+                    <p className="text-xs text-inkMuted flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Manche la plus disputée</p>
+                    <p className="text-sm font-bold text-fg">
+                      {mostContestedRound.title} ({mostContestedCount} tentatives)
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!teamMode && (
+            <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
+              {rankedPlayers.map((p) => {
+                const plate = podiumRowClasses(p.rank);
+                return (
+                  <li
+                    key={p.id}
+                    className={`flex justify-between items-center rounded-xl border-2 border-fg px-4 py-3 ${plate.row}`}
+                  >
+                    <span className={`flex items-center gap-3 ${plate.text}`}>
+                      <span className="font-display font-black w-5 text-center">{p.rank}</span>
+                      <span className="font-medium">{p.display_name}</span>
+                    </span>
+                    <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
+                  </li>
+                );
+              })}
+            </ul>
+            )}
+            <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
+              <button
+                onClick={() => {
+                  resumeRoom(room.id).catch(() => {});
+                  setBuildingPlaylist(true);
+                }}
+                className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
+              >
+                <Play className="w-4 h-4" /> Continuer la partie
+              </button>
+              <button
+                onClick={handleRestartGame}
+                className="flex-none sm:min-w-[220px] bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
+              >
+                <RotateCcw className="w-4 h-4" /> Redémarrer une partie
+              </button>
+            </div>
+            <p className="text-xs text-inkMuted text-center max-w-sm">
+              « Continuer » garde les scores et ajoute d’autres morceaux à la suite. «
+              Redémarrer » garde les mêmes joueurs mais remet les scores et l’historique à zéro.
+            </p>
+          </EndCeremony>
+        </div>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && !gameOver && !buildingPlaylist && (
+        <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+          {launchingRound ? (
+            <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
+          ) : (
+            <>
+              <p className="text-inkMuted">
+                Manche {queueIndex + 1} / {queue.length} à venir :
+              </p>
+              <p className="text-xl font-bold">
+                {blindMode
+                  ? `Morceau ${queueIndex + 1}`
+                  : `${upcomingQueue[0]?.title} — ${upcomingQueue[0]?.artist}`}
+              </p>
+            </>
+          )}
+          <button
+            onClick={handlePlayNextInQueue}
+            disabled={players.length === 0 || launchingRound}
+            className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-4 rounded-xl text-xl font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
+          >
+            <Play className="w-5 h-5" /> Manche suivante
+          </button>
+          {players.length === 0 && (
+            <p className="text-sm text-inkMuted">
+              En attente d’au moins un joueur avant de pouvoir lancer la manche.
+            </p>
+          )}
+          <button
+            onClick={() => setBuildingPlaylist(true)}
+            className="text-sm text-inkMuted hover:text-fg underline transition"
+          >
+            + Ajouter d’autres morceaux à la file
+          </button>
+          {backToBuzzerButton}
+        </div>
+      )}
+
+      {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && buildingPlaylist && (
+        <div className="relative w-full flex flex-col gap-7 text-left bg-inkSurface2 border border-inkBorder rounded-2xl p-7 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-inkMuted flex items-center gap-1.5">
+              Mode :
+              {hostMode === "gamemaster" ? (
+                <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
+                  <Mic2 className="w-3.5 h-3.5 text-fg" /> Maître du jeu
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
+                  <Headphones className="w-3.5 h-3.5 text-fg" /> Tout le monde participe
+                </span>
+              )}
+            </span>
+            {/* Le mode ne se change que pendant la préparation : une fois
+                la première manche jouée, passer de "Tout le monde
+                participe" à "Maître du jeu" (ou l'inverse) en cours de
+                route fausserait la partie (l'hôte joueur verrait les
+                réponses, ou un maître du jeu deviendrait joueur). */}
+            {gameStarted ? (
+              <span className="text-xs text-inkMuted font-bold">Mode verrouillé pendant la partie</span>
+            ) : (
+              <button
+                onClick={() => setHostMode(null)}
+                className="text-sm text-inkMuted hover:text-fg underline transition"
+              >
+                Changer de mode
+              </button>
+            )}
+          </div>
+
+          {/* Score cible et morceaux max fusionnés en une seule ligne
+              compacte (au lieu de 2 blocs empilés avec leur propre texte
+              d'aide) : les 2 réglages restent modifiables à tout moment
+              sans repasser par "Changer de mode" (voir targetScore plus
+              haut), mais prennent beaucoup moins de place verticale. */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
+              Réglages de partie
+            </p>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <label
+                htmlFor="target-score-inline"
+                title="Laisse vide pour jouer jusqu'à la fin de la playlist. Sinon, la partie se termine dès qu'un joueur atteint ce score."
+                className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5 w-full sm:w-auto min-w-0"
+              >
+                <Target className="w-4 h-4 text-inkMuted shrink-0" />
+                <span className="text-inkMuted whitespace-nowrap">Score cible</span>
+                <input
+                  id="target-score-inline"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={targetScore ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setTargetScore(null);
+                      return;
+                    }
+                    const parsed = Number.parseInt(raw, 10);
+                    setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                  }}
+                  placeholder="Illimité"
+                  className="flex-1 min-w-0 sm:flex-none sm:w-24 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                />
+                <span className="text-inkMuted">pts</span>
+              </label>
+              <label
+                htmlFor="max-rounds-inline"
+                title="Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce nombre de morceaux a été joué. Cumulable avec le score cible."
+                className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5 w-full sm:w-auto min-w-0"
+              >
+                <Hash className="w-4 h-4 text-inkMuted shrink-0" />
+                <span className="text-inkMuted whitespace-nowrap">Morceaux max</span>
+                <input
+                  id="max-rounds-inline"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={maxRounds ?? ""}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setMaxRounds(null);
+                      return;
+                    }
+                    const parsed = Number.parseInt(raw, 10);
+                    setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
+                  }}
+                  placeholder="Toute la playlist"
+                  className="flex-1 min-w-0 sm:flex-none sm:w-40 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Réglages bonus/malus (voir migration 0018) : comme le score
+              cible et les morceaux max ci-dessus, modifiables à tout
+              moment en cours de partie — un changement s'applique dès la
+              prochaine manche jugée (voire dès le prochain tirage pour le
+              joker). Grille à 2 colonnes (bonus | malus) plutôt qu'une
+              liste empilée : ça tient sur moins de hauteur pour les 5
+              réglages, le détail de chacun restant accessible au survol
+              (voir le title sur BonusMalusToggleRow). */}
+          {room && (
+            <div className="flex flex-col gap-3 text-sm pt-1 border-t border-inkBorder/60">
+              <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
+                Bonus &amp; malus
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                <div className="flex flex-col gap-2">
+                  <BonusMalusToggleRow
+                    label="Manche joker"
+                    description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
+                    icon={<Dice5 className="w-4 h-4" />}
+                    iconClassName="text-amberStrong"
+                    enabled={room.bonus_joker_enabled}
+                    saving={savingBonusMalusSetting === "bonus_joker_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("bonus_joker_enabled")}
+                  />
+                  <BonusMalusToggleRow
+                    label="Bonus vitesse"
+                    description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 2 secondes."
+                    icon={<Zap className="w-4 h-4" />}
+                    iconClassName="text-fg"
+                    enabled={room.bonus_speed_enabled}
+                    saving={savingBonusMalusSetting === "bonus_speed_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("bonus_speed_enabled")}
+                  />
+                  <BonusMalusToggleRow
+                    label="Bonus remontada"
+                    description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement, avec plus de 5 points d'écart avec l'avant-dernier."
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    iconClassName="text-fg"
+                    enabled={room.bonus_remontada_enabled}
+                    saving={savingBonusMalusSetting === "bonus_remontada_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("bonus_remontada_enabled")}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <BonusMalusToggleRow
+                    label="Malus série"
+                    description="3 bonnes réponses d'affilée par la même personne : son buzzer est retardé de 5s, puis 10s, puis 15s au tour suivant, tant que personne d'autre n'a répondu juste."
+                    icon={<Flame className="w-4 h-4" />}
+                    iconClassName="text-amberStrong"
+                    enabled={room.malus_streak_lockout_enabled}
+                    saving={savingBonusMalusSetting === "malus_streak_lockout_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("malus_streak_lockout_enabled")}
+                  />
+                  <BonusMalusToggleRow
+                    label="Malus buzzer bloqué"
+                    description="3 premiers-buzz ratés d'affilée par la même personne : son buzzer est complètement bloqué à la manche suivante."
+                    icon={<XCircle className="w-4 h-4" />}
+                    iconClassName="text-danger"
+                    enabled={room.malus_streak_block_enabled}
+                    saving={savingBonusMalusSetting === "malus_streak_block_enabled"}
+                    onToggle={() => handleToggleBonusMalusSetting("malus_streak_block_enabled")}
+                  />
+                  {blindMode && (
+                    <p className="text-xs text-inkMuted px-1 pt-1 flex items-start gap-1.5">
+                      <EyeOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                      Les morceaux ajoutés restent masqués — préfère importer une playlist
+                      entière pour être surpris toi aussi.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Coupe-circuit quota Spotify (verrou PARTAGÉ via Supabase, voir
+              spotifyQuotaLock.ts) : un bandeau visible plutôt que de
+              laisser l'hôte cliquer sur les boutons Spotify ci-dessous
+              pour découvrir l'erreur à chaque fois. Seule la catégorie
+              "playlists" est encore posée depuis cette page (voir le
+              commentaire sur quotaLocks plus haut) — la recherche
+              manuelle et la génération par genre ont été retirées, seul
+              l'import de playlist Spotify reste comme méthode d'ajout de
+              morceaux. */}
+          {effectiveMusicSource === "spotify" && playlistsQuotaCooldownSeconds > 0 && (
+            <div className="flex flex-col gap-2 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
+              <p className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>
+                  Spotify a atteint son quota pour les playlists — chargement et import en
+                  pause. Nouvelle tentative possible dans environ{" "}
+                  {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
+                </span>
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-stretch">
+            {/* Import de playlist Spotify : seule méthode d'ajout de
+                morceaux conservée (recherche manuelle et génération par
+                genre retirées — la recherche manuelle et la génération
+                aléatoire multipliaient les appels à l'API Search Spotify,
+                au quota Developer Mode strict, pour un usage jugé
+                secondaire face à l'import direct d'une playlist déjà
+                prête). Note : le badge "Éclectique" (voir lib/badges.ts et
+                migration 0021), qui suivait l'exploration de genres via
+                la génération, ne peut donc plus progresser pour de
+                nouvelles parties — sa définition et la progression déjà
+                acquise par les joueurs restent inchangées. */}
+            {effectiveMusicSource === "deezer" ? (
+              <div className="flex flex-col gap-3 bg-inkSurface3 border-2 border-fg rounded-2xl p-4 min-h-[220px] min-w-0">
+                <DeezerPlaylistPicker
+                  onImport={(tracks) => {
+                    // Mélangé, comme l'import Spotify (l'hôte qui joue ne
+                    // doit pas deviner l'ordre des manches).
+                    setQueue((q) => [...q, ...shuffle(tracks)]);
+                  }}
+                />
+              </div>
+            ) : (
+            <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
+              <p className="text-sm text-inkMuted">
+                Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
+              </p>
+              <button
+                onClick={handleLoadMyPlaylists}
+                disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
+                className="bg-inkSurface border-2 hover:border-fg disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start border-fg shadow-sticker-sm"
+              >
+                {myPlaylists !== null
+                  ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Check className="w-4 h-4" /> Playlists chargées
+                    </span>
+                  )
+                  : loadingPlaylists
+                    ? "Chargement…"
+                    : "Charger mes playlists Spotify"}
+              </button>
+              {myPlaylists !== null && myPlaylists.length === 0 && (
+                <p className="text-sm text-inkMuted">Aucune playlist trouvée sur ton compte Spotify.</p>
+              )}
+              {myPlaylists !== null && myPlaylists.length > 0 && (
+                <div className="max-h-72 overflow-y-auto pr-1">
+                  <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
+                    {myPlaylists.map((playlist) => (
+                      <li key={playlist.id} className="contents">
+                        <span className="bg-inkSurface rounded-xl px-4 py-3 truncate min-w-0">
+                          {playlist.name}{" "}
+                          <span className="text-inkMuted">({playlist.trackCount} morceaux)</span>
+                        </span>
+                        <button
+                          onClick={() => handleImportPlaylist(playlist.id)}
+                          disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
+                          className="bg-inkSurface border-2 hover:border-fg disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap border-fg shadow-sticker-sm"
+                        >
+                          {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            )}
+
+            {/* File d'attente : toujours visible avec le bouton de
+                lancement juste dessous, pour ne jamais avoir à scroller
+                pour démarrer la partie (voir la proposition d'agencement
+                validée). Même style neutre que le panneau de gauche
+                (bg-inkSurface2/border-inkBorder) plutôt qu'un contour
+                sauge sur tout le pourtour : un contour de couleur sur les
+                4 côtés d'un panneau interne se confondait visuellement
+                avec la bordure de la carte englobante et donnait
+                l'impression que la file d'attente "sortait" de la carte
+                au lieu d'en faire partie. Un simple liseré sauge à
+                gauche suffit à la signaler comme le panneau important. */}
+            <div className="relative flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-w-0">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-fg">
+                  File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
+                </h3>
+                {upcomingQueue.length > 0 && (
+                  <button
+                    onClick={handleClearQueue}
+                    className="text-danger text-sm hover:brightness-110 transition"
+                  >
+                    Tout retirer
+                  </button>
+                )}
+              </div>
+              {upcomingQueue.length === 0 ? (
+                <p className="text-sm text-inkMuted">
+                  Aucun morceau pour l’instant — utilise un des onglets à gauche pour en ajouter.
+                </p>
+              ) : (
+                // Mobile : hauteur bornée (max-h-72). Grand écran : la liste
+                // occupe toute la hauteur libre du panneau (calée sur celle
+                // de la colonne Deezer, via le conteneur relatif + ul
+                // absolu qui n'impose pas sa propre hauteur à la grille),
+                // et le bouton Démarrer reste collé en bas.
+                <div className="lg:relative lg:flex-1 lg:min-h-[12rem]">
+                <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1 lg:max-h-none lg:absolute lg:inset-0">
+                  {upcomingQueue.map((track, i) => (
+                    <li
+                      key={`${track.sourceTrackId}-${i}`}
+                      draggable
+                      onDragStart={handleDragStart(i)}
+                      onDragOver={handleDragOver}
+                      onDrop={handleDrop(i)}
+                      className="flex justify-between items-center gap-3 bg-page rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
+                    >
+                      <span className="flex items-center gap-2 min-w-0 flex-1">
+                        <GripVertical className="w-4 h-4 text-inkMuted flex-shrink-0" />
+                        <span className="truncate min-w-0 flex-1">
+                          {blindMode
+                            ? `Morceau ${queueIndex + i + 1}`
+                            : `${track.title} — ${track.artist}`}
+                        </span>
+                      </span>
+                      <button
+                        onClick={() => handleRemoveFromQueue(i)}
+                        className="text-danger text-sm px-3 py-1 hover:brightness-110 transition whitespace-nowrap"
+                      >
+                        Retirer
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                </div>
+              )}
+
+              {players.length === 0 && (
+                <p className="text-sm text-inkMuted">
+                  En attente d’au moins un joueur avant de pouvoir lancer la manche.
+                </p>
+              )}
+              <button
+                onClick={handlePlayNextInQueue}
+                disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
+                className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1 lg:mt-auto border-2 border-fg shadow-sticker-sm"
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  {!launchingRound && <Play className="w-5 h-5" />}
+                  {launchingRound
+                    ? "Lancement…"
+                    : queueIndex === 0
+                      ? `Démarrer la partie · ${upcomingQueue.length} morceau${upcomingQueue.length > 1 ? "x" : ""}`
+                      : `Reprendre la partie · ${upcomingQueue.length} restant${upcomingQueue.length > 1 ? "s" : ""}`}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(spotifyOAuthError || spotifyPlayer.errorMessage) && (
+        <p className="text-danger mt-4 break-words">
+          {spotifyOAuthError ?? spotifyPlayer.errorMessage}
+        </p>
+      )}
+    </div>
+  );
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
       <PlayerAccountCorner inline />
@@ -1946,50 +2926,7 @@ function HostScreenInner() {
       />
       {gameStarted ? (
         <>
-          <div className="text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-10 py-6 shadow-sticker">
-            <p className="text-sm uppercase tracking-[0.3em] text-inkMuted mb-1">
-              Rejoignez la partie avec le code
-            </p>
-            <p className="text-4xl sm:text-6xl font-bold tracking-widest text-fg font-display">{room.code}</p>
-            {/* Hôte qui joue aussi : la vue admin n'avait aucun moyen de
-                revenir au buzzer (seul le lancement d'une manche y
-                rebasculait automatiquement) — un clic sur "Vue admin"
-                pendant une manche en cours privait donc l'hôte de son
-                buzzer jusqu'à la manche suivante. */}
-            {hostPlayerId && (
-              <button
-                onClick={() => setHostView("buzzer")}
-                className="mt-4 bg-sage text-ink hover:bg-sage/90 transition px-5 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
-              >
-                <Gamepad2 className="w-4 h-4" /> Revenir à mon buzzer
-              </button>
-            )}
-            {showJoinQr && (
-              <div className="mt-4">
-                <JoinQrCode code={room.code} />
-              </div>
-            )}
-            <div className="flex justify-center gap-4 mt-3">
-              <button
-                onClick={() => setShowJoinQr((s) => !s)}
-                className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
-              >
-                <QrCode className="w-3.5 h-3.5" /> {showJoinQr ? "Masquer le QR code" : "QR code"}
-              </button>
-              <Link
-                href="/"
-                className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" /> Accueil
-              </Link>
-              <button
-                onClick={handleStartNewGame}
-                className="text-xs text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
-              >
-                <RefreshCw className="w-3.5 h-3.5" /> Nouvelle partie
-              </button>
-            </div>
-          </div>
+          {roundPanel}
 
           {teamMode ? (
             <TeamScoreCards standings={teamStandings} />
@@ -2192,930 +3129,7 @@ function HostScreenInner() {
       </div>
       )}
 
-      <div className="w-full max-w-6xl text-center">
-        {!canStartRound && round?.status === "playing" && (
-          <div className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow shadow-sticker">
-            {round.is_joker && (
-              <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full mb-3">
-                <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
-              </span>
-            )}
-            <p className="text-2xl font-bold flex items-center justify-center gap-2">
-              <Music2 className="w-6 h-6 text-fg" /> Manche en cours — en attente d’un buzz…
-            </p>
-            {!blindMode && (
-              <p className="text-lg text-inkMuted mt-1">
-                {round.title} — {round.artist}
-              </p>
-            )}
-            {(round.title_found || round.artist_found) && (
-              <p className="text-lg text-inkMuted mt-2">
-                {round.title_found ? `Titre trouvé : ${round.title}` : "Titre encore à trouver"}
-                {" · "}
-                {round.artist_found ? `Artiste trouvé : ${round.artist}` : "Artiste encore à trouver"}
-              </p>
-            )}
-            {timeLeft !== null && (
-              <p className="text-4xl sm:text-5xl font-bold mt-4 text-fg tabular-nums font-display">{timeLeft}s</p>
-            )}
-          </div>
-        )}
-        {!canStartRound && round?.status === "buzzed" && (
-          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
-            {round.is_joker && (
-              <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-                <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
-              </span>
-            )}
-            {winner && (
-              <WinnerStamp key={winner.id} stampKey={`${round.id}:${winner.id}`} player={winner} />
-            )}
-            <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
-              <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
-            </p>
-            {teamOfPlayer(winner?.id) && (
-              <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
-                <TeamDot color={teamColor(teamOfPlayer(winner?.id))} /> {teamOfPlayer(winner?.id)?.name}
-              </p>
-            )}
-            {!blindMode && (
-              <p className="text-lg text-inkMuted">
-                {round.title} — {round.artist}
-              </p>
-            )}
-            {(round.title_found || round.artist_found) && (
-              <p className="text-sm text-inkMuted">
-                Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
-                  .filter(Boolean)
-                  .join(" et ")}
-              </p>
-            )}
-            {blindMode ? (
-              <>
-                <p className="text-sm text-inkMuted">
-                  Laisse-le/la donner sa réponse à voix haute, puis révèle le titre.
-                </p>
-                <button
-                  onClick={handleReveal}
-                  disabled={revealing}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-60 transition px-6 py-3 rounded-xl text-lg font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
-                >
-                  <Eye className="w-5 h-5" /> {revealing ? "..." : "Révéler la réponse"}
-                </button>
-              </>
-            ) : (
-              <p className="text-sm text-inkMuted">
-                Laisse-le/la donner sa réponse à voix haute…
-              </p>
-            )}
-          </div>
-        )}
-        {!canStartRound && round?.status === "revealed" && (
-          <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
-            {round.is_joker && (
-              <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-                <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
-              </span>
-            )}
-            {winner && (
-              <WinnerStamp key={winner.id} stampKey={`${round.id}:${winner.id}`} player={winner} />
-            )}
-            <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
-              <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
-            </p>
-            {teamOfPlayer(winner?.id) && (
-              <p className="-mt-2 text-base font-semibold flex items-center gap-2" style={{ color: teamColor(teamOfPlayer(winner?.id)) }}>
-                <TeamDot color={teamColor(teamOfPlayer(winner?.id))} /> {teamOfPlayer(winner?.id)?.name}
-              </p>
-            )}
-            <p className="text-lg text-inkMuted">
-              {round.title} — {round.artist}
-            </p>
-            {round.title_found && !round.artist_found ? (
-              <div className="flex gap-4 w-full max-w-md">
-                <button
-                  onClick={() => handleJudge(false, true)}
-                  className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <CheckCircle2 className="w-5 h-5" /> Artiste trouvé
-                </button>
-                <button
-                  onClick={() => handleJudge(false, false)}
-                  className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-5 h-5" /> Toujours pas
-                </button>
-              </div>
-            ) : !round.title_found && round.artist_found ? (
-              <div className="flex gap-4 w-full max-w-md">
-                <button
-                  onClick={() => handleJudge(true, false)}
-                  className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <CheckCircle2 className="w-5 h-5" /> Titre trouvé
-                </button>
-                <button
-                  onClick={() => handleJudge(false, false)}
-                  className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-5 h-5" /> Toujours pas
-                </button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 w-full max-w-md">
-                <button
-                  onClick={() => handleJudge(true, false)}
-                  className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <Music className="w-4 h-4" /> Titre seul (+1)
-                </button>
-                <button
-                  onClick={() => handleJudge(false, true)}
-                  className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <Mic className="w-4 h-4" /> Artiste seul (+1)
-                </button>
-                <button
-                  onClick={() => handleJudge(true, true)}
-                  className="bg-sage text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <CheckCircle2 className="w-4 h-4" /> Les deux (+2)
-                </button>
-                <button
-                  onClick={() => handleJudge(false, false)}
-                  className="bg-danger text-white px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
-                >
-                  <XCircle className="w-4 h-4" /> Aucun (-1)
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {isUnresolvedTimeout && round && (
-          <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
-            <p className="text-3xl font-bold text-danger">Personne n’a buzzé à temps</p>
-            <p className="text-lg text-inkMuted">
-              La réponse était :{" "}
-              <span className="font-bold text-fg">
-                {round.title} — {round.artist}
-              </span>
-            </p>
-            <button
-              onClick={() => setAcknowledgedTimeoutRoundId(round.id)}
-              className="bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl text-lg font-bold border-2 border-fg shadow-sticker-sm"
-            >
-              Continuer
-            </button>
-          </div>
-        )}
-
-        {canStartRound && !modeChosen && !isUnresolvedTimeout && (
-          <div className="flex flex-col items-center gap-6">
-            <p className="text-2xl font-bold">Comment veux-tu jouer cette partie ?</p>
-
-            <div className="flex flex-col md:flex-row gap-4 w-full">
-              <button
-                onClick={handleChooseGamemaster}
-                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
-              >
-                <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
-                  <Mic2 className="w-5 h-5 text-fg" /> Maître du jeu
-                </p>
-                <p className="text-sm text-inkMuted">
-                  Tu gères la playlist et les manches mais tu ne joues pas toi-même : tu vois tous
-                  les titres à l’avance.
-                </p>
-              </button>
-              <button
-                onClick={() => setHostMode("player")}
-                className="relative flex-1 bg-inkSurface hover:bg-inkSurface2 transition border-2 border-inkBorderStrong hover:border-fg rounded-2xl px-6 py-5 text-left shadow-sticker"
-              >
-                <p className="text-lg font-bold mb-1 text-fg flex items-center gap-2">
-                  <Headphones className="w-5 h-5 text-fg" /> Tout le monde participe
-                </p>
-                <p className="text-sm text-inkMuted">
-                  Tu joues aussi ! Les titres et artistes de la file d’attente restent masqués,
-                  révélés seulement pour valider une réponse.
-                </p>
-              </button>
-            </div>
-
-            {/* Score cible et nombre de morceaux max : réglés après le choix
-                du mode, dans "Réglages de partie" du panneau playlist (le
-                bloc qui les doublait ici a été retiré). */}
-          </div>
-        )}
-
-        {/* "Tu joues aussi sur cet écran ?" : uniquement en mode "Tout le
-            monde participe" (blindMode), et uniquement avant que la
-            question soit tranchée (hostJoinResolved) — décision prise une
-            seule fois, avant de lancer la première manche (sinon le
-            premier morceau démarrerait avant que l'hôte ait eu la chance
-            de s'inscrire comme joueur). Tous les blocs suivants (connexion
-            Spotify, construction de playlist…) restent masqués tant que ce
-            n'est pas résolu. */}
-        {canStartRound && modeChosen && blindMode && !hostJoinResolved && !isUnresolvedTimeout && (
-          <div className="relative flex flex-col items-center gap-4 w-full max-w-sm mx-auto bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-6 shadow-sticker">
-            <p className="text-lg font-bold text-fg text-center flex items-center gap-2">
-              <Gamepad2 className="w-5 h-5 text-fg" /> Tu joues aussi sur cet écran ?
-            </p>
-            <p className="text-sm text-inkMuted text-center">
-              Transforme cet écran en buzzer pour toi entre les manches, sans besoin d’un autre
-              appareil. À décider maintenant : ça ne pourra plus être changé une fois la partie
-              commencée.
-            </p>
-            {hostJoinError && <p className="text-danger text-sm font-bold text-center">{hostJoinError}</p>}
-            {hostPlayerAccount && !joinHostFormOpen ? (
-              // Hôte connecté (Compte joueur déjà utilisé pour les
-              // cosmétiques) : pseudo déjà connu, inutile de le redemander
-              // — un seul clic inscrit directement l'hôte avec son pseudo
-              // ET son account_id (voir handleJoinAsHost).
-              <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => handleJoinAsHost(hostPlayerAccount.pseudo)}
-                  disabled={joiningAsHost}
-                  className="flex-1 bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm"
-                >
-                  {joiningAsHost ? "..." : `Oui, je joue (en tant que ${hostPlayerAccount.pseudo})`}
-                </button>
-                <button
-                  onClick={() => setHostJoinSkipped(true)}
-                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted border-fg shadow-sticker-sm"
-                >
-                  Non, je gère juste le jeu
-                </button>
-              </div>
-            ) : !joinHostFormOpen ? (
-              <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => setJoinHostFormOpen(true)}
-                  className="flex-1 bg-sage text-ink hover:bg-sage/90 transition px-4 py-3 rounded-xl font-bold border-2 border-fg shadow-sticker-sm"
-                >
-                  Oui, je joue
-                </button>
-                <button
-                  onClick={() => setHostJoinSkipped(true)}
-                  className="flex-1 bg-inkSurface border-2 hover:border-fg transition px-4 py-3 rounded-xl font-bold text-inkMuted border-fg shadow-sticker-sm"
-                >
-                  Non, je gère juste le jeu
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col sm:flex-row gap-2 w-full">
-                <input
-                  value={hostNameDraft}
-                  onChange={(e) => setHostNameDraft(e.target.value)}
-                  className="min-w-0 flex-1 bg-inkSurface2 border-2 border-inkBorder focus:border-fg outline-none transition rounded-xl px-3 py-2 text-fg"
-                />
-                <button
-                  onClick={() => handleJoinAsHost(hostNameDraft)}
-                  disabled={joiningAsHost || hostNameDraft.trim().length === 0}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-4 py-2 rounded-xl font-bold inline-flex items-center justify-center gap-2 whitespace-nowrap border-2 border-fg shadow-sticker-sm"
-                >
-                  <UserPlus className="w-4 h-4" /> {joiningAsHost ? "..." : "Confirmer"}
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Choix de la source musicale : uniquement pendant la préparation,
-            et seulement pour les comptes autorisés à utiliser Spotify
-            (spotifyAllowed). Tous les autres sont sur Deezer, sans choix. */}
-        {spotifyAllowed && canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && !gameStarted && (
-          <div role="group" aria-label="Source musicale" className="flex flex-wrap items-center justify-center gap-2 bg-inkSurface border-[3px] border-fg rounded-2xl shadow-sticker-sm px-4 py-2.5">
-            <span className="font-extrabold text-sm mr-1">Musique :</span>
-            {([
-              { id: "deezer", label: "Deezer", hint: "extraits 30 s, sans compte" },
-              { id: "spotify", label: "Spotify", hint: "morceaux complets, Premium" },
-            ] as const).map((src) => (
-              <button
-                key={src.id}
-                type="button"
-                aria-pressed={effectiveMusicSource === src.id}
-                onClick={async () => {
-                  if (effectiveMusicSource === src.id) return;
-                  const others = upcomingQueue.filter((t) => isDeezerTrackId(t.sourceTrackId) !== (src.id === "deezer"));
-                  if (
-                    others.length > 0 &&
-                    !(await confirmDialog({
-                      title: `Passer sur ${src.label} ?`,
-                      message: `Les ${others.length} morceaux de l’autre source seront retirés de la file d’attente.`,
-                      confirmLabel: `Passer sur ${src.label}`,
-                    }))
-                  ) {
-                    return;
-                  }
-                  if (others.length > 0) {
-                    setQueue((q) => [...q.slice(0, queueIndex), ...q.slice(queueIndex).filter((t) => isDeezerTrackId(t.sourceTrackId) === (src.id === "deezer"))]);
-                  }
-                  setMusicSource(src.id);
-                  try {
-                    window.localStorage.setItem(MUSIC_SOURCE_STORAGE_KEY, src.id);
-                  } catch {
-                    // ignore
-                  }
-                }}
-                className={`rounded-xl border-2 border-fg px-3 py-1.5 text-sm font-bold transition ${
-                  effectiveMusicSource === src.id ? "bg-sage shadow-sticker-sm" : "bg-inkSurface text-inkMuted hover:text-fg"
-                }`}
-              >
-                {src.label} <span className="font-medium text-xs opacity-80">· {src.hint}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "ready" && (
-          <button
-            onClick={async () => {
-              if (
-                await confirmDialog({
-                  title: "Se déconnecter de Spotify ?",
-                  message: "Tu pourras ensuite connecter un autre compte Spotify.",
-                  confirmLabel: "Déconnecter",
-                })
-              ) {
-                spotifyPlayer.disconnect();
-              }
-            }}
-            className="text-xs text-inkMuted hover:text-danger underline transition self-end -mb-2 inline-flex items-center gap-1"
-          >
-            <LogOut className="w-3.5 h-3.5" /> Déconnecter Spotify (changer de compte)
-          </button>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "checking" && (
-          <p className="text-inkMuted">Vérification de la connexion Spotify…</p>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "disconnected" && (
-          <div className="flex flex-col items-center gap-2">
-            <button
-              onClick={spotifyPlayer.connect}
-              className="bg-sage text-ink hover:bg-sage/90 transition px-8 py-4 rounded-xl text-xl font-bold border-2 border-fg shadow-sticker-sm"
-            >
-              Se connecter à Spotify pour préparer une playlist
-            </button>
-            {/* Distincte du "Compte joueur" (voir PlayerAccountCorner, coin
-                supérieur droit) : ici on connecte Spotify pour lancer la
-                musique (Web Playback SDK, nécessite Premium), pas pour
-                identifier l'hôte en tant que joueur — retour utilisateur
-                direct, les deux étaient confondues quand l'hôte joue aussi. */}
-            <p className="text-xs text-inkMuted text-center max-w-xs">
-              Connexion technique pour lancer la musique — différente du &laquo; Compte joueur &raquo; en haut à droite.
-            </p>
-          </div>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && effectiveMusicSource === "spotify" && spotifyPlayer.state === "connecting_player" && (
-          <div className="flex flex-col items-center gap-3">
-            <p className="text-inkMuted">Connexion au lecteur Spotify…</p>
-            {/* Bug remonté : cet écran restait parfois bloqué ici
-                indéfiniment (veille de l'ordinateur, coupure réseau
-                passagère...), seul un rechargement complet de la page en
-                sortait. spotifyPlayer.stuckTooLong (voir useSpotifyPlayer.ts)
-                s'arme après 12s sans succès : on propose alors de réessayer
-                sans quitter la page, plutôt que de laisser l'hôte deviner
-                qu'il doit recharger. */}
-            {spotifyPlayer.stuckTooLong && (
-              <div className="flex flex-col items-center gap-2">
-                <p className="text-xs text-inkMuted/70 text-center max-w-xs">
-                  Ça prend plus longtemps que prévu.
-                </p>
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button
-                    onClick={spotifyPlayer.reconnect}
-                    className="bg-inkSurface border-2 hover:border-fg transition rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5 border-fg shadow-sticker-sm"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Réessayer
-                  </button>
-                  {/* Après un premier essai raté : le rechargement reste le
-                      recours le plus sûr (la partie est conservée). */}
-                  {spotifyPlayer.reconnectAttempts > 0 && (
-                    <button
-                      onClick={() => window.location.reload()}
-                      className="bg-sage text-fg border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-2 text-sm font-bold inline-flex items-center gap-1.5"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" /> Recharger la page (la partie est gardée)
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && gameOver && !buildingPlaylist && (
-          <div className="relative flex flex-col items-center gap-6 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
-            <EndCeremony
-              title={
-                <>
-                  <Trophy className="w-10 h-10 text-fg" />
-                  {/* Pas de nom ici : le gagnant est révélé par le podium
-                      juste après (sinon le titre gâcherait la surprise). */}
-                  {targetScoreReached ? (
-                    <p className="text-2xl font-bold text-fg text-center font-display">
-                      Score cible de {targetScore} points atteint !
-                    </p>
-                  ) : maxRoundsReached ? (
-                    <p className="text-2xl font-bold text-fg text-center font-display">
-                      Limite de {maxRounds} morceau{maxRounds && maxRounds > 1 ? "x" : ""} atteinte
-                    </p>
-                  ) : (
-                    <p className="text-2xl font-bold text-fg font-display">Playlist terminée</p>
-                  )}
-                </>
-              }
-              podium={
-                teamMode
-                  ? podiumFrom(teamStandings, (st) => ({ id: st.team.id, name: st.team.name, score: st.score, color: teamColor(st.team) }))
-                  : podiumFrom(rankedPlayers, (p) => ({ id: p.id, name: p.display_name, score: p.score, avatar: avatarForPlayer(p) }))
-              }
-            >
-              {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
-                  tableau par équipe avec MVP, distinctions) à la place du
-                  podium individuel. */}
-              {teamMode && (
-                <div className="w-full flex flex-col gap-5">
-                  <TeamResultBanner standings={teamStandings} />
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {teamStandings.map((st) => (
-                      <TeamRecapTable key={st.team.id} standing={st} stats={playerStats} />
-                    ))}
-                  </div>
-                  <AwardCards
-                    awards={teamAwards}
-                    teamOf={(p) => {
-                      const t = teamOfPlayer(p.id);
-                      return t ? { color: teamColor(t) } : null;
-                    }}
-                  />
-                </div>
-              )}
-              {!teamMode && (fastestAttempt || mostContestedCount > 1) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
-                  {fastestAttempt && (
-                    <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
-                      <p className="text-xs text-inkMuted flex items-center gap-1"><Zap className="w-3.5 h-3.5" /> Buzzeur le plus rapide</p>
-                      <p className="text-sm font-bold text-fg">
-                        {fastestPlayer?.display_name ?? "Joueur"} —{" "}
-                        {(fastestAttempt.reaction_seconds as number).toFixed(1)}s
-                      </p>
-                    </div>
-                  )}
-                  {mostContestedRound && mostContestedCount > 1 && (
-                    <div className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-3 text-left">
-                      <p className="text-xs text-inkMuted flex items-center gap-1"><Flame className="w-3.5 h-3.5" /> Manche la plus disputée</p>
-                      <p className="text-sm font-bold text-fg">
-                        {mostContestedRound.title} ({mostContestedCount} tentatives)
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!teamMode && (
-              <ul className="w-full space-y-2 text-left max-h-64 overflow-y-auto pr-1">
-                {rankedPlayers.map((p) => {
-                  const plate = podiumRowClasses(p.rank);
-                  return (
-                    <li
-                      key={p.id}
-                      className={`flex justify-between items-center rounded-xl border-2 border-fg px-4 py-3 ${plate.row}`}
-                    >
-                      <span className={`flex items-center gap-3 ${plate.text}`}>
-                        <span className="font-display font-black w-5 text-center">{p.rank}</span>
-                        <span className="font-medium">{p.display_name}</span>
-                      </span>
-                      <span className={`font-black font-display ${plate.text}`}>{p.score} pts</span>
-                    </li>
-                  );
-                })}
-              </ul>
-              )}
-              <div className="flex flex-col sm:flex-row gap-3 w-full justify-center">
-                <button
-                  onClick={() => {
-                    resumeRoom(room.id).catch(() => {});
-                    setBuildingPlaylist(true);
-                  }}
-                  className="flex-none sm:min-w-[220px] bg-sage text-ink hover:bg-sage/90 transition px-6 py-3 rounded-xl font-bold inline-flex items-center justify-center gap-2 border-2 border-fg shadow-sticker-sm"
-                >
-                  <Play className="w-4 h-4" /> Continuer la partie
-                </button>
-                <button
-                  onClick={handleRestartGame}
-                  className="flex-none sm:min-w-[220px] bg-inkSurface border-2 hover:border-fg transition px-6 py-3 rounded-xl font-bold text-fg inline-flex items-center justify-center gap-2 border-fg shadow-sticker-sm"
-                >
-                  <RotateCcw className="w-4 h-4" /> Redémarrer une partie
-                </button>
-              </div>
-              <p className="text-xs text-inkMuted text-center max-w-sm">
-                « Continuer » garde les scores et ajoute d’autres morceaux à la suite. «
-                Redémarrer » garde les mêmes joueurs mais remet les scores et l’historique à zéro.
-              </p>
-            </EndCeremony>
-          </div>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && !gameOver && !buildingPlaylist && (
-          <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
-            {launchingRound ? (
-              <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
-            ) : (
-              <>
-                <p className="text-inkMuted">
-                  Manche {queueIndex + 1} / {queue.length} à venir :
-                </p>
-                <p className="text-xl font-bold">
-                  {blindMode
-                    ? `Morceau ${queueIndex + 1}`
-                    : `${upcomingQueue[0]?.title} — ${upcomingQueue[0]?.artist}`}
-                </p>
-              </>
-            )}
-            <button
-              onClick={handlePlayNextInQueue}
-              disabled={players.length === 0 || launchingRound}
-              className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-8 py-4 rounded-xl text-xl font-bold inline-flex items-center gap-2 border-2 border-fg shadow-sticker-sm"
-            >
-              <Play className="w-5 h-5" /> Manche suivante
-            </button>
-            {players.length === 0 && (
-              <p className="text-sm text-inkMuted">
-                En attente d’au moins un joueur avant de pouvoir lancer la manche.
-              </p>
-            )}
-            <button
-              onClick={() => setBuildingPlaylist(true)}
-              className="text-sm text-inkMuted hover:text-fg underline transition"
-            >
-              + Ajouter d’autres morceaux à la file
-            </button>
-          </div>
-        )}
-
-        {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && buildingPlaylist && (
-          <div className="relative w-full flex flex-col gap-7 text-left bg-inkSurface2 border border-inkBorder rounded-2xl p-7 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset,0_12px_28px_rgba(0,0,0,0.45)]">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-inkMuted flex items-center gap-1.5">
-                Mode :
-                {hostMode === "gamemaster" ? (
-                  <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
-                    <Mic2 className="w-3.5 h-3.5 text-fg" /> Maître du jeu
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 bg-inkSurface3 rounded-full px-3 py-1 text-xs font-medium">
-                    <Headphones className="w-3.5 h-3.5 text-fg" /> Tout le monde participe
-                  </span>
-                )}
-              </span>
-              {/* Le mode ne se change que pendant la préparation : une fois
-                  la première manche jouée, passer de "Tout le monde
-                  participe" à "Maître du jeu" (ou l'inverse) en cours de
-                  route fausserait la partie (l'hôte joueur verrait les
-                  réponses, ou un maître du jeu deviendrait joueur). */}
-              {gameStarted ? (
-                <span className="text-xs text-inkMuted font-bold">Mode verrouillé pendant la partie</span>
-              ) : (
-                <button
-                  onClick={() => setHostMode(null)}
-                  className="text-sm text-inkMuted hover:text-fg underline transition"
-                >
-                  Changer de mode
-                </button>
-              )}
-            </div>
-
-            {/* Score cible et morceaux max fusionnés en une seule ligne
-                compacte (au lieu de 2 blocs empilés avec leur propre texte
-                d'aide) : les 2 réglages restent modifiables à tout moment
-                sans repasser par "Changer de mode" (voir targetScore plus
-                haut), mais prennent beaucoup moins de place verticale. */}
-            <div className="flex flex-col gap-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
-                Réglages de partie
-              </p>
-              <div className="flex flex-wrap gap-3 text-sm">
-                <label
-                  htmlFor="target-score-inline"
-                  title="Laisse vide pour jouer jusqu'à la fin de la playlist. Sinon, la partie se termine dès qu'un joueur atteint ce score."
-                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5 w-full sm:w-auto min-w-0"
-                >
-                  <Target className="w-4 h-4 text-inkMuted shrink-0" />
-                  <span className="text-inkMuted whitespace-nowrap">Score cible</span>
-                  <input
-                    id="target-score-inline"
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={targetScore ?? ""}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === "") {
-                        setTargetScore(null);
-                        return;
-                      }
-                      const parsed = Number.parseInt(raw, 10);
-                      setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                    }}
-                    placeholder="Illimité"
-                    className="flex-1 min-w-0 sm:flex-none sm:w-24 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
-                  />
-                  <span className="text-inkMuted">pts</span>
-                </label>
-                <label
-                  htmlFor="max-rounds-inline"
-                  title="Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce nombre de morceaux a été joué. Cumulable avec le score cible."
-                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5 w-full sm:w-auto min-w-0"
-                >
-                  <Hash className="w-4 h-4 text-inkMuted shrink-0" />
-                  <span className="text-inkMuted whitespace-nowrap">Morceaux max</span>
-                  <input
-                    id="max-rounds-inline"
-                    type="number"
-                    min={1}
-                    inputMode="numeric"
-                    value={maxRounds ?? ""}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      if (raw === "") {
-                        setMaxRounds(null);
-                        return;
-                      }
-                      const parsed = Number.parseInt(raw, 10);
-                      setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-                    }}
-                    placeholder="Toute la playlist"
-                    className="flex-1 min-w-0 sm:flex-none sm:w-40 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* Réglages bonus/malus (voir migration 0018) : comme le score
-                cible et les morceaux max ci-dessus, modifiables à tout
-                moment en cours de partie — un changement s'applique dès la
-                prochaine manche jugée (voire dès le prochain tirage pour le
-                joker). Grille à 2 colonnes (bonus | malus) plutôt qu'une
-                liste empilée : ça tient sur moins de hauteur pour les 5
-                réglages, le détail de chacun restant accessible au survol
-                (voir le title sur BonusMalusToggleRow). */}
-            {room && (
-              <div className="flex flex-col gap-3 text-sm pt-1 border-t border-inkBorder/60">
-                <p className="text-xs font-semibold uppercase tracking-wide text-inkMuted">
-                  Bonus &amp; malus
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
-                  <div className="flex flex-col gap-2">
-                    <BonusMalusToggleRow
-                      label="Manche joker"
-                      description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
-                      icon={<Dice5 className="w-4 h-4" />}
-                      iconClassName="text-amberStrong"
-                      enabled={room.bonus_joker_enabled}
-                      saving={savingBonusMalusSetting === "bonus_joker_enabled"}
-                      onToggle={() => handleToggleBonusMalusSetting("bonus_joker_enabled")}
-                    />
-                    <BonusMalusToggleRow
-                      label="Bonus vitesse"
-                      description="+1 point si la réponse complète (titre + artiste) est buzzée en moins de 2 secondes."
-                      icon={<Zap className="w-4 h-4" />}
-                      iconClassName="text-fg"
-                      enabled={room.bonus_speed_enabled}
-                      saving={savingBonusMalusSetting === "bonus_speed_enabled"}
-                      onToggle={() => handleToggleBonusMalusSetting("bonus_speed_enabled")}
-                    />
-                    <BonusMalusToggleRow
-                      label="Bonus remontada"
-                      description="+1 point si tu réponds juste alors que tu es strictement dernier·ère au classement, avec plus de 5 points d'écart avec l'avant-dernier."
-                      icon={<TrendingUp className="w-4 h-4" />}
-                      iconClassName="text-fg"
-                      enabled={room.bonus_remontada_enabled}
-                      saving={savingBonusMalusSetting === "bonus_remontada_enabled"}
-                      onToggle={() => handleToggleBonusMalusSetting("bonus_remontada_enabled")}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <BonusMalusToggleRow
-                      label="Malus série"
-                      description="3 bonnes réponses d'affilée par la même personne : son buzzer est retardé de 5s, puis 10s, puis 15s au tour suivant, tant que personne d'autre n'a répondu juste."
-                      icon={<Flame className="w-4 h-4" />}
-                      iconClassName="text-amberStrong"
-                      enabled={room.malus_streak_lockout_enabled}
-                      saving={savingBonusMalusSetting === "malus_streak_lockout_enabled"}
-                      onToggle={() => handleToggleBonusMalusSetting("malus_streak_lockout_enabled")}
-                    />
-                    <BonusMalusToggleRow
-                      label="Malus buzzer bloqué"
-                      description="3 premiers-buzz ratés d'affilée par la même personne : son buzzer est complètement bloqué à la manche suivante."
-                      icon={<XCircle className="w-4 h-4" />}
-                      iconClassName="text-danger"
-                      enabled={room.malus_streak_block_enabled}
-                      saving={savingBonusMalusSetting === "malus_streak_block_enabled"}
-                      onToggle={() => handleToggleBonusMalusSetting("malus_streak_block_enabled")}
-                    />
-                    {blindMode && (
-                      <p className="text-xs text-inkMuted px-1 pt-1 flex items-start gap-1.5">
-                        <EyeOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                        Les morceaux ajoutés restent masqués — préfère importer une playlist
-                        entière pour être surpris toi aussi.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Coupe-circuit quota Spotify (verrou PARTAGÉ via Supabase, voir
-                spotifyQuotaLock.ts) : un bandeau visible plutôt que de
-                laisser l'hôte cliquer sur les boutons Spotify ci-dessous
-                pour découvrir l'erreur à chaque fois. Seule la catégorie
-                "playlists" est encore posée depuis cette page (voir le
-                commentaire sur quotaLocks plus haut) — la recherche
-                manuelle et la génération par genre ont été retirées, seul
-                l'import de playlist Spotify reste comme méthode d'ajout de
-                morceaux. */}
-            {effectiveMusicSource === "spotify" && playlistsQuotaCooldownSeconds > 0 && (
-              <div className="flex flex-col gap-2 text-sm text-danger bg-danger/10 border border-danger/40 rounded-xl px-4 py-3">
-                <p className="flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>
-                    Spotify a atteint son quota pour les playlists — chargement et import en
-                    pause. Nouvelle tentative possible dans environ{" "}
-                    {formatCooldownDuration(playlistsQuotaCooldownSeconds)}.
-                  </span>
-                </p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] gap-4 items-stretch">
-              {/* Import de playlist Spotify : seule méthode d'ajout de
-                  morceaux conservée (recherche manuelle et génération par
-                  genre retirées — la recherche manuelle et la génération
-                  aléatoire multipliaient les appels à l'API Search Spotify,
-                  au quota Developer Mode strict, pour un usage jugé
-                  secondaire face à l'import direct d'une playlist déjà
-                  prête). Note : le badge "Éclectique" (voir lib/badges.ts et
-                  migration 0021), qui suivait l'exploration de genres via
-                  la génération, ne peut donc plus progresser pour de
-                  nouvelles parties — sa définition et la progression déjà
-                  acquise par les joueurs restent inchangées. */}
-              {effectiveMusicSource === "deezer" ? (
-                <div className="flex flex-col gap-3 bg-inkSurface3 border-2 border-fg rounded-2xl p-4 min-h-[220px] min-w-0">
-                  <DeezerPlaylistPicker
-                    onImport={(tracks) => {
-                      // Mélangé, comme l'import Spotify (l'hôte qui joue ne
-                      // doit pas deviner l'ordre des manches).
-                      setQueue((q) => [...q, ...shuffle(tracks)]);
-                    }}
-                  />
-                </div>
-              ) : (
-              <div className="flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-h-[220px]">
-                <p className="text-sm text-inkMuted">
-                  Ajoute tous les morceaux d’une de tes playlists Spotify d’un coup.
-                </p>
-                <button
-                  onClick={handleLoadMyPlaylists}
-                  disabled={loadingPlaylists || myPlaylists !== null || playlistsQuotaCooldownSeconds > 0}
-                  className="bg-inkSurface border-2 hover:border-fg disabled:opacity-60 transition px-6 py-3 rounded-xl font-bold self-start border-fg shadow-sticker-sm"
-                >
-                  {myPlaylists !== null
-                    ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Check className="w-4 h-4" /> Playlists chargées
-                      </span>
-                    )
-                    : loadingPlaylists
-                      ? "Chargement…"
-                      : "Charger mes playlists Spotify"}
-                </button>
-                {myPlaylists !== null && myPlaylists.length === 0 && (
-                  <p className="text-sm text-inkMuted">Aucune playlist trouvée sur ton compte Spotify.</p>
-                )}
-                {myPlaylists !== null && myPlaylists.length > 0 && (
-                  <div className="max-h-72 overflow-y-auto pr-1">
-                    <ul className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-2 items-center">
-                      {myPlaylists.map((playlist) => (
-                        <li key={playlist.id} className="contents">
-                          <span className="bg-inkSurface rounded-xl px-4 py-3 truncate min-w-0">
-                            {playlist.name}{" "}
-                            <span className="text-inkMuted">({playlist.trackCount} morceaux)</span>
-                          </span>
-                          <button
-                            onClick={() => handleImportPlaylist(playlist.id)}
-                            disabled={importingPlaylistId === playlist.id || playlistsQuotaCooldownSeconds > 0}
-                            className="bg-inkSurface border-2 hover:border-fg disabled:opacity-40 transition px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap border-fg shadow-sticker-sm"
-                          >
-                            {importingPlaylistId === playlist.id ? "Import…" : "+Importer"}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-              )}
-
-              {/* File d'attente : toujours visible avec le bouton de
-                  lancement juste dessous, pour ne jamais avoir à scroller
-                  pour démarrer la partie (voir la proposition d'agencement
-                  validée). Même style neutre que le panneau de gauche
-                  (bg-inkSurface2/border-inkBorder) plutôt qu'un contour
-                  sauge sur tout le pourtour : un contour de couleur sur les
-                  4 côtés d'un panneau interne se confondait visuellement
-                  avec la bordure de la carte englobante et donnait
-                  l'impression que la file d'attente "sortait" de la carte
-                  au lieu d'en faire partie. Un simple liseré sauge à
-                  gauche suffit à la signaler comme le panneau important. */}
-              <div className="relative flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-w-0">
-                <div className="flex justify-between items-center">
-                  <h3 className="font-bold text-fg">
-                    File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
-                  </h3>
-                  {upcomingQueue.length > 0 && (
-                    <button
-                      onClick={handleClearQueue}
-                      className="text-danger text-sm hover:brightness-110 transition"
-                    >
-                      Tout retirer
-                    </button>
-                  )}
-                </div>
-                {upcomingQueue.length === 0 ? (
-                  <p className="text-sm text-inkMuted">
-                    Aucun morceau pour l’instant — utilise un des onglets à gauche pour en ajouter.
-                  </p>
-                ) : (
-                  // Mobile : hauteur bornée (max-h-72). Grand écran : la liste
-                  // occupe toute la hauteur libre du panneau (calée sur celle
-                  // de la colonne Deezer, via le conteneur relatif + ul
-                  // absolu qui n'impose pas sa propre hauteur à la grille),
-                  // et le bouton Démarrer reste collé en bas.
-                  <div className="lg:relative lg:flex-1 lg:min-h-[12rem]">
-                  <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1 lg:max-h-none lg:absolute lg:inset-0">
-                    {upcomingQueue.map((track, i) => (
-                      <li
-                        key={`${track.sourceTrackId}-${i}`}
-                        draggable
-                        onDragStart={handleDragStart(i)}
-                        onDragOver={handleDragOver}
-                        onDrop={handleDrop(i)}
-                        className="flex justify-between items-center gap-3 bg-page rounded-xl px-4 py-3 cursor-grab active:cursor-grabbing"
-                      >
-                        <span className="flex items-center gap-2 min-w-0 flex-1">
-                          <GripVertical className="w-4 h-4 text-inkMuted flex-shrink-0" />
-                          <span className="truncate min-w-0 flex-1">
-                            {blindMode
-                              ? `Morceau ${queueIndex + i + 1}`
-                              : `${track.title} — ${track.artist}`}
-                          </span>
-                        </span>
-                        <button
-                          onClick={() => handleRemoveFromQueue(i)}
-                          className="text-danger text-sm px-3 py-1 hover:brightness-110 transition whitespace-nowrap"
-                        >
-                          Retirer
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  </div>
-                )}
-
-                {players.length === 0 && (
-                  <p className="text-sm text-inkMuted">
-                    En attente d’au moins un joueur avant de pouvoir lancer la manche.
-                  </p>
-                )}
-                <button
-                  onClick={handlePlayNextInQueue}
-                  disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1 lg:mt-auto border-2 border-fg shadow-sticker-sm"
-                >
-                  <span className="inline-flex items-center justify-center gap-2">
-                    {!launchingRound && <Play className="w-5 h-5" />}
-                    {launchingRound
-                      ? "Lancement…"
-                      : queueIndex === 0
-                        ? `Démarrer la partie · ${upcomingQueue.length} morceau${upcomingQueue.length > 1 ? "x" : ""}`
-                        : `Reprendre la partie · ${upcomingQueue.length} restant${upcomingQueue.length > 1 ? "s" : ""}`}
-                  </span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {(spotifyOAuthError || spotifyPlayer.errorMessage) && (
-          <p className="text-danger mt-4 break-words">
-            {spotifyOAuthError ?? spotifyPlayer.errorMessage}
-          </p>
-        )}
-      </div>
+      {gameStarted ? codeCard : roundPanel}
     </main>
   );
 }
