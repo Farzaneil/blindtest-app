@@ -346,8 +346,6 @@ function HostBuzzerView({
   const ranked = withRanks(players);
   const meRaw = ranked.find((p) => p.id === hostPlayerId);
   const me = meRaw ? withTeamStreaks(meRaw, players, team !== null) : meRaw;
-  // Mode équipes : anneau couleur d'équipe autour du buzzer.
-  const buzzRing = team ? teamColor(team) : null;
 
   // Malus buzzer (voir lib/buzzLockout.ts + migration 0017) : la vraie
   // application se fait côté serveur (resolve_buzz_winner), ceci ne sert
@@ -430,10 +428,6 @@ function HostBuzzerView({
                 ? ({
                     background: equippedCosmetic.swatch,
                     color: equippedCosmetic.textOn === "dark" ? "#111111" : "#FFFFFF",
-                    // Anneau couleur d'équipe quand un skin perso est équipé
-                    // (le remplissage reste celui du skin).
-                    "--buzz-ring": buzzRing ?? "transparent",
-                    "--buzz-ring-w": buzzRing ? "8px" : "0px",
                   } as CSSProperties)
                 : undefined
             }
@@ -458,8 +452,12 @@ function HostBuzzerView({
                                     BUZZÉ !
                 </span>
               ) : (
-                // Manche close par le timer, sans aucun buzz.
-                round.buzzed_by_player_id ? "BUZZÉ" : "TERMINÉ"
+                // Manche close par le timer, sans aucun buzz (taille réduite pour tenir dans le rond).
+                round.buzzed_by_player_id ? (
+                    "BUZZÉ"
+                  ) : (
+                    <span className="text-2xl whitespace-nowrap">TROP TARD</span>
+                  )
               )
             ) : fullyBlocked ? (
               "BLOQUÉ"

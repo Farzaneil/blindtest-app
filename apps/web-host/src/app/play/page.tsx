@@ -634,7 +634,7 @@ function BuzzerView({
   const meForLockout = me ? withTeamStreaks(me, players, teamMode) : me;
   // Mode équipes : le buzzer prend la couleur de l'équipe si le joueur n'a
   // pas équipé de skin (skin par défaut) ; un skin choisi reste prioritaire
-  // sur le remplissage, seul l'anneau extérieur passe à la couleur d'équipe.
+  // (pas de contour couleur d’équipe : même rendu que pour les autres joueurs).
   const equippedCosmetic =
     myTeam && baseCosmetic.key === DEFAULT_COSMETIC_KEY
       ? {
@@ -647,9 +647,6 @@ function BuzzerView({
       : myTeam
         ? { ...baseCosmetic, accentColor: teamColor(myTeam) }
         : baseCosmetic;
-  // Anneau couleur d'équipe autour du buzzer quand un skin perso est équipé
-  // (avec le skin par défaut, c'est déjà le remplissage qui porte l'équipe).
-  const buzzRing = myTeam && baseCosmetic.key !== DEFAULT_COSMETIC_KEY ? teamColor(myTeam) : null;
 
   // Classement animé affiché à la révélation de la réponse (voir
   // AnimatedScoreboard) : previousScores mémorise les scores tels
@@ -1100,10 +1097,6 @@ function BuzzerView({
                 ? ({
                     background: equippedCosmetic.swatch,
                     color: equippedCosmetic.textOn === "dark" ? "#111111" : "#FFFFFF",
-                    // Anneau couleur d'équipe quand un skin perso est équipé
-                    // (le remplissage reste celui du skin).
-                    "--buzz-ring": buzzRing ?? "transparent",
-                    "--buzz-ring-w": buzzRing ? "8px" : "0px",
                   } as CSSProperties)
                 : undefined
             }
@@ -1128,8 +1121,12 @@ function BuzzerView({
                                         BUZZÉ !
                   </span>
                 ) : (
-                  // Manche close par le timer, sans aucun buzz.
-                  round.buzzed_by_player_id ? "BUZZÉ" : "TERMINÉ"
+                  // Manche close par le timer, sans aucun buzz (taille réduite pour tenir dans le rond).
+                  round.buzzed_by_player_id ? (
+                    "BUZZÉ"
+                  ) : (
+                    <span className="text-2xl whitespace-nowrap">TROP TARD</span>
+                  )
                 )
               ) : fullyBlocked ? (
                 "BLOQUÉ"
