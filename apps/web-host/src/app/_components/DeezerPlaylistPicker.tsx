@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Search } from "lucide-react";
 import {
   featuredDeezerPlaylists,
+  getDeezerPlayableCount,
   getDeezerPlaylistInfo,
   getDeezerPlaylistTracks,
   playlistIdFromLink,
@@ -13,6 +14,43 @@ import {
 } from "../../lib/deezer";
 
 // Recherches rapides proposées sans rien taper.
+// Comptages "morceaux jouables" lancés en parallèle au maximum (l'API
+// Deezer limite à ~50 requêtes / 5 s, une grosse playlist en coûte 5).
+const MAX_CONCURRENT_COUNTS = 3;
+
+/**
+ * Ligne de playlist : signale quand elle devient visible (dans la liste
+ * défilante), pour ne compter les morceaux jouables que des playlists
+ * réellement affichées.
+ */
+function VisibleRow({ onVisible, children }: { onVisible: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLLIElement>(null);
+  const onVisibleRef = useRef(onVisible);
+  useEffect(() => {
+    onVisibleRef.current = onVisible;
+  });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          onVisibleRef.current();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "120px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <li ref={ref} className="flex items-center gap-3 bg-inkSurface border-2 border-fg rounded-xl p-2 pr-3">
+      {children}
+    </li>
+  );
+}
+
 const QUICK_SEARCHES = [
   "Blind test",
   "Années 80",
@@ -45,7 +83,39 @@ export function DeezerPlaylistPicker({
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
   const [imported, setImported] = useState<Record<string, number>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  // Nombre de morceaux JOUABLES (avec extrait) par playlist : c'est le seul
+  // chiffre affiché, pour qu'il corresponde exactement à ce qui arrive dans
+  // la file à l'import. Calculé à la volée pour les lignes visibles (mis en
+  // cache 1 h côté serveur, voir getPlayableTracks).
+  const [counts, setCounts] = useState<Record<string, number | "error">>({});
+  const requested = useRef(new Set<string>());
+  const pending = useRef<string[]>([]);
+  const active = useRef(0);
+
+  const pump = () => {
+    while (active.current < MAX_CONCURRENT_COUNTS && pending.current.length > 0) {
+      const id = pending.current.shift()!;
+      active.current += 1;
+      getDeezerPlayableCount(id)
+        .then((n) => setCounts((c) => ({ ...c, [id]: n })))
+        .catch(() => {
+          // Réessayé à la prochaine apparition de la ligne.
+          requested.current.delete(id);
+          setCounts((c) => ({ ...c, [id]: "error" }));
+        })
+        .finally(() => {
+          active.current -= 1;
+          pump();
+        });
+    }
+  };
+
+  const requestCount = (id: string) => {
+    if (requested.current.has(id)) return;
+    requested.current.add(id);
+    pending.current.push(id);
+    pump();
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -85,16 +155,15 @@ export function DeezerPlaylistPicker({
   const importPlaylist = async (p: DeezerPlaylistSummary) => {
     setImportingId(p.id);
     setError(null);
-    setNotice(null);
     try {
-      const { tracks, skipped } = await getDeezerPlaylistTracks(p.id);
+      const tracks = await getDeezerPlaylistTracks(p.id);
+      setCounts((c) => ({ ...c, [p.id]: tracks.length }));
       if (tracks.length === 0) {
         setError("Aucun morceau de cette playlist n’a d’extrait disponible.");
         return;
       }
       onImport(tracks, p);
       setImported((m) => ({ ...m, [p.id]: tracks.length }));
-      if (skipped > 0) setNotice(`${tracks.length} morceaux ajoutés (${skipped} sans extrait ignorés).`);
     } catch (e: any) {
       setError(e?.message ?? "Import impossible.");
     } finally {
@@ -147,7 +216,6 @@ export function DeezerPlaylistPicker({
       </div>
 
       {error && <p className="text-sm text-danger font-bold">{error}</p>}
-      {notice && <p className="text-sm text-inkMuted font-bold">{notice}</p>}
 
       <p className="text-xs font-extrabold uppercase tracking-wide text-inkMuted">{label}</p>
       {results === null ? (
@@ -158,8 +226,10 @@ export function DeezerPlaylistPicker({
         <ul className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
           {results.map((p) => {
             const done = imported[p.id];
+            const count = counts[p.id];
+            const empty = count === 0;
             return (
-              <li key={p.id} className="flex items-center gap-3 bg-inkSurface border-2 border-fg rounded-xl p-2 pr-3">
+              <VisibleRow key={p.id} onVisible={() => requestCount(p.id)}>
                 {p.pictureUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={p.pictureUrl} alt="" className="w-12 h-12 rounded-lg border-2 border-fg object-cover shrink-0" />
@@ -169,13 +239,23 @@ export function DeezerPlaylistPicker({
                 <span className="flex-1 min-w-0">
                   <span className="block font-bold truncate">{p.title}</span>
                   <span className="block text-xs text-inkMuted truncate">
-                    {p.trackCount} morceaux{p.creator ? ` · ${p.creator}` : ""}
+                    {count === undefined ? (
+                      <span className="animate-pulse">… morceaux</span>
+                    ) : count === "error" ? (
+                      // Comptage impossible pour l'instant : total annoncé par Deezer.
+                      `${p.trackCount} morceaux`
+                    ) : empty ? (
+                      "Aucun extrait disponible"
+                    ) : (
+                      `${count} morceau${count > 1 ? "x" : ""}`
+                    )}
+                    {p.creator ? ` · ${p.creator}` : ""}
                   </span>
                 </span>
                 <button
                   type="button"
                   onClick={() => importPlaylist(p)}
-                  disabled={disabled || importingId !== null}
+                  disabled={disabled || importingId !== null || empty}
                   className={`shrink-0 border-2 border-fg shadow-sticker-sm rounded-xl px-3 py-1.5 text-sm font-bold whitespace-nowrap disabled:opacity-50 ${
                     done ? "bg-good" : "bg-inkSurface"
                   }`}
@@ -190,7 +270,7 @@ export function DeezerPlaylistPicker({
                     "+ Importer"
                   )}
                 </button>
-              </li>
+              </VisibleRow>
             );
           })}
         </ul>

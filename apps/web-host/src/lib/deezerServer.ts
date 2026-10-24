@@ -9,6 +9,8 @@
  * (temporaire, elle expire) est redemandée au lancement de chaque manche.
  */
 
+import { unstable_cache } from "next/cache";
+
 const DEEZER_API = "https://api.deezer.com";
 
 export class DeezerApiError extends Error {
@@ -79,3 +81,45 @@ export function jsonError(e: unknown) {
   const message = e instanceof Error ? e.message : "Erreur Deezer.";
   return Response.json({ error: message }, { status });
 }
+
+/** Morceau jouable tel qu'envoyé au navigateur (même forme que la file d'attente). */
+export type PlayableTrack = {
+  sourceTrackId: string;
+  title: string;
+  artist: string;
+  durationMs: number;
+  albumImageUrl: string | null;
+};
+
+const MAX_TRACKS = 500;
+
+async function fetchPlayableTracks(id: string): Promise<PlayableTrack[]> {
+  const tracks: RawTrack[] = [];
+  let index = 0;
+  while (tracks.length < MAX_TRACKS) {
+    const page = await deezerGet<{ data?: RawTrack[]; next?: string }>(`/playlist/${id}/tracks?limit=100&index=${index}`);
+    const items = page.data ?? [];
+    tracks.push(...items);
+    if (!page.next || items.length === 0) break;
+    index += items.length;
+  }
+  return tracks
+    .filter((t) => t.readable !== false && !!t.preview)
+    .map((t) => ({
+      sourceTrackId: `deezer:${t.id}`,
+      title: t.title_short || t.title,
+      artist: t.artist?.name ?? "",
+      durationMs: 30_000,
+      albumImageUrl: t.album?.cover_medium ?? null,
+    }));
+}
+
+/**
+ * Morceaux JOUABLES d'une playlist (ceux qui ont un extrait ; certains n'en
+ * ont pas, souvent pour des raisons de droits selon le pays), mis en cache
+ * une heure côté serveur : le comptage affiché dans la liste des playlists
+ * et l'import qui suit ne refont pas les appels à Deezer. Seuls les
+ * identifiants/titres sont gardés en cache, jamais l'URL de l'extrait
+ * (règles Deezer, voir en tête de fichier).
+ */
+export const getPlayableTracks = unstable_cache(fetchPlayableTracks, ["deezer-playable-tracks"], { revalidate: 3600 });

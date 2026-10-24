@@ -42,8 +42,13 @@ export async function getDeezerPlaylistInfo(id: string): Promise<DeezerPlaylistS
   return (await getJson<{ playlist: DeezerPlaylistSummary }>(`/api/deezer/playlist/${id}?info=1`)).playlist;
 }
 
-export async function getDeezerPlaylistTracks(id: string): Promise<{ tracks: QueueTrack[]; skipped: number }> {
-  return getJson<{ tracks: QueueTrack[]; skipped: number }>(`/api/deezer/playlist/${id}`);
+export async function getDeezerPlaylistTracks(id: string): Promise<QueueTrack[]> {
+  return (await getJson<{ tracks: QueueTrack[] }>(`/api/deezer/playlist/${id}`)).tracks;
+}
+
+/** Nombre de morceaux jouables (avec extrait) d'une playlist. */
+export async function getDeezerPlayableCount(id: string): Promise<number> {
+  return (await getJson<{ playable: number }>(`/api/deezer/playlist/${id}?count=1`)).playable;
 }
 
 export async function getDeezerPreviewUrl(trackId: string): Promise<string> {

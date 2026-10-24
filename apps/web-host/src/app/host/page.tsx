@@ -2784,7 +2784,7 @@ function HostScreenInner() {
                 <label
                   htmlFor="target-score-inline"
                   title="Laisse vide pour jouer jusqu'à la fin de la playlist. Sinon, la partie se termine dès qu'un joueur atteint ce score."
-                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5"
+                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5 w-full sm:w-auto min-w-0"
                 >
                   <Target className="w-4 h-4 text-inkMuted shrink-0" />
                   <span className="text-inkMuted whitespace-nowrap">Score cible</span>
@@ -2804,14 +2804,14 @@ function HostScreenInner() {
                       setTargetScore(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Illimité"
-                    className="w-24 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                    className="flex-1 min-w-0 sm:flex-none sm:w-24 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold text-center appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                   <span className="text-inkMuted">pts</span>
                 </label>
                 <label
                   htmlFor="max-rounds-inline"
                   title="Laisse vide pour jouer toute la playlist. Sinon, la partie se termine dès que ce nombre de morceaux a été joué. Cumulable avec le score cible."
-                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5"
+                  className="flex items-center gap-2 bg-inkSurface3 rounded-xl px-4 py-2.5 w-full sm:w-auto min-w-0"
                 >
                   <Hash className="w-4 h-4 text-inkMuted shrink-0" />
                   <span className="text-inkMuted whitespace-nowrap">Morceaux max</span>
@@ -2831,7 +2831,7 @@ function HostScreenInner() {
                       setMaxRounds(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
                     }}
                     placeholder="Toute la playlist"
-                    className="w-40 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
+                    className="flex-1 min-w-0 sm:flex-none sm:w-40 bg-inkSurface border border-inkBorderStrong focus:border-fg outline-none transition rounded-lg px-2 py-1 text-fg font-bold appearance-none [-moz-appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0"
                   />
                 </label>
               </div>
@@ -3013,7 +3013,7 @@ function HostScreenInner() {
                   l'impression que la file d'attente "sortait" de la carte
                   au lieu d'en faire partie. Un simple liseré sauge à
                   gauche suffit à la signaler comme le panneau important. */}
-              <div className="relative flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4">
+              <div className="relative flex flex-col gap-3 bg-inkSurface3 border border-inkBorder rounded-2xl p-4 min-w-0">
                 <div className="flex justify-between items-center">
                   <h3 className="font-bold text-fg">
                     File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
@@ -3032,7 +3032,13 @@ function HostScreenInner() {
                     Aucun morceau pour l’instant — utilise un des onglets à gauche pour en ajouter.
                   </p>
                 ) : (
-                  <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1">
+                  // Mobile : hauteur bornée (max-h-72). Grand écran : la liste
+                  // occupe toute la hauteur libre du panneau (calée sur celle
+                  // de la colonne Deezer, via le conteneur relatif + ul
+                  // absolu qui n'impose pas sa propre hauteur à la grille),
+                  // et le bouton Démarrer reste collé en bas.
+                  <div className="lg:relative lg:flex-1 lg:min-h-[12rem]">
+                  <ul className="flex flex-col gap-2 max-h-72 overflow-y-auto pr-1 lg:max-h-none lg:absolute lg:inset-0">
                     {upcomingQueue.map((track, i) => (
                       <li
                         key={`${track.sourceTrackId}-${i}`}
@@ -3059,6 +3065,7 @@ function HostScreenInner() {
                       </li>
                     ))}
                   </ul>
+                  </div>
                 )}
 
                 {players.length === 0 && (
@@ -3069,15 +3076,15 @@ function HostScreenInner() {
                 <button
                   onClick={handlePlayNextInQueue}
                   disabled={upcomingQueue.length === 0 || players.length === 0 || launchingRound}
-                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1 border-2 border-fg shadow-sticker-sm"
+                  className="bg-sage text-ink hover:bg-sage/90 disabled:opacity-40 transition px-6 py-3 rounded-xl text-lg font-bold mt-1 lg:mt-auto border-2 border-fg shadow-sticker-sm"
                 >
                   <span className="inline-flex items-center justify-center gap-2">
                     {!launchingRound && <Play className="w-5 h-5" />}
                     {launchingRound
                       ? "Lancement…"
                       : queueIndex === 0
-                        ? `Démarrer la partie (${upcomingQueue.length} morceau(x))`
-                        : `Reprendre la partie (${upcomingQueue.length} restant(s))`}
+                        ? `Démarrer la partie · ${upcomingQueue.length} morceau${upcomingQueue.length > 1 ? "x" : ""}`
+                        : `Reprendre la partie · ${upcomingQueue.length} restant${upcomingQueue.length > 1 ? "s" : ""}`}
                   </span>
                 </button>
               </div>
