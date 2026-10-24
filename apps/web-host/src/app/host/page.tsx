@@ -440,7 +440,15 @@ function HostBuzzerView({
                 {equippedCosmetic.icon({ size: 140 })}
               </span>
             )}
-            <span className="relative">
+            {/* Skin à motif : le texte passe dans une étiquette blanche pour
+                rester lisible sur le dessin. */}
+            <span
+              className={`relative ${
+                (canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.art
+                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1 shadow-sticker-sm"
+                  : ""
+              }`}
+            >
             {alreadyBuzzed ? (
               iWon ? (
                 <span className="inline-flex flex-col items-center gap-1">

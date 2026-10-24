@@ -8,6 +8,10 @@ export type LeaderboardEntry = {
   pseudo: string;
   avatarUrl: string | null;
   xp: number;
+  // Avatar (migration 0031) ; absent tant que la migration n'est pas lancée.
+  avatarKey: string | null;
+  avatarColor: string | null;
+  avatarExtra: string | null;
 };
 
 type State = {
@@ -39,6 +43,9 @@ async function loadLeaderboard(accountId: string): Promise<LeaderboardEntry[]> {
     pseudo: row.pseudo as string,
     avatarUrl: (row.avatar_url as string | null) ?? null,
     xp: row.xp as number,
+    avatarKey: (row.avatar_key as string | null) ?? null,
+    avatarColor: (row.avatar_color as string | null) ?? null,
+    avatarExtra: (row.avatar_extra as string | null) ?? null,
   }));
 }
 

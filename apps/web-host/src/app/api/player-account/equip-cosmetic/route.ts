@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_PLAYER_SESSION, verifySessionCookieValue } from "../../../../lib/playerAuth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
-import { COSMETIC_BY_KEY } from "../../../../lib/cosmetics";
+import { COSMETIC_BY_KEY, isCosmeticUnlocked } from "../../../../lib/cosmetics";
 
 /**
  * Équipe un cosmétique de buzzer pour le compte joueur connecté (onglet
@@ -41,18 +41,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Cosmétique inconnu." }, { status: 400 });
   }
 
+  // Déblocage calculé à la volée (XP + badges), même règle que l'écran
+  // profil : voir isCosmeticUnlocked dans lib/cosmetics.tsx.
   if (def.unlock.type !== "always") {
-    const { data: unlockedRow, error: checkError } = await supabaseAdmin
-      .from("player_cosmetics")
-      .select("cosmetic_key")
-      .eq("account_id", accountId)
-      .eq("cosmetic_key", cosmeticKey)
-      .maybeSingle();
-    if (checkError) {
-      return NextResponse.json({ ok: false, error: checkError.message }, { status: 500 });
+    const [{ data: acc, error: accError }, { data: badgeRows, error: badgeError }] = await Promise.all([
+      supabaseAdmin.from("player_accounts").select("xp").eq("id", accountId).maybeSingle(),
+      supabaseAdmin.from("player_badge_progress").select("badge_key, tier").eq("account_id", accountId),
+    ]);
+    if (accError || badgeError) {
+      return NextResponse.json({ ok: false, error: (accError ?? badgeError)!.message }, { status: 500 });
     }
-    if (!unlockedRow) {
-      return NextResponse.json({ ok: false, error: "Ce cosmétique n'est pas encore débloqué." }, { status: 403 });
+    const badges = Object.fromEntries((badgeRows ?? []).map((r: any) => [r.badge_key, { tier: r.tier }]));
+    if (!isCosmeticUnlocked(def, { xp: acc?.xp ?? 0, badges })) {
+      return NextResponse.json({ ok: false, error: "Ce skin n'est pas encore débloqué." }, { status: 403 });
     }
   }
 
