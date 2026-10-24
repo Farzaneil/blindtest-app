@@ -56,6 +56,7 @@ import { BADGE_BY_KEY } from "../../lib/badges";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY } from "../../lib/cosmetics";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
+import { PlayerAvatar, avatarForPlayer } from "../../lib/avatars";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 
 type Session = { roomId: string; playerId: string };
@@ -274,7 +275,8 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
         code.trim(),
         effectiveName.trim(),
         account?.id,
-        needsTeam ? selectedTeam?.id : null
+        needsTeam ? selectedTeam?.id : null,
+        account?.avatarKey ? { key: account.avatarKey, color: account.avatarColor, extra: account.avatarExtra } : null
       );
       onJoined({ roomId: room.id, playerId: player.id });
     } catch (e: any) {
@@ -861,7 +863,7 @@ function BuzzerView({
               <p className="text-2xl font-bold text-fg text-center font-display">Partie terminée !</p>
             </>
           }
-          podium={podiumFrom(ranked, (p) => ({ id: p.id, name: p.display_name, score: p.score }))}
+          podium={podiumFrom(ranked, (p) => ({ id: p.id, name: p.display_name, score: p.score, avatar: avatarForPlayer(p) }))}
           headline={
             meRanked && (
               <p
@@ -972,7 +974,8 @@ function BuzzerView({
       )}
       {!answerRevealed && !myTeam && (
         <div className="relative w-full flex justify-between items-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-5 py-3 shadow-sticker">
-          <span className="font-bold truncate flex items-center gap-1.5">
+          <span className="font-bold truncate flex items-center gap-2">
+            {me && <PlayerAvatar player={me} size={34} />}
             {me?.display_name ?? "…"}
             {/* Malus buzzer en cours (voir lib/buzzLockout.ts) : purement
                 informatif, l'application réelle se fait côté serveur. */}

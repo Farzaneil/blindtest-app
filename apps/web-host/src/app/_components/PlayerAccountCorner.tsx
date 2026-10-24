@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { UserCircle2 } from "lucide-react";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
+import { PlayerAvatar } from "../../lib/avatars";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
 
 /**
@@ -71,17 +72,13 @@ export function PlayerAccountCorner() {
   return (
     <div
       title="Ton compte joueur (stats, badges, classement) — indépendant de la connexion Spotify de l'hôte pour la musique."
-      className="fixed top-4 right-4 z-20 flex items-center gap-2 bg-inkSurface2 border border-inkBorder rounded-full pl-1.5 pr-3 py-1.5"
+      className="fixed top-4 right-4 z-20 flex items-center gap-2 bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-full pl-1 pr-3 py-1"
     >
       <Link href="/profil" className="flex items-center gap-2 min-w-0">
-        <div className="w-5 h-5 rounded-full bg-inkSurface3 overflow-hidden flex items-center justify-center text-[10px] font-black text-fg shrink-0">
-          {account.avatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={account.avatarUrl} alt="" className="w-full h-full object-cover" />
-          ) : (
-            account.pseudo.charAt(0).toUpperCase()
-          )}
-        </div>
+        <PlayerAvatar
+          player={{ display_name: account.pseudo, avatar_key: account.avatarKey, avatar_color: account.avatarColor, avatar_extra: account.avatarExtra }}
+          size={26}
+        />
         <span className="text-xs font-semibold text-fg truncate max-w-[8rem] hover:underline">{account.pseudo}</span>
       </Link>
       <button

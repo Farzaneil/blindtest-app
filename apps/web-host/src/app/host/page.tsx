@@ -72,6 +72,7 @@ import { confirmDialog } from "../_components/ConfirmDialog";
 import { DeezerPlaylistPicker } from "../_components/DeezerPlaylistPicker";
 import { getDeezerPreviewUrl, isDeezerTrackId } from "../../lib/deezer";
 import { usePreviewPlayer } from "../../lib/usePreviewPlayer";
+import { PlayerAvatar, avatarForPlayer } from "../../lib/avatars";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
@@ -1432,7 +1433,14 @@ function HostScreenInner() {
     if (!room) return;
     setJoiningAsHost(true);
     try {
-      const player = await joinRoomAsHost(room.id, name.trim() || "Hôte", hostPlayerAccount?.id ?? null);
+      const player = await joinRoomAsHost(
+        room.id,
+        name.trim() || "Hôte",
+        hostPlayerAccount?.id ?? null,
+        hostPlayerAccount?.avatarKey
+          ? { key: hostPlayerAccount.avatarKey, color: hostPlayerAccount.avatarColor, extra: hostPlayerAccount.avatarExtra }
+          : null
+      );
       setHostPlayerId(player.id);
       setJoinHostFormOpen(false);
       setHostJoinError(null);
@@ -2016,9 +2024,10 @@ function HostScreenInner() {
                 {players.map((p) => (
                   <li
                     key={p.id}
-                    className="bg-inkSurface2 border border-inkBorder rounded-lg px-2.5 py-1 text-xs text-fg truncate max-w-[160px]"
+                    className="inline-flex items-center gap-1.5 bg-inkSurface border-2 border-fg rounded-full pl-0.5 pr-3 py-0.5 text-sm font-bold text-fg max-w-[180px]"
                   >
-                    {p.display_name}
+                    <PlayerAvatar player={p} size={26} />
+                    <span className="truncate">{p.display_name}</span>
                   </li>
                 ))}
               </ul>
@@ -2159,6 +2168,11 @@ function HostScreenInner() {
                 <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
               </span>
             )}
+            {winner && (
+              <span key={winner.id} className="block -rotate-6 drop-shadow-[6px_6px_0_#111111] animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]">
+                <PlayerAvatar player={winner} size={120} animate />
+              </span>
+            )}
             <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
             </p>
@@ -2204,6 +2218,11 @@ function HostScreenInner() {
             {round.is_joker && (
               <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
                 <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              </span>
+            )}
+            {winner && (
+              <span key={winner.id} className="block -rotate-6 drop-shadow-[6px_6px_0_#111111] animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]">
+                <PlayerAvatar player={winner} size={120} animate />
               </span>
             )}
             <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
@@ -2557,7 +2576,7 @@ function HostScreenInner() {
               podium={
                 teamMode
                   ? podiumFrom(teamStandings, (st) => ({ id: st.team.id, name: st.team.name, score: st.score, color: teamColor(st.team) }))
-                  : podiumFrom(rankedPlayers, (p) => ({ id: p.id, name: p.display_name, score: p.score }))
+                  : podiumFrom(rankedPlayers, (p) => ({ id: p.id, name: p.display_name, score: p.score, avatar: avatarForPlayer(p) }))
               }
             >
               {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,

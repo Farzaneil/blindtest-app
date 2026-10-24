@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
   const { data: account } = await supabaseAdmin
     .from("player_accounts")
-    .select("pseudo")
+    .select("pseudo, avatar_key, avatar_color, avatar_extra")
     .eq("id", accountId)
     .maybeSingle();
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
   if (pseudo) {
     const { error } = await supabaseAdmin
       .from("players")
-      .update({ account_id: accountId, display_name: pseudo })
+      .update({ account_id: accountId, display_name: pseudo, avatar_key: account?.avatar_key ?? null, avatar_color: account?.avatar_color ?? null, avatar_extra: account?.avatar_extra ?? null })
       .eq("id", playerId);
     if (!error) return NextResponse.json({ ok: true, renamed: true });
     if (error.code !== "23505") {
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Pseudo déjà pris par un autre joueur : on rattache quand même le compte.
-  const { error } = await supabaseAdmin.from("players").update({ account_id: accountId }).eq("id", playerId);
+  const { error } = await supabaseAdmin.from("players").update({ account_id: accountId, avatar_key: account?.avatar_key ?? null, avatar_color: account?.avatar_color ?? null, avatar_extra: account?.avatar_extra ?? null }).eq("id", playerId);
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true, renamed: false });
 }

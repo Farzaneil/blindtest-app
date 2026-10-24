@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   const { data } = await supabase
     .from("player_accounts")
-    .select("id, pseudo, avatar_url, xp")
+    .select("id, pseudo, avatar_url, avatar_key, avatar_color, avatar_extra, xp")
     .eq("id", accountId)
     .maybeSingle();
 
@@ -30,6 +30,14 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     connected: true,
-    account: { id: data.id, pseudo: data.pseudo, avatarUrl: data.avatar_url, xp: data.xp },
+    account: {
+      id: data.id,
+      pseudo: data.pseudo,
+      avatarUrl: data.avatar_url,
+      avatarKey: data.avatar_key ?? null,
+      avatarColor: data.avatar_color ?? null,
+      avatarExtra: data.avatar_extra ?? null,
+      xp: data.xp,
+    },
   });
 }

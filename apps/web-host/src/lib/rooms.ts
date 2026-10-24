@@ -41,6 +41,11 @@ export type Player = {
   // et lib/usePlayerAccount.ts) ; null pour un joueur invité, comportement
   // inchangé sinon.
   account_id: string | null;
+  // Avatar recopié depuis le compte en rejoignant (migration 0030) ; null
+  // pour un invité (avatar tiré de son pseudo, voir lib/avatars.tsx).
+  avatar_key?: string | null;
+  avatar_color?: string | null;
+  avatar_extra?: string | null;
   // Équipe du joueur en mode équipes (voir migration 0025) ; null en solo
   // ou tant que le joueur n'a pas été placé.
   team_id: string | null;
@@ -766,7 +771,8 @@ export async function getPlayerSession(
 export async function joinRoomAsHost(
   roomId: string,
   displayName: string,
-  accountId?: string | null
+  accountId?: string | null,
+  avatar?: { key: string; color: string | null; extra?: string | null } | null
 ): Promise<Player> {
   // Mêmes règles que joinRoomByCode (bug remonté : l'hôte pouvait s'ajouter
   // avec un pseudo déjà pris, et donc apparaître deux fois) : un compte déjà
@@ -788,6 +794,7 @@ export async function joinRoomAsHost(
       device_id: webDeviceId,
       is_host: true,
       ...(accountId ? { account_id: accountId } : {}),
+      ...(avatar ? { avatar_key: avatar.key, avatar_color: avatar.color, avatar_extra: avatar.extra ?? null } : {}),
     })
     .select()
     .single();
@@ -914,7 +921,9 @@ export async function joinRoomByCode(
   accountId?: string | null,
   // Mode équipes : équipe choisie sur l'écran "Rejoindre" (team_id fait
   // partie des colonnes accordées en insert, voir 0004_rls_hardening.sql).
-  teamId?: string | null
+  teamId?: string | null,
+  // Avatar du compte (voir lib/avatars.tsx), recopié sur la ligne joueur.
+  avatar?: { key: string; color: string | null; extra?: string | null } | null
 ) {
   const { data: room, error: roomError } = await supabase
     .from("rooms")
@@ -958,6 +967,7 @@ export async function joinRoomByCode(
       display_name: displayName,
       device_id: webDeviceId,
       ...(accountId ? { account_id: accountId } : {}),
+      ...(avatar ? { avatar_key: avatar.key, avatar_color: avatar.color, avatar_extra: avatar.extra ?? null } : {}),
       ...(teamId ? { team_id: teamId } : {}),
     })
     .select()

@@ -6,6 +6,10 @@ export type PlayerAccount = {
   id: string;
   pseudo: string;
   avatarUrl: string | null;
+  // Avatar "La Bande-Son" choisi (voir lib/avatars.tsx) ; null = pas encore choisi.
+  avatarKey: string | null;
+  avatarColor: string | null;
+  avatarExtra: string | null;
   xp: number;
 };
 

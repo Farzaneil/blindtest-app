@@ -160,3 +160,27 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Effet "Animé" des avatars (voir lib/avatarExtras.ts, ANIMATION_CLASS). */
+.avatar-anim-bop { animation: avatarBop 1.4s ease-in-out infinite; }
+.avatar-anim-spin { animation: avatarSpin 2.6s linear infinite; }
+.avatar-anim-hop { animation: avatarHop 0.9s cubic-bezier(0.3, 1.5, 0.5, 1) infinite; }
+.avatar-anim-pulse { animation: avatarPulse 0.55s ease-in-out infinite alternate; }
+.avatar-anim-shake { animation: avatarShake 0.45s ease-in-out infinite; }
+@keyframes avatarBop {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-5px) rotate(-6deg); }
+  75% { transform: translateY(-2px) rotate(6deg); }
+}
+@keyframes avatarSpin { to { transform: rotate(360deg); } }
+@keyframes avatarHop {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  40% { transform: translateY(-9px) scale(0.96, 1.05); }
+  70% { transform: translateY(0) scale(1.05, 0.95); }
+}
+@keyframes avatarPulse { from { transform: scale(1); } to { transform: scale(1.08); } }
+@keyframes avatarShake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-12deg); }
+  75% { transform: rotate(12deg); }
+}

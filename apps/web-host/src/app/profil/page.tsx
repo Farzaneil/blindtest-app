@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { ThemePicker } from "../_components/ThemePicker";
+import { PlayerAvatar } from "../../lib/avatars";
+import { AvatarPicker } from "../_components/AvatarPicker";
 import { usePlayerProfileData } from "../../lib/usePlayerProfileData";
 import { usePlayerBadges } from "../../lib/usePlayerBadges";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
@@ -116,19 +118,19 @@ export default function ProfilPage() {
       </div>
 
       <ThemePicker className="w-full max-w-3xl" />
+      <AvatarPicker className="w-full max-w-3xl" />
 
       <div className="relative w-full max-w-3xl bg-inkSurface border-[3px] border-fg rounded-2xl p-7 flex flex-col gap-6 shadow-sticker">
 
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-4 min-w-0">
-            <div className="w-14 h-14 rounded-full bg-inkSurface3 border border-inkBorder overflow-hidden flex items-center justify-center font-display font-black text-xl text-fg shrink-0">
-              {account.avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={account.avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                account.pseudo.charAt(0).toUpperCase()
-              )}
-            </div>
+            <span className="block -rotate-6 drop-shadow-[4px_4px_0_#111111]">
+              <PlayerAvatar
+                player={{ display_name: account.pseudo, avatar_key: account.avatarKey, avatar_color: account.avatarColor, avatar_extra: account.avatarExtra }}
+                size={64}
+                animate
+              />
+            </span>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="font-display font-bold text-lg truncate text-fg">{account.pseudo}</p>

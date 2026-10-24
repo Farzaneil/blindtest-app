@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type 
 import { ArrowDown, ArrowUp, Crown, Drum } from "lucide-react";
 import type { Player, Round, RoundAttempt } from "../../lib/rooms";
 import { podiumRowClasses, withRanks, type RankedPlayer } from "../../lib/ranking";
+import { Avatar, PlayerAvatar } from "../../lib/avatars";
 
 /**
  * Animations "spectacle" des scores (direction Arcade) :
@@ -245,6 +246,7 @@ export function AnimatedScoreboard({
               )}
               <span className={`flex items-center gap-2 min-w-0 ${text}`}>
                 <span className={`font-display shrink-0 text-center ${host ? "w-7" : "w-5 text-sm"}`}>{p.rank}</span>
+                <PlayerAvatar player={p} size={host ? 40 : 28} />
                 <span className="truncate font-bold">{p.display_name}</span>
                 {renderExtra?.(p)}
                 {animating && realDelta !== 0 && (
@@ -382,6 +384,8 @@ export type PodiumEntry = {
   rank: 1 | 2 | 3;
   /** Pastille de couleur (équipe). */
   color?: string;
+  /** Avatar du joueur (podium individuel). */
+  avatar?: { key: string; color: string; extra?: string | null };
 };
 
 type CeremonyStep = "drumroll" | "third" | "second" | "first" | "details";
@@ -511,6 +515,17 @@ function Podium({
               {r === 1 && shown && (
                 <span className="w-10 h-10 rounded-full bg-gold border-[3px] border-fg shadow-sticker-sm flex items-center justify-center -rotate-12 animate-[crownDrop_0.7s_cubic-bezier(0.3,1.6,0.5,1)_0.6s_both]">
                   <Crown className="w-5 h-5" strokeWidth={2.5} />
+                </span>
+              )}
+              {group.some((e) => e.avatar) && (
+                <span className="flex -space-x-3">
+                  {group.map((e) =>
+                    e.avatar ? (
+                      <span key={e.id} className="block drop-shadow-[3px_3px_0_#111111]">
+                        <Avatar avatarKey={e.avatar.key} color={e.avatar.color} extra={e.avatar.extra} animate size={compact ? (r === 1 ? 52 : 42) : r === 1 ? 84 : 66} />
+                      </span>
+                    ) : null
+                  )}
                 </span>
               )}
               {group.map((e) => (
