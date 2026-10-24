@@ -163,6 +163,11 @@ export default function ProfilPage() {
               } catch (e) {
                 console.error("[profil] déconnexion échouée", e);
               }
+              // Bug remonté : sans ce rafraîchissement, le compte restait
+              // affiché après la redirection (état partagé côté navigateur,
+              // voir usePlayerAccount) — on avait l'impression de ne pas
+              // être déconnecté.
+              await refreshAccount();
               router.push("/");
             }}
             className="text-xs text-inkMuted hover:text-fg underline transition whitespace-nowrap shrink-0 mt-1"

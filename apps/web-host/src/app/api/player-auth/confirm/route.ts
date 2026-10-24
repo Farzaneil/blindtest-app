@@ -4,8 +4,8 @@ import {
   createSessionCookieValue,
   verifySessionCookieValue,
 } from "../../../../lib/playerAuth";
-import { COOKIE_MAGIC_VERIFIER, normalizeEmail, requestOrigin, pseudoFromEmail, safeNext, supabaseAuthClient } from "../../../../lib/playerEmailAuth";
-import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
+import { COOKIE_MAGIC_VERIFIER, normalizeEmail, requestOrigin, safeNext, supabaseAuthClient } from "../../../../lib/playerEmailAuth";
+import { SESSION_COOKIE_OPTIONS, findOrCreateAccountForEmail } from "../../../../lib/playerEmailAccount";
 
 /**
  * Retour du lien magique : /api/player-auth/confirm?code=…&next=… (modèle
@@ -55,53 +55,15 @@ export async function GET(request: NextRequest) {
   if (error || !email) return fail("Lien expiré ou déjà utilisé — redemande un lien.");
 
   try {
-    let accountId: string | null = null;
-
-    const { data: byEmail, error: byEmailError } = await supabaseAdmin
-      .from("player_accounts")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-    if (byEmailError) throw new Error(`Lecture des comptes impossible (migration 0029 appliquée ?) : ${byEmailError.message}`);
-    if (byEmail) {
-      accountId = byEmail.id;
-      if (authUserId) await supabaseAdmin.from("player_accounts").update({ auth_user_id: authUserId }).eq("id", byEmail.id);
-    }
-
-    if (!accountId) {
-      const currentId = verifySessionCookieValue(request.cookies.get(COOKIE_PLAYER_SESSION)?.value);
-      if (currentId) {
-        const { data: current } = await supabaseAdmin
-          .from("player_accounts")
-          .select("id, email")
-          .eq("id", currentId)
-          .maybeSingle();
-        if (current && !current.email) {
-          const { error: linkError } = await supabaseAdmin.from("player_accounts").update({ email, auth_user_id: authUserId }).eq("id", current.id);
-          if (!linkError) accountId = current.id;
-        }
-      }
-    }
-
-    if (!accountId) {
-      const { data: created, error: createError } = await supabaseAdmin
-        .from("player_accounts")
-        .insert({ pseudo: pseudoFromEmail(email), email, auth_user_id: authUserId })
-        .select("id")
-        .single();
-      if (createError || !created) throw new Error(`Création du compte impossible : ${createError?.message ?? "réponse vide"}`);
-      accountId = created.id;
-    }
+    const accountId = await findOrCreateAccountForEmail(
+      email,
+      authUserId,
+      verifySessionCookieValue(request.cookies.get(COOKIE_PLAYER_SESSION)?.value)
+    );
 
     const response = NextResponse.redirect(`${origin}${next}${next.includes("?") ? "&" : "?"}player_connected=1`);
     response.cookies.delete(COOKIE_MAGIC_VERIFIER);
-    response.cookies.set(COOKIE_PLAYER_SESSION, createSessionCookieValue(accountId!), {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-    });
+    response.cookies.set(COOKIE_PLAYER_SESSION, createSessionCookieValue(accountId), SESSION_COOKIE_OPTIONS);
     return response;
   } catch (e: any) {
     console.error("[player-auth/confirm]", e);

@@ -93,7 +93,7 @@ export function PlayerAccountCorner() {
           } catch (e) {
             console.error("[PlayerAccountCorner] déconnexion échouée", e);
           }
-          refresh();
+          await refresh();
         }}
         className="text-[11px] text-inkMuted hover:text-danger underline transition"
       >

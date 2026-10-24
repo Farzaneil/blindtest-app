@@ -41,6 +41,31 @@ function ConnexionForm() {
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(urlError);
+  const [code, setCode] = useState("");
+  const [checkingCode, setCheckingCode] = useState(false);
+
+  // Code à 6 chiffres reçu dans l'e-mail (voir api/player-auth/verify-code) :
+  // alternative au lien, utile quand on lit ses e-mails sur un autre appareil.
+  const verifyCode = async () => {
+    if (!sentTo) return;
+    setCheckingCode(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/player-auth/verify-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: sentTo, code }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Code incorrect.");
+      // Rechargement complet : le compte (état partagé, voir usePlayerAccount)
+      // est relu proprement sur la page de destination.
+      window.location.href = `${next}${next.includes("?") ? "&" : "?"}player_connected=1`;
+    } catch (e: any) {
+      setError(e?.message ?? "Code incorrect.");
+      setCheckingCode(false);
+    }
+  };
 
   const send = async () => {
     setSending(true);
@@ -84,9 +109,35 @@ function ConnexionForm() {
             </span>
             <p className="font-display text-lg">Regarde tes e-mails !</p>
             <p className="text-sm text-inkMuted">
-              Un lien de connexion a été envoyé à <span className="font-bold text-fg">{sentTo}</span>. Ouvre-le
-              <span className="font-bold text-fg"> sur cet appareil</span> pour te connecter ici.
+              On a envoyé un e-mail à <span className="font-bold text-fg">{sentTo}</span>. Clique sur le lien
+              <span className="font-bold text-fg"> sur cet appareil</span>, ou tape le code reçu :
             </p>
+            <form
+              className="w-full flex gap-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                verifyCode();
+              }}
+            >
+              <label className="flex-1 min-w-0">
+                <span className="sr-only">Code reçu par e-mail</span>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  className="w-full bg-inkSurface border-2 border-fg rounded-xl px-3 py-3 text-center font-display text-2xl tracking-[0.3em] outline-none"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={checkingCode || code.length < 6}
+                className="bg-sage border-[3px] border-fg shadow-sticker-sm rounded-xl px-4 font-display disabled:opacity-40"
+              >
+                {checkingCode ? "…" : "OK"}
+              </button>
+            </form>
             <p className="text-xs text-inkMuted">Rien reçu ? Regarde dans les spams, ou</p>
             <button
               type="button"

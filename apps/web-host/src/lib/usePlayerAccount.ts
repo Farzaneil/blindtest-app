@@ -48,7 +48,7 @@ function setSnapshot(next: Snapshot) {
 
 function fetchAccount(): Promise<void> {
   if (inFlightFetch) return inFlightFetch;
-  inFlightFetch = fetch("/api/player-auth/me")
+  inFlightFetch = fetch("/api/player-auth/me", { cache: "no-store" })
     .then((r) => r.json())
     .then((data) => setSnapshot({ account: data.connected ? data.account : null, loading: false }))
     .catch(() => setSnapshot({ account: null, loading: false }))
@@ -86,9 +86,7 @@ export function usePlayerAccount() {
   // Forcé (ConnexionPage après retour de callback OAuth, PlayerAccountCorner
   // après déconnexion) : relance toujours une requête fraîche, même si une
   // précédente a déjà abouti — voir le commentaire au-dessus du store.
-  const refresh = useCallback(() => {
-    fetchAccount();
-  }, []);
+  const refresh = useCallback(() => fetchAccount(), []);
 
   return { account, loading, refresh };
 }

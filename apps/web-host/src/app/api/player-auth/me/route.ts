@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const accountId = verifySessionCookieValue(request.cookies.get(COOKIE_PLAYER_SESSION)?.value);
 
   if (!accountId) {
-    return NextResponse.json({ connected: false });
+    return NextResponse.json({ connected: false }, { headers: { "Cache-Control": "no-store" } });
   }
 
   const { data } = await supabase
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
 
   if (!data) {
-    return NextResponse.json({ connected: false });
+    return NextResponse.json({ connected: false }, { headers: { "Cache-Control": "no-store" } });
   }
 
   return NextResponse.json({
@@ -39,5 +39,5 @@ export async function GET(request: NextRequest) {
       avatarExtra: data.avatar_extra ?? null,
       xp: data.xp,
     },
-  });
+  }, { headers: { "Cache-Control": "no-store" } });
 }
