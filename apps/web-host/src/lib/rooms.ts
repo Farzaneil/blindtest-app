@@ -727,6 +727,9 @@ export type PlayerRound = {
   // voir resolve_buzz_winner).
   order_index: number;
   started_at: string | null;
+  // Temps déjà joué avant la reprise en cours (migration 0009) : sert au
+  // compte à rebours affiché côté joueur, calculé comme côté hôte.
+  elapsed_seconds: number;
 };
 
 function generateWebDeviceId(): string {
@@ -989,7 +992,7 @@ export function subscribeToCurrentRoundForPlayer(
     const { data } = await supabase
       .from("rounds")
       .select(
-        "id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist, blind_mode, is_joker, order_index, started_at"
+        "id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist, blind_mode, is_joker, order_index, started_at, elapsed_seconds"
       )
       .eq("room_id", roomId)
       .order("order_index", { ascending: false })

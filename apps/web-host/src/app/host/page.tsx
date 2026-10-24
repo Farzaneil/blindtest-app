@@ -443,16 +443,16 @@ function HostBuzzerView({
             {/* Skin à motif : le texte passe dans une étiquette blanche pour
                 rester lisible sur le dessin. */}
             <span
-              className={`relative ${
+              className={`relative inline-flex items-center justify-center ${
                 (canBuzz || (alreadyBuzzed && iWon)) && equippedCosmetic.art
-                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1 shadow-sticker-sm"
+                  ? "bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-4 py-1.5 shadow-sticker-sm"
                   : ""
               }`}
             >
             {alreadyBuzzed ? (
               iWon ? (
-                <span className="inline-flex flex-col items-center gap-1">
-                  <CheckCircle2 className="w-9 h-9" />
+                <span className="inline-flex items-center gap-2 text-3xl">
+                  <CheckCircle2 className="w-7 h-7 shrink-0" strokeWidth={2.75} />
                   BUZZÉ !
                 </span>
               ) : (
