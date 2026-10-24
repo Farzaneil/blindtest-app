@@ -153,7 +153,7 @@ export default function ProfilPage() {
               aria-label="Changer d’avatar"
               className="relative shrink-0 transition-transform hover:-translate-y-0.5 hover:-rotate-2"
             >
-              <span className="block -rotate-6 drop-shadow-[4px_4px_0_#111111]">
+              <span className="block p-5 -m-5 -rotate-6 drop-shadow-[4px_4px_0_#111111]">
                 <PlayerAvatar
                   player={{
                     display_name: account.pseudo,
@@ -854,7 +854,7 @@ function ClassementPanel({ accountId }: { accountId: string }) {
           const me = e.accountId === accountId;
           return (
             <div key={e.accountId} className="flex flex-col items-center gap-1 w-[100px]">
-              <span className="block drop-shadow-[3px_3px_0_#111111]" style={{ transform: `rotate(${rank === 1 ? 0 : rank === 2 ? -4 : 4}deg)` }}>
+              <span className="block p-5 -m-5 drop-shadow-[3px_3px_0_#111111]" style={{ transform: `rotate(${rank === 1 ? 0 : rank === 2 ? -4 : 4}deg)` }}>
                 <PlayerAvatar player={avatarOf(e)} size={rank === 1 ? 62 : 50} animate={rank === 1} />
               </span>
               <span className="font-display text-sm truncate max-w-full">

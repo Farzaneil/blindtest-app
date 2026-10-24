@@ -521,7 +521,7 @@ function Podium({
                 <span className="flex -space-x-3">
                   {group.map((e) =>
                     e.avatar ? (
-                      <span key={e.id} className="block drop-shadow-[3px_3px_0_#111111]">
+                      <span key={e.id} className="block p-5 -m-5 drop-shadow-[3px_3px_0_#111111]">
                         <Avatar avatarKey={e.avatar.key} color={e.avatar.color} extra={e.avatar.extra} animate size={compact ? (r === 1 ? 52 : 42) : r === 1 ? 84 : 66} />
                       </span>
                     ) : null

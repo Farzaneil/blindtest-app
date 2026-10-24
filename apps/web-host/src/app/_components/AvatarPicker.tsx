@@ -61,7 +61,7 @@ export function AvatarPicker({ className = "" }: { className?: string }) {
   return (
     <section className={`bg-inkSurface border-[3px] border-fg rounded-2xl shadow-sticker p-5 flex flex-col gap-4 ${className}`}>
       <div className="flex items-center gap-4">
-        <span className="block -rotate-6 drop-shadow-[5px_5px_0_#111111]">
+        <span className="block p-5 -m-5 -rotate-6 drop-shadow-[5px_5px_0_#111111]">
           <Avatar avatarKey={chosen.key} color={chosen.color} extra={chosen.extra} animate size={88} title={def ? `${def.name}, ${def.what}` : undefined} />
         </span>
         <div className="min-w-0">

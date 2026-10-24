@@ -471,7 +471,7 @@ function HostBuzzerView({
             </span>
           </button>
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-fg" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center text-fg`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -480,7 +480,7 @@ function HostBuzzerView({
             </p>
           )}
           {!alreadyBuzzed && fullyBlocked && (
-            <p className="text-sm text-danger text-center">
+            <p className="text-sm font-bold text-fg text-center">
               Ton buzzer est bloqué ce tour-ci — trop de premières réponses ratées d’affilée.
             </p>
           )}
@@ -547,6 +547,36 @@ async function getFreshSpotifyAccessToken(fallback: string | null): Promise<stri
 // Formatage lisible du temps restant avant la fin du coupe-circuit quota
 // Spotify (voir playlistsQuotaCooldownSeconds) — en heures + minutes plutôt
 // qu'en secondes brutes, ce délai se comptant potentiellement en heures.
+/**
+ * Avatar du premier buzzeur (vue admin). L'effet "tampon" ne se joue qu'une
+ * fois par manche et par joueur : sans ça, il se rejouait à chaque retour
+ * sur la vue admin ou à chaque nouveau rendu. Set au niveau du module pour
+ * survivre aux démontages (passage vue joueur ↔ vue admin).
+ * La marge intérieure compensée (p-6 -m-6) agrandit la boîte du filtre
+ * drop-shadow, qui rognait le haut des chapeaux/couronnes.
+ */
+const stampedWinners = new Set<string>();
+
+function WinnerStamp({ stampKey, player }: { stampKey: string; player: Parameters<typeof PlayerAvatar>[0]["player"] }) {
+  const [playStamp] = useState(() => !stampedWinners.has(stampKey));
+  useEffect(() => {
+    stampedWinners.add(stampKey);
+  }, [stampKey]);
+  return (
+    <span
+      className={`block p-6 -m-6 drop-shadow-[6px_6px_0_#111111] ${
+        playStamp ? "animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]" : ""
+      }`}
+    >
+      {/* Inclinaison sur un span intérieur : la fin de l'animation (transform)
+          l'écraserait sinon. */}
+      <span className="block -rotate-6">
+        <PlayerAvatar player={player} size={120} animate />
+      </span>
+    </span>
+  );
+}
+
 function formatCooldownDuration(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.max(1, Math.ceil((totalSeconds % 3600) / 60));
@@ -2180,9 +2210,7 @@ function HostScreenInner() {
               </span>
             )}
             {winner && (
-              <span key={winner.id} className="block -rotate-6 drop-shadow-[6px_6px_0_#111111] animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]">
-                <PlayerAvatar player={winner} size={120} animate />
-              </span>
+              <WinnerStamp key={winner.id} stampKey={`${round.id}:${winner.id}`} player={winner} />
             )}
             <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !
@@ -2232,9 +2260,7 @@ function HostScreenInner() {
               </span>
             )}
             {winner && (
-              <span key={winner.id} className="block -rotate-6 drop-shadow-[6px_6px_0_#111111] animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]">
-                <PlayerAvatar player={winner} size={120} animate />
-              </span>
+              <WinnerStamp key={winner.id} stampKey={`${round.id}:${winner.id}`} player={winner} />
             )}
             <p className="text-3xl font-bold text-fg flex items-center justify-center gap-2">
               <Bell className="w-7 h-7 text-fg" /> {winner?.display_name ?? "Un joueur"} a buzzé en premier !

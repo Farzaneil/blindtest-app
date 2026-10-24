@@ -1031,7 +1031,7 @@ function BuzzerView({
             </span>
           )}
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-fg" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center text-fg`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -1141,7 +1141,7 @@ function BuzzerView({
             </span>
           </button>
           {alreadyBuzzed && (
-            <p className={`text-xl font-bold text-center ${iWon ? "text-fg" : "text-danger"}`}>
+            <p className={`text-xl font-bold text-center text-fg`}>
               {iWon
                 ? "Tu as buzzé en premier !"
                 : round.buzzed_by_player_id === null
@@ -1150,7 +1150,7 @@ function BuzzerView({
             </p>
           )}
           {!alreadyBuzzed && fullyBlocked && (
-            <p className="text-sm text-danger text-center">
+            <p className="text-sm font-bold text-fg text-center">
               Ton buzzer est bloqué ce tour-ci — trop de premières réponses ratées d’affilée.
             </p>
           )}
