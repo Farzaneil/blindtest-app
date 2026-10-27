@@ -494,6 +494,13 @@ Les cookies sont en `secure: true` en production, détecté via `NODE_ENV`.
 - Repo sur un compte GitHub **personnel** : la config git est locale au repo, pas
   globale.
 - Une migration SQL doit être committée **et** exécutée à la main dans Supabase.
+- **Toute nouvelle table doit déclarer ses droits explicitement**, dans la migration qui la crée. Depuis le 30/10/2026, Supabase n'accorde plus automatiquement l'accès aux nouvelles tables du schéma `public` ; sans `grant`, l'API renvoie « permission denied ». Toujours activer la RLS, et n'accorder que le strict nécessaire, par exemple :
+  ```sql
+  alter table public.ma_table enable row level security;
+  grant select on public.ma_table to anon, authenticated;          -- lecture publique (+ policy)
+  grant select, insert, update, delete on public.ma_table to service_role; -- routes serveur
+  ```
+  Une table interne, lue uniquement par des fonctions `security definer` (comme `room_hosts` ou `rate_limits`), ne reçoit aucun `grant`.
 
 ## Roadmap
 
