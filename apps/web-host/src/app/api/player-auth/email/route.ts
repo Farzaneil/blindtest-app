@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp, rateLimitAll, tooManyRequests } from "../../../../lib/rateLimit";
 import { COOKIE_MAGIC_VERIFIER, isPlausibleEmail, normalizeEmail, requestOrigin, safeNext, supabaseAuthClient } from "../../../../lib/playerEmailAuth";
 
 /**
@@ -20,6 +21,13 @@ export async function POST(request: NextRequest) {
   if (!isPlausibleEmail(email)) {
     return NextResponse.json({ ok: false, error: "Adresse e-mail invalide." }, { status: 400 });
   }
+
+  // Anti-abus : au plus 5 e-mails par adresse et 10 par IP par quart d'heure.
+  const allowed = await rateLimitAll([
+    [`auth-email:ip:${clientIp(request)}`, 10, 15 * 60],
+    [`auth-email:to:${email}`, 5, 15 * 60],
+  ]);
+  if (!allowed) return tooManyRequests("Trop de demandes de lien pour le moment, réessaie dans quelques minutes.");
 
   const origin = requestOrigin(request);
   const redirectTo = `${origin}/api/player-auth/confirm?next=${encodeURIComponent(next)}`;

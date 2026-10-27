@@ -132,6 +132,50 @@ export type RoundAttempt = {
   remontada_bonus_awarded: boolean;
 };
 
+// ============================================================================
+// Jeton secret d'hôte (migration 0032). Renvoyé une seule fois par
+// create_room, gardé dans l'onglet hôte (sessionStorage, comme la partie
+// elle-même) et exigé par toutes les actions d'hôte : sans lui, un joueur
+// ne peut ni juger, ni lancer de manche, ni attribuer d'XP à la place de
+// l'hôte. Une partie dont l'onglet a perdu le jeton n'est plus pilotable :
+// l'écran hôte en crée alors une neuve (voir hasHostToken).
+// ============================================================================
+
+const HOST_TOKEN_STORAGE_KEY = "blindtest_host_token";
+let memoryHostToken: { roomId: string; token: string } | null = null;
+
+function storeHostToken(roomId: string, token: string) {
+  memoryHostToken = { roomId, token };
+  try {
+    window.sessionStorage.setItem(HOST_TOKEN_STORAGE_KEY, JSON.stringify(memoryHostToken));
+  } catch {
+    // Stockage indisponible : le jeton reste en mémoire pour cet onglet.
+  }
+}
+
+function readHostToken(): { roomId: string; token: string } | null {
+  if (memoryHostToken) return memoryHostToken;
+  try {
+    const raw = window.sessionStorage.getItem(HOST_TOKEN_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as { roomId?: string; token?: string }) : null;
+    if (parsed?.roomId && parsed.token) memoryHostToken = { roomId: parsed.roomId, token: parsed.token };
+  } catch {
+    // Illisible : pas de jeton.
+  }
+  return memoryHostToken;
+}
+
+/** Cet onglet a-t-il le jeton d'hôte de cette partie ? */
+export function hasHostToken(roomId: string): boolean {
+  return readHostToken()?.roomId === roomId;
+}
+
+function hostToken(): string {
+  const t = readHostToken();
+  if (!t) throw new Error("Cet onglet ne pilote plus cette partie : crée une nouvelle partie.");
+  return t.token;
+}
+
 /**
  * Crée une nouvelle partie et retourne son code + id. Réessaie avec un
  * nouveau code si celui généré existe déjà (collision très rare vu
@@ -140,13 +184,14 @@ export type RoundAttempt = {
 export async function createRoom(): Promise<Room> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateRoomCode();
-    const { data, error } = await supabase
-      .from("rooms")
-      .insert({ code, status: "lobby" })
-      .select()
-      .single();
+    // create_room (migration 0032) crée la partie ET son jeton secret d'hôte.
+    const { data, error } = await supabase.rpc("create_room", { p_code: code });
 
-    if (!error && data) return data as Room;
+    if (!error && data) {
+      const { room, host_token } = data as { room: Room; host_token: string };
+      storeHostToken(room.id, host_token);
+      return room;
+    }
     if (error && error.code !== "23505") throw error; // 23505 = violation de contrainte unique
   }
   throw new Error("Impossible de générer un code de partie unique après plusieurs tentatives.");
@@ -232,12 +277,16 @@ export async function updateRoomBonusMalusSettings(
     >
   >
 ): Promise<void> {
-  const { error } = await supabase.from("rooms").update(settings).eq("id", roomId);
+  const { error } = await supabase.rpc("update_room_settings", {
+    p_host_token: hostToken(),
+    p_room_id: roomId,
+    p_settings: settings,
+  });
   if (error) throw error;
 }
 
 export async function finishRoom(roomId: string): Promise<void> {
-  await supabase.from("rooms").update({ status: "finished" }).eq("id", roomId);
+  await supabase.rpc("set_room_status", { p_host_token: hostToken(), p_room_id: roomId, p_status: "finished" });
 }
 
 /**
@@ -247,7 +296,7 @@ export async function finishRoom(roomId: string): Promise<void> {
  * manche est sur le point d'être relancée.
  */
 export async function resumeRoom(roomId: string): Promise<void> {
-  await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
+  await supabase.rpc("set_room_status", { p_host_token: hostToken(), p_room_id: roomId, p_status: "in_progress" });
 }
 
 /**
@@ -265,7 +314,7 @@ export async function resumeRoom(roomId: string): Promise<void> {
  * `players` côté client depuis le durcissement RLS.
  */
 export async function resetRoomScores(roomId: string): Promise<void> {
-  const { error } = await supabase.rpc("reset_room_scores", { p_room_id: roomId });
+  const { error } = await supabase.rpc("reset_room_scores", { p_host_token: hostToken(), p_room_id: roomId });
   if (error) throw error;
 }
 
@@ -281,7 +330,7 @@ export async function resetRoomScores(roomId: string): Promise<void> {
  * échec ne doit jamais empêcher l'écran de fin de partie de s'afficher.
  */
 export async function awardGameRewards(roomId: string): Promise<void> {
-  const { error } = await supabase.rpc("award_game_rewards", { p_room_id: roomId });
+  const { error } = await supabase.rpc("award_game_rewards", { p_host_token: hostToken(), p_room_id: roomId });
   if (error) throw error;
 }
 
@@ -294,10 +343,11 @@ export async function awardGameRewards(roomId: string): Promise<void> {
  * quelconque (déconnexion, RLS, etc.).
  */
 export async function recordGenreUsed(roomId: string, genre: string): Promise<void> {
-  const { error } = await supabase.from("room_genres_used").upsert(
-    { room_id: roomId, genre },
-    { onConflict: "room_id,genre", ignoreDuplicates: true }
-  );
+  const { error } = await supabase.rpc("record_genre_used", {
+    p_host_token: hostToken(),
+    p_room_id: roomId,
+    p_genre: genre,
+  });
   if (error) throw error;
 }
 
@@ -308,10 +358,11 @@ export async function recordGenreUsed(roomId: string, genre: string): Promise<vo
  * app/host/page.tsx).
  */
 export async function recordPlaylistImport(roomId: string, playlistId: string): Promise<void> {
-  const { error } = await supabase.from("room_playlist_imports").upsert(
-    { room_id: roomId, playlist_id: playlistId },
-    { onConflict: "room_id,playlist_id", ignoreDuplicates: true }
-  );
+  const { error } = await supabase.rpc("record_playlist_import", {
+    p_host_token: hostToken(),
+    p_room_id: roomId,
+    p_playlist_id: playlistId,
+  });
   if (error) throw error;
 }
 
@@ -324,6 +375,7 @@ export async function recordPlaylistImport(roomId: string, playlistId: string): 
 /** 0 = repasser en solo ; 2 à 4 = mode équipes avec ce nombre d'équipes. */
 export async function configureRoomTeams(roomId: string, teamCount: 0 | 2 | 3 | 4): Promise<void> {
   const { error } = await supabase.rpc("configure_room_teams", {
+    p_host_token: hostToken(),
     p_room_id: roomId,
     p_team_count: teamCount,
   });
@@ -331,12 +383,13 @@ export async function configureRoomTeams(roomId: string, teamCount: 0 | 2 | 3 | 
 }
 
 export async function renameTeam(teamId: string, name: string): Promise<void> {
-  const { error } = await supabase.rpc("rename_team", { p_team_id: teamId, p_name: name });
+  const { error } = await supabase.rpc("rename_team", { p_host_token: hostToken(), p_team_id: teamId, p_name: name });
   if (error) throw error;
 }
 
 export async function setPlayerTeam(playerId: string, teamId: string | null): Promise<void> {
   const { error } = await supabase.rpc("set_player_team", {
+    p_host_token: hostToken(),
     p_player_id: playerId,
     p_team_id: teamId,
   });
@@ -344,7 +397,7 @@ export async function setPlayerTeam(playerId: string, teamId: string | null): Pr
 }
 
 export async function shuffleRoomTeams(roomId: string): Promise<void> {
-  const { error } = await supabase.rpc("shuffle_room_teams", { p_room_id: roomId });
+  const { error } = await supabase.rpc("shuffle_room_teams", { p_host_token: hostToken(), p_room_id: roomId });
   if (error) throw error;
 }
 
@@ -353,7 +406,7 @@ export async function shuffleRoomTeams(roomId: string): Promise<void> {
  * appelée par l'hôte au lancement de chaque manche (no-op en solo).
  */
 export async function assignUnassignedPlayers(roomId: string): Promise<void> {
-  const { error } = await supabase.rpc("assign_unassigned_players", { p_room_id: roomId });
+  const { error } = await supabase.rpc("assign_unassigned_players", { p_host_token: hostToken(), p_room_id: roomId });
   if (error) throw error;
 }
 
@@ -553,45 +606,28 @@ async function insertRound(
   blindMode: boolean,
   jokerEnabled: boolean
 ): Promise<Round> {
-  const { data: existing } = await supabase
-    .from("rounds")
-    .select("order_index")
-    .eq("room_id", roomId)
-    .order("order_index", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const nextIndex = (existing?.order_index ?? -1) + 1;
-
-  // Manche joker (voir migration 0017) : tirée au hasard ici plutôt que
-  // côté serveur — purement cosmétique/ludique, aucune conséquence de
-  // sécurité à avoir ça décidé côté client, comme le mélange de playlist
-  // ou la génération par genre juste au-dessus dans ce fichier. Si le
-  // bonus est désactivé dans les réglages de la room, on ne tire même pas
-  // au hasard : is_joker restera toujours false.
+  // Manche joker (voir migration 0017) : tirée au hasard ici, purement
+  // ludique. Si le bonus est désactivé dans les réglages de la room, on ne
+  // tire même pas au hasard : is_joker restera toujours false.
   const isJoker = jokerEnabled && Math.random() < JOKER_ROUND_PROBABILITY;
 
-  const { data, error } = await supabase
-    .from("rounds")
-    .insert({
-      room_id: roomId,
-      order_index: nextIndex,
-      source_track_id: track.sourceTrackId,
-      title: track.title,
-      artist: track.artist,
-      status: "playing",
-      started_at: new Date().toISOString(),
-      blind_mode: blindMode,
-      is_joker: isJoker,
-    })
-    .select()
-    .single();
+  // start_round (migration 0032) : vérifie le jeton d'hôte, calcule le
+  // numéro de manche, crée la manche et passe la partie "in_progress".
+  // started_at vient de l'horloge de l'hôte, sur laquelle son timer se base.
+  const { data, error } = await supabase.rpc("start_round", {
+    p_host_token: hostToken(),
+    p_room_id: roomId,
+    p_source_track_id: track.sourceTrackId,
+    p_title: track.title,
+    p_artist: track.artist,
+    p_blind_mode: blindMode,
+    p_is_joker: isJoker,
+    p_started_at: new Date().toISOString(),
+  });
 
   if (error || !data) {
     throw new Error("Impossible de créer la manche.");
   }
-
-  await supabase.from("rooms").update({ status: "in_progress" }).eq("id", roomId);
 
   return data as Round;
 }
@@ -645,7 +681,7 @@ export async function startRoundWithTrack(
  * resolveRound ci-dessous (pas de policy UPDATE ouverte côté client).
  */
 export async function revealRound(roundId: string): Promise<void> {
-  const { error } = await supabase.rpc("reveal_round", { p_round_id: roundId });
+  const { error } = await supabase.rpc("reveal_round", { p_host_token: hostToken(), p_round_id: roundId });
   if (error) throw error;
 }
 
@@ -676,6 +712,7 @@ export async function resolveRoundAttempt(
   forceEnd: boolean
 ): Promise<void> {
   const { error } = await supabase.rpc("resolve_round_attempt", {
+    p_host_token: hostToken(),
     p_round_id: roundId,
     p_title_found: titleFound,
     p_artist_found: artistFound,
@@ -696,7 +733,7 @@ export async function resolveRoundAttempt(
  * ne fait rien (la RPC exige status = 'playing', déjà passé à 'buzzed').
  */
 export async function timeoutRound(roundId: string): Promise<void> {
-  const { error } = await supabase.rpc("timeout_round", { p_round_id: roundId });
+  const { error } = await supabase.rpc("timeout_round", { p_host_token: hostToken(), p_round_id: roundId });
   if (error) throw error;
 }
 
@@ -816,7 +853,7 @@ export async function joinRoomAsHost(
  * déjà été jouée.
  */
 export async function removeHostPlayer(playerId: string): Promise<void> {
-  const { error } = await supabase.rpc("remove_host_player", { p_player_id: playerId });
+  const { error } = await supabase.rpc("remove_host_player", { p_host_token: hostToken(), p_player_id: playerId });
   if (error) throw new Error("Impossible de te retirer des joueurs, réessaie.");
 }
 
@@ -882,6 +919,7 @@ export async function getRejoinRequestStatus(requestId: string): Promise<RejoinR
 
 export async function resolveRejoinRequest(requestId: string, accept: boolean): Promise<void> {
   const { error } = await supabase.rpc("resolve_rejoin_request", {
+    p_host_token: hostToken(),
     p_request_id: requestId,
     p_accept: accept,
   });

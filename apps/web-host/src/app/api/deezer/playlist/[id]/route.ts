@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { deezerGet, getPlayableTracks, jsonError, toPlaylistSummary } from "../../../../../lib/deezerServer";
+import { DEEZER_LIMIT_PER_MINUTE, deezerGet, getPlayableTracks, jsonError, toPlaylistSummary } from "../../../../../lib/deezerServer";
+import { clientIp, rateLimit, tooManyRequests } from "../../../../../lib/rateLimit";
 
 /**
  * Morceaux jouables d'une playlist Deezer : GET /api/deezer/playlist/123
@@ -11,6 +12,7 @@ import { deezerGet, getPlayableTracks, jsonError, toPlaylistSummary } from "../.
  * lancement de la manche (voir /api/deezer/track/[id]).
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!(await rateLimit(`deezer:${clientIp(request)}`, DEEZER_LIMIT_PER_MINUTE, 60))) return tooManyRequests();
   const { id } = await params;
   if (!/^\d{1,20}$/.test(id)) return Response.json({ error: "Playlist invalide." }, { status: 400 });
   const search = new URL(request.url).searchParams;

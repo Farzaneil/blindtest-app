@@ -1,4 +1,4 @@
-import { awardGameRewards, finishRoom, getRoomById, type Room } from "./rooms";
+import { awardGameRewards, finishRoom, getRoomById, hasHostToken, type Room } from "./rooms";
 import { supabase } from "./supabase";
 
 /**
@@ -21,6 +21,12 @@ export async function readOngoingHostGame(): Promise<OngoingHostGame | null> {
     return null;
   }
   if (!stored?.id) return null;
+  // Partie créée avant le jeton d'hôte (migration 0032), ou jeton perdu :
+  // plus pilotable depuis cet onglet, on repart sur une partie neuve.
+  if (!hasHostToken(stored.id)) {
+    forgetHostGame();
+    return null;
+  }
   const room = await getRoomById(stored.id);
   if (!room || room.status === "finished") {
     // Partie terminée (ou disparue) : "Créer une partie" doit en créer une

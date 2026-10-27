@@ -13,6 +13,14 @@ import { unstable_cache } from "next/cache";
 
 const DEEZER_API = "https://api.deezer.com";
 
+/**
+ * Requêtes par minute et par adresse IP vers nos routes /api/deezer/*
+ * (voir lib/rateLimit.ts) : large pour un hôte qui parcourt des playlists
+ * (les comptages de morceaux jouables en consomment un par ligne), mais
+ * empêche un script d'épuiser le quota Deezer de tout le site.
+ */
+export const DEEZER_LIMIT_PER_MINUTE = 150;
+
 export class DeezerApiError extends Error {
   readonly status: number;
   constructor(message: string, status: number) {

@@ -12,3 +12,6 @@ supabase/.temp/
 *.patch
 .vercel
 *.tsbuildinfo
+
+# Fichiers temporaires du partage de dossier (FUSE)
+.fuse_hidden*

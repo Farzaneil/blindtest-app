@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { COOKIE_PLAYER_SESSION, createSessionCookieValue, verifySessionCookieValue } from "../../../../lib/playerAuth";
 import { COOKIE_MAGIC_VERIFIER, isPlausibleEmail, normalizeEmail, supabaseAuthClient } from "../../../../lib/playerEmailAuth";
+import { clientIp, rateLimitAll, tooManyRequests } from "../../../../lib/rateLimit";
 import { SESSION_COOKIE_OPTIONS, findOrCreateAccountForEmail } from "../../../../lib/playerEmailAccount";
 
 /**
@@ -21,6 +22,14 @@ export async function POST(request: NextRequest) {
   if (!isPlausibleEmail(email) || !/^\d{6,10}$/.test(code)) {
     return NextResponse.json({ ok: false, error: "Code invalide." }, { status: 400 });
   }
+
+  // Anti-force brute sur le code à 6 chiffres : 8 essais par adresse et 20
+  // par IP par quart d'heure.
+  const allowed = await rateLimitAll([
+    [`auth-code:ip:${clientIp(request)}`, 20, 15 * 60],
+    [`auth-code:to:${email}`, 8, 15 * 60],
+  ]);
+  if (!allowed) return tooManyRequests("Trop d’essais : attends quelques minutes ou redemande un e-mail.");
 
   const { data, error } = await supabaseAuthClient().client.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user?.email) {

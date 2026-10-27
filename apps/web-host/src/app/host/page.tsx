@@ -11,6 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { spotify } from "@blindtest/api-clients";
 import {
   createRoom,
+  hasHostToken,
   getRoomById,
   subscribeToPlayers,
   subscribeToRounds,
@@ -936,7 +937,9 @@ function HostScreenInner() {
       // On vérifie que la room existe toujours côté Supabase avant de la
       // réutiliser : sessionStorage peut très bien pointer vers une partie
       // qui n'existe plus (base réinitialisée, etc.).
-      const existing = await getRoomById(stored.id);
+      // Sans le jeton d'hôte de cette partie (créée avant la migration 0032,
+      // ou onglet qui l'a perdu), elle n'est plus pilotable : partie neuve.
+      const existing = hasHostToken(stored.id) ? await getRoomById(stored.id) : null;
       if (cancelled) return;
       if (!existing) {
         await startFresh();
