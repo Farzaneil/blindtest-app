@@ -21,7 +21,10 @@ export async function findOrCreateAccountForEmail(
     .maybeSingle();
   if (byEmailError) throw new Error(`Lecture des comptes impossible (migration 0029 appliquée ?) : ${byEmailError.message}`);
   if (byEmail) {
-    if (authUserId) await supabaseAdmin.from("player_accounts").update({ auth_user_id: authUserId }).eq("id", byEmail.id);
+    await supabaseAdmin
+      .from("player_accounts")
+      .update({ last_seen_at: new Date().toISOString(), ...(authUserId ? { auth_user_id: authUserId } : {}) })
+      .eq("id", byEmail.id);
     return byEmail.id;
   }
 

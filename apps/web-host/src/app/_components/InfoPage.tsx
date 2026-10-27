@@ -1,9 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowLeft, BookOpen, Info, ShieldCheck, type LucideIcon } from "lucide-react";
+import { ArrowLeft, BookOpen, FileText, Info, Scale, ShieldCheck, type LucideIcon } from "lucide-react";
 
 /**
- * Gabarit commun des pages d'information (/rules, /about, /confidentialite),
+ * Gabarit commun des pages d'information (/rules, /about, /confidentialite,
+ * /cgu, /mentions-legales),
  * direction "Arcade autocollants" (comme /profil) : titre en autocollant
  * incliné, cartes blanches à gros contour noir et ombre décalée, icône de
  * section dans une pastille de couleur. Composant serveur, sans état.
@@ -13,6 +14,8 @@ const PAGES = [
   { href: "/rules", label: "Règles du jeu", Icon: BookOpen },
   { href: "/about", label: "À propos", Icon: Info },
   { href: "/confidentialite", label: "Confidentialité", Icon: ShieldCheck },
+  { href: "/cgu", label: "Conditions d’utilisation", Icon: FileText },
+  { href: "/mentions-legales", label: "Mentions légales", Icon: Scale },
 ] as const;
 
 export function InfoPage({

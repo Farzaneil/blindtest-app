@@ -11,12 +11,21 @@ import { COOKIE_MAGIC_VERIFIER, isPlausibleEmail, normalizeEmail, requestOrigin,
 export async function POST(request: NextRequest) {
   let email = "";
   let next = "/";
+  let acceptedTerms = false;
   try {
     const body = await request.json();
     email = normalizeEmail(typeof body?.email === "string" ? body.email : "");
     next = safeNext(typeof body?.next === "string" ? body.next : "/");
+    acceptedTerms = body?.acceptedTerms === true;
   } catch {
     // corps invalide : traité juste en dessous
+  }
+  // Âge minimum et CGU acceptés sur l'écran de connexion (lib/legal.ts).
+  if (!acceptedTerms) {
+    return NextResponse.json(
+      { ok: false, error: "Coche la case pour confirmer ton âge et accepter les conditions." },
+      { status: 400 }
+    );
   }
   if (!isPlausibleEmail(email)) {
     return NextResponse.json({ ok: false, error: "Adresse e-mail invalide." }, { status: 400 });

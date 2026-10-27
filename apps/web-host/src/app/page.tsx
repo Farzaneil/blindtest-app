@@ -59,6 +59,15 @@ export default function HomePage() {
           </Link>
         ))}
       </nav>
+
+      <p className="-mt-4 flex gap-3 text-xs font-bold text-fg/70">
+        <Link href="/cgu" className="underline hover:text-fg">
+          Conditions d’utilisation
+        </Link>
+        <Link href="/mentions-legales" className="underline hover:text-fg">
+          Mentions légales
+        </Link>
+      </p>
     </main>
   );
 }

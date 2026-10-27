@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "../../../../lib/supabase";
+import { supabaseAdmin } from "../../../../lib/supabaseAdmin";
 import { COOKIE_PLAYER_SESSION, verifySessionCookieValue } from "../../../../lib/playerAuth";
 
 /**
@@ -27,6 +28,19 @@ export async function GET(request: NextRequest) {
   if (!data) {
     return NextResponse.json({ connected: false }, { headers: { "Cache-Control": "no-store" } });
   }
+
+  // Dernière activité (durée de conservation, migration 0035) : au plus une
+  // écriture par jour et par compte ; un échec ne bloque jamais la réponse.
+  const oneDayAgo = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  await supabaseAdmin
+    .from("player_accounts")
+    .update({ last_seen_at: new Date().toISOString() })
+    .eq("id", accountId)
+    .lt("last_seen_at", oneDayAgo)
+    .then(
+      () => undefined,
+      () => undefined
+    );
 
   return NextResponse.json({
     connected: true,

@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { ArrowLeft, Mail, MailCheck } from "lucide-react";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
+import { MIN_ACCOUNT_AGE } from "../../lib/legal";
 
 /**
  * Écran de connexion joueur : lien magique par e-mail (voir
@@ -38,6 +39,9 @@ function ConnexionForm() {
   const urlError = searchParams.get("error");
 
   const [email, setEmail] = useState("");
+  // Âge minimum + acceptation des CGU (voir lib/legal.ts) : exigés avant
+  // l'envoi du lien, puisque c'est lui qui crée le compte au premier passage.
+  const [accepted, setAccepted] = useState(false);
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(urlError);
@@ -68,13 +72,14 @@ function ConnexionForm() {
   };
 
   const send = async () => {
+    if (!accepted) return;
     setSending(true);
     setError(null);
     try {
       const res = await fetch("/api/player-auth/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, next }),
+        body: JSON.stringify({ email, next, acceptedTerms: accepted }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Envoi impossible, réessaie.");
@@ -169,9 +174,29 @@ function ConnexionForm() {
                 className="flex-1 min-w-0 bg-transparent outline-none font-medium"
               />
             </label>
+            <label className="flex items-start gap-2.5 text-xs font-bold text-left cursor-pointer">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+                required
+                className="mt-0.5 w-4 h-4 shrink-0 accent-[#111111]"
+              />
+              <span>
+                J’ai {MIN_ACCOUNT_AGE} ans ou plus et j’accepte les{" "}
+                <Link href="/cgu" target="_blank" className="underline">
+                  conditions d’utilisation
+                </Link>{" "}
+                et la{" "}
+                <Link href="/confidentialite" target="_blank" className="underline">
+                  politique de confidentialité
+                </Link>
+                .
+              </span>
+            </label>
             <button
               type="submit"
-              disabled={sending || !email.trim()}
+              disabled={sending || !email.trim() || !accepted}
               className="bg-sage text-fg border-[3px] border-fg shadow-sticker rounded-xl py-3 font-display text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50"
             >
               {sending ? "Envoi…" : "Recevoir mon lien de connexion"}
