@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fr" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<title>Ton code Kazou Band</title>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Rubik:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: light only; supported-color-schemes: light only; }
+  body { margin: 0; padding: 0; }
+  a { color: #111111; }
+  .display { font-family: 'Dela Gothic One', 'Arial Black', Impact, sans-serif; }
+  .txt { font-family: 'Rubik', 'Helvetica Neue', Arial, sans-serif; }
+  @media (max-width: 480px) {
+    .card { padding: 24px 18px !important; }
+    .code { font-size: 34px !important; letter-spacing: 6px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#FFE14D;">
+<!-- Texte d'aperçu (affiché sous l'objet dans la boîte de réception) -->
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Ton code : {{ .Token }} — valable une heure. Kaz, Zou et Zazou t'attendent !</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#FFE14D" style="background-color:#FFE14D;">
+<tr><td align="center" style="padding:32px 12px 40px;">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+
+    <!-- Logo (image : les autocollants inclinés et la pastille ne passent
+         pas en HTML dans Gmail / Outlook). Texte de secours si images bloquées. -->
+    <tr><td align="center" style="padding:0 0 22px;">
+      <img src="https://kazouband.fr/email/kazou-band-logo.png" width="260" height="140" alt="KAZOU BAND" style="display:block;width:260px;max-width:80%;height:auto;border:0;outline:none;font-family:'Arial Black',Impact,sans-serif;font-size:34px;font-weight:900;color:#111111;">
+    </td></tr>
+
+    <!-- Carte -->
+    <tr><td class="card" bgcolor="#FFFFFF" style="background-color:#FFFFFF;border:3px solid #111111;border-right-width:8px;border-bottom-width:8px;border-radius:22px;padding:30px 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+        <tr><td align="center" style="padding:0 0 4px;">
+          <img src="https://kazouband.fr/email/kazou-band.png" width="280" height="88" alt="Kaz, Zou et Zazou" style="display:block;width:280px;max-width:100%;height:auto;border:0;outline:none;">
+        </td></tr>
+
+        <tr><td align="center" class="display" style="font-family:'Dela Gothic One','Arial Black',Impact,sans-serif;font-weight:900;font-size:24px;line-height:1.25;color:#111111;padding:10px 0 6px;">
+          Prêt à buzzer&nbsp;?
+        </td></tr>
+        <tr><td align="center" class="txt" style="font-family:'Rubik','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.5;color:#4D4D4D;padding:0 0 18px;">
+          Voici ton code pour te connecter à Kazou Band&nbsp;:
+        </td></tr>
+
+        <!-- Code -->
+        <tr><td align="center" style="padding:0 0 22px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td class="code display" bgcolor="#A8DCFF" style="background-color:#A8DCFF;color:#111111;font-family:'Dela Gothic One','Arial Black',Impact,sans-serif;font-weight:900;font-size:40px;line-height:1;letter-spacing:10px;padding:16px 14px 16px 24px;border:3px solid #111111;border-right-width:6px;border-bottom-width:6px;border-radius:16px;">{{ .Token }}</td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td align="center" class="txt" style="font-family:'Rubik','Helvetica Neue',Arial,sans-serif;font-size:14px;line-height:1.5;color:#4D4D4D;padding:0 0 12px;">
+          Tape-le sur l'écran de connexion, ou clique directement&nbsp;:
+        </td></tr>
+
+        <!-- Bouton -->
+        <tr><td align="center" style="padding:0 0 24px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td bgcolor="#C9B6FF" style="background-color:#C9B6FF;border:3px solid #111111;border-right-width:6px;border-bottom-width:6px;border-radius:14px;">
+              <a href="{{ .ConfirmationURL }}" target="_blank" class="txt" style="display:inline-block;padding:14px 28px;font-family:'Rubik','Helvetica Neue',Arial,sans-serif;font-size:17px;font-weight:800;line-height:1;color:#111111;text-decoration:none;">Me connecter &rarr;</a>
+            </td>
+          </tr></table>
+        </td></tr>
+
+        <tr><td align="center" class="txt" style="font-family:'Rubik','Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.5;color:#4D4D4D;border-top:2px dashed #111111;padding:16px 0 0;">
+          Le lien et le code expirent dans une heure.<br>
+          Tu n'as rien demandé&nbsp;? Ignore cet e-mail&nbsp;: sans ce code, personne ne peut se connecter à ta place.
+        </td></tr>
+
+      </table>
+    </td></tr>
+
+    <!-- Pied -->
+    <tr><td align="center" class="txt" style="font-family:'Rubik','Helvetica Neue',Arial,sans-serif;font-size:12px;line-height:1.6;color:#111111;padding:22px 0 0;">
+      <strong>Kazou Band</strong> · le blind test entre potes<br>
+      <a href="https://kazouband.fr" style="color:#111111;font-weight:700;">kazouband.fr</a>
+    </td></tr>
+
+  </table>
+
+</td></tr>
+</table>
+</body>
+</html>
