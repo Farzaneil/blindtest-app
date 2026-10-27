@@ -1,6 +1,6 @@
-# Blindtest App
+# Kazou Band · le blind test entre potes
 
-Une appli pour faire des blind tests entre potes sans personne dédiée au lancement
+**Kazou Band** (ex-« Blindtest App ») est une appli pour faire des blind tests entre potes sans personne dédiée au lancement
 des sons. Les téléphones des joueurs servent de buzzer. Un écran « hôte » (laptop
 projeté sur une TV, ordi ou même téléphone) diffuse la musique, affiche le code de
 partie et un QR code, les joueurs, qui a buzzé en premier et le classement.
@@ -9,7 +9,11 @@ Projet perso, pas encore commercialisé. `docs/architecture/blueprint.docx` cont
 le cadrage initial (concept, DA, roadmap, business plan). Ce README décrit l'état
 **réel** du code, qui a beaucoup évolué depuis.
 
-Prod : **https://blindtest-app-web-host.vercel.app**
+Prod : **https://kazouband.fr**. L'ancienne adresse `blindtest-app-web-host.vercel.app`,
+kazouband.com et les `www` redirigent tous vers ce domaine.
+
+Le dépôt et les paquets gardent le nom technique `blindtest-app` / `@blindtest/*` :
+seule la marque visible a changé.
 
 ## Sommaire
 
@@ -18,11 +22,13 @@ Prod : **https://blindtest-app-web-host.vercel.app**
 - [Sources de musique](#sources-de-musique)
 - [Comptes joueurs, progression et cosmétiques](#comptes-joueurs-progression-et-cosmétiques)
 - [Design « Arcade autocollants »](#design--arcade-autocollants-)
+- [Marque Kazou Band](#marque-kazou-band)
 - [Le jeu, techniquement](#le-jeu-techniquement)
 - [Architecture / stack](#architecture--stack)
 - [Sécurité / RLS](#sécurité--rls)
 - [Démarrer en local](#démarrer-en-local)
 - [Déploiement (Vercel)](#déploiement-vercel)
+- [Domaine et e-mails](#domaine-et-e-mails)
 - [Qualité / CI](#qualité--ci)
 - [Conventions Git](#conventions-git)
 - [Roadmap](#roadmap)
@@ -84,7 +90,8 @@ réseaux différents, y compris tout depuis des téléphones.
 - L'historique des manches est replié, avec le détail de chaque tentative.
 - **Cérémonie de fin**, côté hôte comme côté joueurs : podium avec avatars, confettis,
   buzzeur le plus rapide, manche la plus disputée.
-- Pages annexes : `/rules`, `/about` et `/confidentialite`, plus un bandeau cookies
+- Pages annexes : `/rules`, `/about`, `/confidentialite`, `/cgu` et
+  `/mentions-legales` (gabarit commun `InfoPage`), plus un bandeau cookies
   (l'analytics est prévu mais pas branché, `ANALYTICS_ENABLED = false`).
 
 **Pas fait / mis de côté**
@@ -92,10 +99,8 @@ réseaux différents, y compris tout depuis des téléphones.
   cause de soucis de toolchain iOS. Elle est en retard sur les règles actuelles. Le
   buzzer web la remplace très bien.
 - **Amis** : fonctionnalité prévue.
-- **Domaine propre et e-mails** : les mails de connexion arrivent souvent en spams
-  pour l'instant.
-- **Vérifications légales** (Deezer notamment) : à faire avant toute
-  commercialisation.
+- **Accord Deezer** : l'API publique suffit pour la bêta gratuite ; à revoir avec
+  Deezer avant toute commercialisation.
 
 ## Comment jouer
 
@@ -103,7 +108,7 @@ réseaux différents, y compris tout depuis des téléphones.
 choix du fond (jaune, ciel ou lilas) et accès au compte joueur.
 
 - **En ligne** :
-  - Hôte : `https://blindtest-app-web-host.vercel.app/host`. Choisis un mode,
+  - Hôte : `https://kazouband.fr/host`. Choisis un mode,
     construis la playlist, puis montre le code ou le QR code.
   - Joueurs : `/play`, avec le code et un pseudo, ou en scannant le QR code.
 - **En local** :
@@ -184,7 +189,7 @@ toute façon que 5 utilisateurs de test.
 - **Ancien code** : les routes `api/player-auth/login` et `callback` (connexion
   joueur via Spotify) sont l'ancien système. Elles ne sont plus proposées dans l'UI.
 
-### Avatars « La Bande-Son »
+### Avatars
 
 - **Les avatars** : 12 personnages musicaux, tous gratuits, chacun avec sa couleur de
   rond. Les invités reçoivent un avatar déterminé par le hash de leur pseudo.
@@ -242,6 +247,35 @@ victoires, et la barre d'XP. Cinq onglets :
     `EndCeremony`).
 - **Maquettes de référence** : canvas Claude « Blindtest — Refonte Arcade » (pages
   joueur, hôte, infos, avatars, profil v2).
+
+## Marque Kazou Band
+
+- **Nom** : « Kazou Band », signature « le blind test entre potes ». Domaines
+  kazouband.fr (principal) et kazouband.com, chez OVHcloud.
+- **Logo** (`app/_components/KazouBandLogo.tsx`) : deux autocollants inclinés,
+  KAZOU (rose `#FF6FB5`, texte noir) et BAND (bleu `#4D7CFF`, texte blanc), avec
+  une pastille ronde accrochée au coin haut-droit de KAZOU, à l'extérieur, pour ne
+  jamais couvrir le U.
+- **Le Kazou Band** (`lib/kazou.tsx`) : trois kazoos-buzzers à visage, un par fond.
+  Kaz (jaune, le meneur, éclair), Zou (bleu ciel, le blagueur, pois), Zazou (lilas,
+  la star, étoile). Quatre humeurs : `joie`, `buzz`, `triste`, `champion`.
+  - `Kazou` / `kazouSvgString` : un personnage ; `KazouTrio` : les trois ;
+  - `KazouForTheme` : affiche celui du fond courant, en CSS seul (classes
+    `.kazou-fond-*` et `.kazou-badge` dans `globals.css`, pilotées par
+    `data-fond`), donc sans clignotement au chargement.
+- **Polices** : Rubik (texte) et Dela Gothic One (titres) sont **incluses dans le
+  dépôt** (`app/_fonts/*.woff2`, sous-ensemble latin) et chargées par
+  `next/font/local`. Ne pas revenir à `next/font/google` : il faisait échouer des
+  builds Vercel au hasard (« Can't resolve
+  '@vercel/turbopack-next/internal/font/google/font' »).
+- **Icônes et aperçus** : `app/icon.svg` (favicon), `app/apple-icon.tsx` (icône
+  iOS), `app/opengraph-image.tsx` (aperçu de lien 1200×630 ; récupère Dela sur
+  Google Fonts au build, avec une police de secours si le réseau échoue).
+- **Images des e-mails** : `public/email/kazou-band-logo.png` et
+  `public/email/kazou-band.png`, servies par kazouband.fr (voir
+  [Domaine et e-mails](#domaine-et-e-mails)).
+- **Maquettes** : canvas Claude Design, page « Nom, logo & goodies » (logo,
+  personnages, stickers, icône d'app, réseaux, goodies).
 
 ## Le jeu, techniquement
 
@@ -348,6 +382,10 @@ En prod, il ne fait rien.
 | 0029 | Connexion par e-mail (`email`, `auth_user_id`) |
 | 0030 | Avatars (comptes et joueurs) |
 | 0031 | Classement avec avatars |
+| 0032 | Jeton d'hôte : `create_room` renvoie `{room, host_token}`, et toute action d'hôte le vérifie (`assert_room_host`, table `room_hosts`) |
+| 0033 | Limitation des requêtes (`rate_limits`, `hit_rate_limit`, réservée au `service_role`) |
+| 0034 | Droits explicites sur toutes les tables ; e-mails des comptes illisibles par les clients |
+| 0035 | Conservation des données : `last_seen_at`, `purge_old_data()` planifiée chaque nuit par pg_cron |
 
 ### `apps/web-host/src` en bref
 
@@ -357,7 +395,7 @@ En prod, il ne fait rien.
   - `play/` (buzzer) ;
   - `connexion/` (e-mail et code) ;
   - `profil/` (espace joueur) ;
-  - `rules/`, `about/`, `confidentialite/` ;
+  - `rules/`, `about/`, `confidentialite/`, `cgu/`, `mentions-legales/` ;
   - `spotify-test/` (débogage de la connexion Spotify).
 - **`app/_components/`** :
   - `AvatarPicker`, `SkinSwatch`, `ThemePicker` ;
@@ -365,7 +403,9 @@ En prod, il ne fait rien.
   - `TeamSetupPanel`, `Teams` ;
   - `DeezerPlaylistPicker`, `JoinQrCode` ;
   - `HomeActions`, `PlayerAccountCorner`, `RejoinRequestsBanner` ;
-  - `CookieConsentBanner`.
+  - `CookieConsentBanner` ;
+  - `KazouBandLogo`, `InfoPage` (gabarit des pages d'info), `ContactEmail`,
+    `RoundTimer`.
 - **`app/api/`** :
   - `deezer/*` (proxy) ;
   - `spotify/*` (OAuth de l'hôte, token, logout) ;
@@ -385,7 +425,11 @@ En prod, il ne fait rien.
     `playerEmailAccount.ts` ;
   - `supabase.ts` (clé anon) et `supabaseAdmin.ts` (`service_role`, serveur
     uniquement) ;
-  - `theme.ts`, `analyticsConsent.ts`.
+  - `theme.ts`, `analyticsConsent.ts` ;
+  - `kazou.tsx` (personnages), `legal.ts` (adresse de contact, date des
+    documents légaux, âge minimum, hébergeurs) ;
+  - `rateLimit.ts` (limitation des requêtes), `deezerServer.ts` (proxy Deezer
+    avec cache).
 
 ## Sécurité / RLS
 
@@ -395,10 +439,21 @@ En prod, il ne fait rien.
   restreintes par des `GRANT`.
 - **Les données de compte** (e-mail, XP, badges) ne sont écrites que par les routes
   serveur, avec la clé `service_role`. L'e-mail n'est jamais lisible publiquement.
+- **Jeton d'hôte** (0032) : seul l'onglet qui a créé la partie peut la piloter.
+  Le jeton est gardé dans `sessionStorage` (`blindtest_host_token`) et passé en
+  premier argument de chaque fonction d'hôte.
+- **Limitation des requêtes** (0033, `lib/rateLimit.ts`) : Deezer 150/min par IP ;
+  envoi d'e-mail 5 par adresse et 10 par IP par quart d'heure ; saisie du code 8 par
+  adresse et 20 par IP. En cas de panne de la base, la limite laisse passer.
+- **En-têtes HTTP** (`next.config.js`) : pas d'iframe sur un autre site, `nosniff`,
+  `Referrer-Policy`, caméra / micro / localisation désactivés.
+- **Données personnelles** (0035) : comptes sans connexion depuis 3 ans et parties
+  de plus de 12 mois supprimés automatiquement, compteurs anti-abus effacés.
+  Création de compte réservée aux 15 ans et plus (`MIN_ACCOUNT_AGE`), avec
+  acceptation des CGU vérifiée côté serveur.
 - **Limite assumée** : en partie, les joueurs invités sont identifiés par un
-  `device_id` côté client, non vérifié. N'importe qui connaissant le code peut
-  rejoindre. Avant une ouverture large au public, il faudra restreindre les policies
-  au joueur et à la room de l'utilisateur authentifié.
+  `device_id` côté client, non vérifié, et n'importe qui connaissant le code peut
+  rejoindre. Prochaine étape : un jeton joueur pour les buzz.
 - **Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY`** avec un préfixe `NEXT_PUBLIC_`.
   Ne jamais committer `.env.local`.
 
@@ -424,7 +479,8 @@ npm run web-host                                          # http://localhost:300
 | `PLAYER_SESSION_SECRET` | Signe le cookie `player_session` : `openssl rand -hex 32` | **Oui** |
 | `SPOTIFY_HOST_EMAILS` | E-mails autorisés à utiliser Spotify, séparés par des virgules | Non |
 | `SPOTIFY_CLIENT_ID` | Spotify Developer Dashboard (pas de Client Secret, flow PKCE) | Non |
-| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` | Non |
+| `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` (prod : `https://kazouband.fr/api/spotify/callback`) | Non |
+| `NEXT_PUBLIC_SITE_URL` | Adresse publique (QR code, aperçus de lien). Facultative : `https://kazouband.fr` par défaut | Non |
 | `SPOTIFY_PLAYER_REDIRECT_URI` | Pour l'ancienne connexion joueur via Spotify, plus utilisée dans l'UI | Non |
 
 Pièges :
@@ -439,7 +495,7 @@ Pièges :
 ### Configuration Supabase
 
 1. **Migrations** : exécuter les fichiers de `supabase/migrations/` dans l'ordre
-   (0001 → 0031), dans le SQL Editor. Une migration committée n'est **pas**
+   (0001 → 0035), dans le SQL Editor. Une migration committée n'est **pas**
    appliquée automatiquement : il faut aussi la coller dans le SQL Editor. Attention,
    la base locale et la prod sont la même base.
 2. **Realtime** : vérifier que `players`, `rounds`, `buzzes`, `rooms`,
@@ -447,28 +503,73 @@ Pièges :
    `supabase_realtime` (Database → Publications).
 3. **Auth**, pour la connexion par e-mail :
    - **Providers** : Email activé, OTP à **6 chiffres**.
-   - **URL Configuration** : Site URL = l'URL de prod. Ajouter aux Redirect URLs
-     `https://blindtest-app-web-host.vercel.app/api/player-auth/confirm**` et
-     `http://127.0.0.1:3000/api/player-auth/confirm**`.
-   - **Email Templates** (Magic Link) : afficher le lien et le code `{{ .Token }}`.
-   - **SMTP** : Brevo, configuré dans Auth → SMTP Settings. Le SMTP intégré de
-     Supabase est trop limité en volume. Prévoir un domaine propre (par exemple avec
-     Resend) avant le lancement, pour sortir des spams.
+   - **URL Configuration** : Site URL = `https://kazouband.fr`. Redirect URLs :
+     `https://kazouband.fr/api/player-auth/confirm**` et
+     `http://127.0.0.1:3000/api/player-auth/confirm**`. Le lien envoyé reprend le
+     domaine visité (`requestOrigin`) : tout domaine servi doit être dans la liste.
+   - **Email Templates** : **Confirm signup** (premier passage d'une adresse) **et**
+     **Magic link or OTP** (passages suivants) utilisent le même modèle,
+     `supabase/templates/magic-link.html` (variables `{{ .Token }}` et
+     `{{ .ConfirmationURL }}`). Objet : `Ton code Kazou Band : {{ .Token }}`. Le
+     modèle n'est pas déployé automatiquement : le recoller dans les deux après
+     chaque modification (`pbcopy < supabase/templates/magic-link.html`).
+   - **SMTP** : Brevo (Auth → SMTP Settings), expéditeur
+     `Kazou Band <connexion@kazouband.fr>`. Le SMTP intégré de Supabase est trop
+     limité en volume.
 
 ### Configuration Spotify Developer (optionnelle)
 
-Ajouter aux Redirect URIs `http://127.0.0.1:3000/api/spotify/callback` et son
-équivalent de prod. Copier le Client ID dans `.env.local`.
+Ajouter aux Redirect URIs `http://127.0.0.1:3000/api/spotify/callback` et
+`https://kazouband.fr/api/spotify/callback`. Copier le Client ID dans `.env.local`.
 
 ## Déploiement (Vercel)
 
 1. Importer le repo avec **Root Directory = `apps/web-host`**.
 2. Renseigner les variables ci-dessus, avec les URI de redirection en
-   `https://blindtest-app-web-host.vercel.app/...`. Marquer comme *Sensitive*
+   `https://kazouband.fr/...`. Marquer comme *Sensitive*
    `SUPABASE_SERVICE_ROLE_KEY` et `PLAYER_SESSION_SECRET`.
 3. **Un push sur `main` déploie la prod.**
 
 Les cookies sont en `secure: true` en production, détecté via `NODE_ENV`.
+
+**Domaines** (Vercel → Settings → Domains) : `kazouband.fr` sert la production ;
+`www.kazouband.fr`, `kazouband.com` et `www.kazouband.com` redirigent en 308 vers
+`kazouband.fr`. L'ancienne adresse `blindtest-app-web-host.vercel.app` est
+redirigée par `next.config.js` (`redirects`, hôte exact uniquement : les
+prévisualisations `*-git-*.vercel.app` restent accessibles).
+
+## Domaine et e-mails
+
+- **Registrar et DNS** : OVHcloud, pour kazouband.fr et kazouband.com.
+- **Zone DNS kazouband.fr** (même principe pour le .com, sans la partie mail) :
+
+  | Usage | Type | Sous-domaine | Cible |
+  |---|---|---|---|
+  | Site (Vercel) | A | `@` | `216.198.79.1` |
+  | Site (Vercel) | CNAME | `www` | `f2be2f0e22b8c531.vercel-dns-017.com.` |
+  | Boîte mail (Zimbra OVH) | MX ×4, SPF, CNAME `ovhmo-selector-*._domainkey`, SRV `_autodiscover._tcp` | | créés par OVH, **ne pas toucher** |
+  | Envoi Brevo | TXT | `@` | `brevo-code:…` (vérification) |
+  | Envoi Brevo | CNAME | `brevo1._domainkey` / `brevo2._domainkey` | `b1` / `b2.kazouband-fr.dkim.brevo.com.` |
+  | Politique mail | TXT | `_dmarc` | `v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com` |
+
+  Un seul enregistrement SPF par domaine : s'il faut un jour y ajouter un service,
+  modifier la ligne existante (`v=spf1 include:mx.ovh.com … ~all`), ne jamais en
+  créer une deuxième.
+- **Adresses** (OVH, Zimbra Starter offert avec le domaine) :
+  - `contact@kazouband.fr` : vraie boîte (webmail.mail.ovh.net), affichée sur les
+    pages légales (`CONTACT_EMAIL` dans `lib/legal.ts`). Demandes RGPD à traiter
+    sous un mois ;
+  - `connexion@kazouband.fr` : simple redirection vers contact@, expéditeur des
+    e-mails de connexion (les réponses des joueurs arrivent donc dans contact@).
+- **E-mails de connexion** : Supabase Auth → SMTP Brevo, domaine authentifié dans
+  Brevo (DKIM + DMARC). Modèle dans `supabase/templates/magic-link.html` :
+  - tableaux et styles en ligne uniquement (Gmail et Outlook ignorent le reste) ;
+  - logo et trio en **images** (`public/email/`), car ni l'inclinaison, ni les
+    ombres, ni les polices web ne passent partout ; texte de secours si les images
+    sont bloquées ;
+  - les clients mail (Outlook, Apple Mail) gardent les images en cache : après
+    modification d'une image, **incrémenter `?v=` dans son adresse** dans le
+    modèle, puis le recoller dans Supabase.
 
 ## Qualité / CI
 
@@ -515,12 +616,20 @@ Les cookies sont en `secure: true` en production, détecté via `NODE_ENV`.
 - Profil v2 (stats, historique, classement).
 - Refonte « Arcade autocollants » : animations de score, cérémonie de fin.
 - Déploiement Vercel et CI.
+- Sécurité bêta : jeton d'hôte, limitation des requêtes, droits explicites, en-têtes.
+- Légal : mentions légales, CGU, confidentialité, âge minimum, purge automatique.
+- Marque Kazou Band : nom, logo, personnages, icônes, aperçu de lien.
+- Domaine kazouband.fr, adresse de contact, e-mails de connexion authentifiés et
+  aux couleurs du jeu.
 
 🔜 **Prochaines étapes**
 - Redéfinir les règles de déblocage des skins (`lib/cosmetics.tsx`).
 - Fonctionnalité **amis**, avec un classement entre amis.
-- Domaine propre et e-mails transactionnels (Resend) avant le lancement.
-- Volet légal : Deezer, CGU, RGPD (une page `/confidentialite` existe déjà).
+- Humeurs des Kazous dans le jeu (buzz, trop tard, champion).
+- Sécurité, phase 2 : jeton joueur pour les buzz ; titre illisible pendant la
+  manche.
+- Bêta publique : testeurs, recueil des retours, puis mail à Deezer.
+- Marque : comptes @kazouband sur les réseaux, dépôt INPI (et EUIPO).
 - Style de jeu dans les stats (il faudrait stocker plus de données).
 - Persister les playlists côté serveur pour les réutiliser d'une partie à l'autre.
 - App mobile native, seulement si le besoin d'une app installable se confirme.
