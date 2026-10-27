@@ -24,7 +24,7 @@ import { QRCodeSVG } from "qrcode.react";
  * toujours vers l'adresse publique depuis un domaine Vercel.
  * NEXT_PUBLIC_SITE_URL permet de la changer (futur nom de domaine).
  */
-const PUBLIC_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://blindtest-app-web-host.vercel.app").replace(/\/$/, "");
+const PUBLIC_SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://kazouband.fr").replace(/\/$/, "");
 
 function joinOrigin(): string {
   const { origin, hostname } = window.location;

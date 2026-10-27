@@ -25,4 +25,19 @@ module.exports = {
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
+  /**
+   * Ancienne adresse de prod -> nom de domaine (liens et QR codes déjà
+   * partagés). Seul l'hôte exact est redirigé : les déploiements de
+   * prévisualisation (*-git-*.vercel.app) restent accessibles.
+   */
+  async redirects() {
+    return [
+      {
+        source: "/:path*",
+        has: [{ type: "host", value: "blindtest-app-web-host.vercel.app" }],
+        destination: "https://kazouband.fr/:path*",
+        permanent: true,
+      },
+    ];
+  },
 };

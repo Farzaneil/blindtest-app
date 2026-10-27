@@ -15,7 +15,7 @@ const dela = Dela_Gothic_One({ subsets: ["latin"], weight: "400", variable: "--f
 // Titre d'onglet par page (voir `metadata` / les layout.tsx de chaque
 // route) : "Règles du jeu · Kazou Band", etc. Icônes : app/icon.svg et
 // app/apple-icon.tsx ; aperçu de lien : app/opengraph-image.tsx.
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://blindtest-app-web-host.vercel.app";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kazouband.fr";
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
