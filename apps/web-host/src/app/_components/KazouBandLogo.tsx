@@ -27,7 +27,7 @@ export function KazouBandLogo({ size = "lg" }: { size?: "lg" | "sm" }) {
             lg ? "-top-9 -ml-4 w-[4.5rem] h-[4.5rem] md:-top-12 md:-ml-5 md:w-24 md:h-24" : "-top-6 -ml-3 w-12 h-12"
           }`}
         >
-          <KazouForTheme size={lg ? 64 : 42} className={lg ? "md:w-[84px] md:h-[84px]" : ""} />
+          <KazouForTheme size={lg ? 52 : 34} className={lg ? "mr-1.5 md:mr-2 md:w-[70px] md:h-[70px]" : "mr-1"} />
         </span>
       </span>
       <span
