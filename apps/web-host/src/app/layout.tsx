@@ -1,16 +1,30 @@
 import "./globals.css";
 import type { ReactNode } from "react";
-import { Dela_Gothic_One, Rubik } from "next/font/google";
+import localFont from "next/font/local";
 import { CookieConsentBanner } from "./_components/CookieConsentBanner";
 import { ConfirmDialogHost } from "./_components/ConfirmDialog";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
-// Auto-hébergées par next/font (pas de <link> vers Google Fonts, pas de
-// FOUC) : Rubik pour le texte courant, Dela Gothic One pour les titres, les
-// scores et les gros boutons (direction "Arcade autocollants", voir
-// tailwind.config.js — fontFamily.sans / fontFamily.display).
-const rubik = Rubik({ subsets: ["latin"], weight: ["500", "700", "800"], variable: "--font-rubik" });
-const dela = Dela_Gothic_One({ subsets: ["latin"], weight: "400", variable: "--font-dela" });
+// Polices incluses dans le dépôt (src/app/_fonts, sous-ensemble latin, qui
+// couvre le français) et servies par next/font/local : le build ne dépend
+// plus de Google Fonts (next/font/google faisait échouer des builds Vercel
+// au hasard : "Can't resolve '@vercel/turbopack-next/internal/font/google/font'").
+// Rubik (police variable 300-900) pour le texte courant, Dela Gothic One pour
+// les titres, les scores et les gros boutons (direction "Arcade
+// autocollants", voir tailwind.config.js — fontFamily.sans / fontFamily.display).
+// Licence : SIL Open Font License 1.1 (redistribution autorisée).
+const rubik = localFont({
+  src: "./_fonts/rubik-latin.woff2",
+  weight: "300 900",
+  display: "swap",
+  variable: "--font-rubik",
+});
+const dela = localFont({
+  src: "./_fonts/dela-gothic-one-latin.woff2",
+  weight: "400",
+  display: "swap",
+  variable: "--font-dela",
+});
 
 // Titre d'onglet par page (voir `metadata` / les layout.tsx de chaque
 // route) : "Règles du jeu · Kazou Band", etc. Icônes : app/icon.svg et
