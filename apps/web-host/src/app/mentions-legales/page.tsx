@@ -16,7 +16,7 @@ export default function MentionsLegalesPage() {
     <InfoPage current="/mentions-legales" title="Mentions légales">
       <InfoCard icon={UserRound} title="Éditeur">
         <p>
-          Blindtest est édité à titre non professionnel par un particulier, qui a choisi de ne pas rendre
+          Kazou Band est édité à titre non professionnel par un particulier, qui a choisi de ne pas rendre
           publique son identité, comme la loi le permet. Ses coordonnées sont connues de l’hébergeur.
         </p>
         <p>
@@ -46,13 +46,13 @@ export default function MentionsLegalesPage() {
         <p>
           Les extraits musicaux de 30 secondes, les titres, les pochettes et les playlists sont fournis par
           l’API publique de Deezer. Ils restent la propriété de leurs ayants droit et ne sont jamais
-          stockés par Blindtest.
+          stockés par Kazou Band.
         </p>
       </InfoCard>
 
       <InfoCard icon={Copyright} title="Propriété intellectuelle">
         <p>
-          Le site, son code, son design et ses illustrations (notamment les avatars « La Bande-Son ») sont
+          Le site, son code, son design et ses illustrations (notamment les personnages Kaz, Zou et Zazou et les avatars) sont
           la propriété de l’éditeur. Toute reproduction sans autorisation est interdite.
         </p>
       </InfoCard>

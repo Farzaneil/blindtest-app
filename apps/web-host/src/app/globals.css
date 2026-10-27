@@ -29,6 +29,31 @@
   --tint: 239 233 255;
 }
 
+/*
+ * Kazou Band : le personnage du fond choisi (jaune → Kaz, ciel → Zou,
+ * lilas → Zazou), voir KazouForTheme dans lib/kazou.tsx. Les trois sont
+ * rendus, seul le bon s'affiche ; jaune par défaut avant le script de thème.
+ * La pastille du logo prend une couleur qui fait ressortir ce Kazou.
+ */
+.kazou-fond {
+  display: none;
+}
+:root:not([data-fond]) .kazou-fond-jaune,
+:root[data-fond="jaune"] .kazou-fond-jaune,
+:root[data-fond="ciel"] .kazou-fond-ciel,
+:root[data-fond="lilas"] .kazou-fond-lilas {
+  display: inline-flex;
+}
+.kazou-badge {
+  background: #a8dcff;
+}
+:root[data-fond="ciel"] .kazou-badge {
+  background: #c9b6ff;
+}
+:root[data-fond="lilas"] .kazou-badge {
+  background: #ffe14d;
+}
+
 html,
 body {
   background-color: rgb(var(--bg));

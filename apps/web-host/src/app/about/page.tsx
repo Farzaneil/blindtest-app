@@ -12,7 +12,7 @@ export default function AboutPage() {
     <InfoPage current="/about" title="À propos">
       <InfoCard icon={Heart} title="Le projet">
         <p>
-          Blindtest est né d’une envie simple : faire des blind tests entre potes sans tableur bricolé ni
+          Kazou Band est né d’une envie simple : faire des blind tests entre potes sans tableur bricolé ni
           personne coincée à lancer les sons. Un écran diffuse la musique, les téléphones servent de
           buzzers, et l’appli s’occupe du chrono, des points et du classement.
         </p>
@@ -29,10 +29,11 @@ export default function AboutPage() {
         </p>
       </InfoCard>
 
-      <InfoCard icon={Smile} title="La Bande-Son" tone="gold">
+      <InfoCard icon={Smile} title="Kaz, Zou & Zazou" tone="gold">
         <p>
-          Les avatars sont une petite troupe d’instruments et d’objets musicaux dessinée pour l’appli, à
-          habiller d’effets que tu débloques en jouant.
+          Le Kazou Band, ce sont trois kazoos-buzzers : Kaz le meneur, Zou le blagueur et Zazou la star.
+          Chacun veille sur un des fonds de l’appli. Autour d’eux, une petite troupe d’instruments sert
+          d’avatars aux joueurs, à habiller d’effets que tu débloques en jouant.
         </p>
       </InfoCard>
 

@@ -16,11 +16,11 @@ export default function CguPage() {
     <InfoPage
       current="/cgu"
       title="Conditions d’utilisation"
-      intro="Les règles du jeu… du site. En utilisant Blindtest, tu acceptes ces conditions."
+      intro="Les règles du jeu… du site. En utilisant Kazou Band, tu acceptes ces conditions."
     >
       <InfoCard icon={FlaskConical} title="Un service en bêta" tone="gold">
         <p>
-          Blindtest est un service gratuit, en phase de test. Il est fourni « en l’état » : des bugs, des
+          Kazou Band est un service gratuit, en phase de test. Il est fourni « en l’état » : des bugs, des
           interruptions ou des changements de fonctionnalités sont possibles. Pendant la bêta, la
           progression (XP, badges, skins) pourrait exceptionnellement devoir être réinitialisée ; on fera
           tout pour l’éviter et on préviendra avant.
@@ -66,7 +66,7 @@ export default function CguPage() {
 
       <InfoCard icon={Megaphone} title="Jouer en public" tone="gold">
         <p>
-          Blindtest est pensé pour jouer entre proches, dans un cadre privé. Si tu organises une partie
+          Kazou Band est pensé pour jouer entre proches, dans un cadre privé. Si tu organises une partie
           dans un lieu public ou lors d’un événement (bar, soirée ouverte, entreprise…), la diffusion de
           musique peut nécessiter une autorisation auprès des sociétés d’auteurs (la SACEM, en France).
           Cette démarche est à la charge de l’organisateur.

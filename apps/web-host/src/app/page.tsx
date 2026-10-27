@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { BookOpen, Info, ShieldCheck, Music2 } from "lucide-react";
+import { BookOpen, Info, ShieldCheck } from "lucide-react";
+import { KazouBandLogo } from "./_components/KazouBandLogo";
+import { KazouTrio } from "../lib/kazou";
 import { PlayerAccountCorner } from "./_components/PlayerAccountCorner";
 import { ThemePicker } from "./_components/ThemePicker";
 import { HomeActions } from "./_components/HomeActions";
@@ -9,9 +11,9 @@ import { HomeActions } from "./_components/HomeActions";
  * rejoindre une), le choix de la couleur du fond et les pages d'info.
  *
  * Direction "Arcade autocollants" (maquette validée, canvas "Blindtest —
- * Refonte Arcade") : logo en deux autocollants inclinés (BLIND en rose —
- * seul usage du rose dans l'app — et TEST en bleu), gros contours noirs,
- * ombres décalées. "Créer une partie" prend la couleur d'action du thème
+ * Refonte Arcade") : logo Kazou Band en deux autocollants inclinés (voir
+ * KazouBandLogo), le trio Kaz, Zou & Zazou (lib/kazou.tsx), gros contours
+ * noirs, ombres décalées. "Créer une partie" prend la couleur d'action du thème
  * (bg-sage = --c1), "Rejoindre" la couleur de décor (bg-info = --c2). Ces
  * boutons vivent dans HomeActions (partie en cours -> "Reprendre").
  */
@@ -21,26 +23,18 @@ export default function HomePage() {
       <PlayerAccountCorner scroll />
 
       <div className="flex flex-col items-center gap-5">
-        <div className="relative flex flex-col items-center">
-          <span className="font-display text-5xl md:text-7xl leading-none bg-logo text-fg border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-3">
-            BLIND
-          </span>
-          <span className="font-display text-5xl md:text-7xl leading-none bg-[#4D7CFF] text-white border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 rotate-2 -mt-2 ml-10">
-            TEST
-          </span>
-          <span
-            aria-hidden
-            className="absolute -top-4 -right-8 w-12 h-12 rounded-full bg-info border-[3px] border-fg shadow-sticker-sm flex items-center justify-center rotate-12"
-          >
-            <Music2 className="w-6 h-6" strokeWidth={2.5} />
-          </span>
-        </div>
+        <KazouBandLogo />
         <p className="bg-inkSurface border-2 border-fg rounded-full px-4 py-1.5 font-bold text-sm shadow-sticker-sm">
-          entre potes, sans prise de tête
+          le blind test entre potes
         </p>
       </div>
 
       <HomeActions />
+
+      <div className="flex flex-col items-center gap-1">
+        <KazouTrio size={104} />
+        <p className="text-sm font-extrabold">Kaz, Zou et Zazou t’attendent !</p>
+      </div>
 
       <ThemePicker className="w-full max-w-lg" />
 

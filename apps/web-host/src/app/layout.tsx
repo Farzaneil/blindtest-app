@@ -13,10 +13,23 @@ const rubik = Rubik({ subsets: ["latin"], weight: ["500", "700", "800"], variabl
 const dela = Dela_Gothic_One({ subsets: ["latin"], weight: "400", variable: "--font-dela" });
 
 // Titre d'onglet par page (voir `metadata` / les layout.tsx de chaque
-// route) : "Règles du jeu · Blindtest", etc.
+// route) : "Règles du jeu · Kazou Band", etc. Icônes : app/icon.svg et
+// app/apple-icon.tsx ; aperçu de lien : app/opengraph-image.tsx.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://blindtest-app-web-host.vercel.app";
+
 export const metadata = {
-  title: { default: "Blindtest", template: "%s · Blindtest" },
-  description: "Le blind test entre potes : un écran hôte, les téléphones en buzzer.",
+  metadataBase: new URL(SITE_URL),
+  title: { default: "Kazou Band · le blind test entre potes", template: "%s · Kazou Band" },
+  description: "Le blind test entre potes : un écran pour la musique, vos téléphones en buzzer. Rien à installer.",
+  applicationName: "Kazou Band",
+  openGraph: {
+    title: "Kazou Band · le blind test entre potes",
+    description: "Un écran pour la musique, vos téléphones en buzzer. Rien à installer.",
+    siteName: "Kazou Band",
+    locale: "fr_FR",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image" },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

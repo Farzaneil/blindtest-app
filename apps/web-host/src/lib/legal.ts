@@ -8,7 +8,7 @@
  * null tant qu'elle n'est pas créée : les pages affichent alors un texte
  * d'attente. À renseigner AVANT l'ouverture au public.
  */
-export const CONTACT_EMAIL: string | null = null;
+export const CONTACT_EMAIL: string | null = "contact@kazouband.fr";
 
 /** Date de dernière mise à jour des documents légaux. */
 export const LEGAL_LAST_UPDATE = "27 octobre 2026";

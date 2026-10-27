@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Dice5, Check } from "lucide-react";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
+import { KazouTrio } from "../../lib/kazou";
 import {
   joinRoomByCode,
   getJoinInfoByCode,
@@ -997,6 +998,7 @@ function BuzzerView({
 
       {!round ? (
         <div className="w-full flex flex-col items-center gap-4">
+          <KazouTrio size={92} />
           <p className="text-xl text-inkMuted text-center animate-pulse">
             En attente du lancement d’une manche par l’hôte…
           </p>

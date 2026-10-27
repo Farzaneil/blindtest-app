@@ -166,7 +166,7 @@ export function useSpotifyPlayer() {
     window.onSpotifyWebPlaybackSDKReady = () => {
       if (shared.player) return;
       const player = new window.Spotify.Player({
-        name: "Blindtest — écran hôte",
+        name: "Kazou Band — écran hôte",
         getOAuthToken: (cb: (token: string) => void) => {
           // Sans .catch() ici, un aléa réseau ponctuel sur cette requête
           // laissait le SDK attendre indéfiniment un token qui n'arrivait
