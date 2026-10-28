@@ -111,6 +111,7 @@ import {
   UserPlus,
   TrendingUp,
   QrCode,
+  Shuffle,
 } from "lucide-react";
 
 type HostMode = "gamemaster" | "player";
@@ -1286,6 +1287,13 @@ function HostScreenInner() {
   // file d'attente encore à jouer est vidée.
   const handleClearQueue = () => {
     setQueue((q) => q.slice(0, queueIndex));
+  };
+
+  // Mélange la portion "à venir" (utile après l'import de plusieurs
+  // playlists, sinon elles s'enchaînent bloc par bloc) ; les morceaux déjà
+  // joués restent à leur place.
+  const handleShuffleQueue = () => {
+    setQueue((q) => [...q.slice(0, queueIndex), ...shuffle(q.slice(queueIndex))]);
   };
 
   // Réordonnancement par glisser-déposer, restreint à la portion "à venir"
@@ -2837,12 +2845,24 @@ function HostScreenInner() {
                   File d’attente {upcomingQueue.length > 0 && `(${upcomingQueue.length})`}
                 </h3>
                 {upcomingQueue.length > 0 && (
-                  <button
-                    onClick={handleClearQueue}
-                    className="text-danger text-sm hover:brightness-110 transition"
-                  >
-                    Tout retirer
-                  </button>
+                  <div className="flex items-center gap-3">
+                    {upcomingQueue.length > 1 && (
+                      <button
+                        onClick={handleShuffleQueue}
+                        title="Mélanger l’ordre des morceaux à venir"
+                        className="inline-flex items-center gap-1.5 bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-xl px-3 py-1 text-sm font-bold hover:-translate-y-px active:translate-y-px transition"
+                      >
+                        <Shuffle size={14} aria-hidden />
+                        Mélanger
+                      </button>
+                    )}
+                    <button
+                      onClick={handleClearQueue}
+                      className="text-danger text-sm hover:brightness-110 transition"
+                    >
+                      Tout retirer
+                    </button>
+                  </div>
                 )}
               </div>
               {upcomingQueue.length === 0 ? (
