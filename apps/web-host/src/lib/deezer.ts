@@ -52,7 +52,13 @@ export async function getDeezerPlayableCount(id: string): Promise<number> {
 }
 
 export async function getDeezerPreviewUrl(trackId: string): Promise<string> {
-  return (await getJson<{ preview: string }>(`/api/deezer/track/${deezerIdOf(trackId)}`)).preview;
+  return (await getDeezerPreview(trackId)).preview;
+}
+
+/** Extrait + tous les artistes du morceau (null si Deezer n'en donne pas). */
+export async function getDeezerPreview(trackId: string): Promise<{ preview: string; artist: string | null }> {
+  const data = await getJson<{ preview: string; artist?: string | null }>(`/api/deezer/track/${deezerIdOf(trackId)}`);
+  return { preview: data.preview, artist: data.artist ?? null };
 }
 
 /** Identifiant de playlist dans un lien collé (deezer.com/fr/playlist/123…). */

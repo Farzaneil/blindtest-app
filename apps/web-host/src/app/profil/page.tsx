@@ -285,7 +285,12 @@ function ReglagesPanel({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const { equippedKey, loading: cosmeticsLoading, refresh: refreshCosmetics } = usePlayerCosmetics(accountId);
+  const { equippedKey: savedEquippedKey, loading: cosmeticsLoading, refresh: refreshCosmetics } = usePlayerCosmetics(accountId);
+  // Affichage optimiste : le skin choisi s'affiche tout de suite, sans
+  // attendre l'aller-retour serveur + la relecture (revient en arrière si
+  // l'équipement échoue).
+  const [pendingEquipKey, setPendingEquipKey] = useState<string | null>(null);
+  const equippedKey = pendingEquipKey ?? savedEquippedKey;
   const [skinCategory, setSkinCategory] = useState<CosmeticCategory>(() => COSMETIC_BY_KEY[equippedKey]?.category ?? "uni");
   const [equipping, setEquipping] = useState<string | null>(null);
   const [equipError, setEquipError] = useState<string | null>(null);
@@ -295,6 +300,9 @@ function ReglagesPanel({
   const equipped = COSMETIC_BY_KEY[equippedKey] ?? COSMETIC_BY_KEY["uni_sage"];
 
   const equipCosmetic = async (key: string) => {
+    if (key === equippedKey) return;
+    const previousKey = equippedKey;
+    setPendingEquipKey(key);
     setEquipping(key);
     setEquipError(null);
     try {
@@ -307,6 +315,7 @@ function ReglagesPanel({
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Échec de l'équipement.");
       refreshCosmetics();
     } catch (e: any) {
+      setPendingEquipKey(previousKey === savedEquippedKey ? null : previousKey);
       setEquipError(e?.message ?? "Échec de l'équipement.");
     } finally {
       setEquipping(null);

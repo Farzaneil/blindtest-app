@@ -81,8 +81,29 @@ export type RawTrack = {
   readable?: boolean;
   preview?: string;
   artist?: { name?: string };
+  // Présent seulement sur /track/{id} (pas dans les listes de playlist) :
+  // tous les artistes du morceau, artiste principal compris (featurings,
+  // duos…).
+  contributors?: { name?: string }[];
   album?: { cover_medium?: string };
 };
+
+/**
+ * Tous les artistes d'un morceau, séparés par des virgules, sans doublon
+ * (insensible à la casse) : "Orelsan, Stromae". Repli sur l'artiste
+ * principal quand Deezer ne renvoie pas de contributeurs.
+ */
+export function artistNames(t: RawTrack): string {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (const name of [t.artist?.name, ...(t.contributors ?? []).map((c) => c.name)]) {
+    const clean = name?.trim();
+    if (!clean || seen.has(clean.toLowerCase())) continue;
+    seen.add(clean.toLowerCase());
+    names.push(clean);
+  }
+  return names.join(", ");
+}
 
 export function jsonError(e: unknown) {
   const status = e instanceof DeezerApiError ? e.status : 502;

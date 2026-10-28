@@ -414,7 +414,7 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
       </button>
       <Link
         href="/"
-        className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+        className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
       >
         <ArrowLeft className="w-3.5 h-3.5" /> Accueil
       </Link>
@@ -838,11 +838,11 @@ function BuzzerView({
             </details>
           )}
 
-          <div className="flex gap-4">
-            <Link href="/" className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1">
+          <div className="flex gap-5 mt-4">
+            <Link href="/" className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1">
               <ArrowLeft className="w-3.5 h-3.5" /> Accueil
             </Link>
-            <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
+            <button onClick={onLeave} className="text-sm font-bold text-inkMuted hover:text-danger underline transition">
               Quitter la partie
             </button>
           </div>
@@ -940,14 +940,14 @@ function BuzzerView({
             })}
           </ul>
 
-          <div className="flex gap-4">
+          <div className="flex gap-5 mt-4">
             <Link
               href="/"
-              className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+              className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Accueil
             </Link>
-            <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
+            <button onClick={onLeave} className="text-sm font-bold text-inkMuted hover:text-danger underline transition">
               Quitter la partie
             </button>
           </div>
@@ -1165,14 +1165,14 @@ function BuzzerView({
           )}
         </>
       )}
-      <div className="flex gap-4">
+      <div className="flex gap-5 mt-4">
         <Link
           href="/"
-          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+          className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Accueil
         </Link>
-        <button onClick={onLeave} className="text-xs text-inkMuted hover:text-danger underline transition">
+        <button onClick={onLeave} className="text-sm font-bold text-inkMuted hover:text-danger underline transition">
           Quitter la partie
         </button>
       </div>

@@ -604,12 +604,8 @@ async function insertRound(
   roomId: string,
   track: { sourceTrackId: string; title: string; artist: string },
   blindMode: boolean,
-  jokerEnabled: boolean
+  isJoker: boolean
 ): Promise<Round> {
-  // Manche joker (voir migration 0017) : tirée au hasard ici, purement
-  // ludique. Si le bonus est désactivé dans les réglages de la room, on ne
-  // tire même pas au hasard : is_joker restera toujours false.
-  const isJoker = jokerEnabled && Math.random() < JOKER_ROUND_PROBABILITY;
 
   // start_round (migration 0032) : vérifie le jeton d'hôte, calcule le
   // numéro de manche, crée la manche et passe la partie "in_progress".
@@ -649,7 +645,7 @@ export async function startTestRound(
       artist: "Artiste de test",
     },
     blindMode,
-    jokerEnabled
+    drawJokerRound(jokerEnabled)
   );
 }
 
@@ -660,13 +656,22 @@ export async function startTestRound(
  * (spotify.playTrackOnHostDevice), pour garder cette fonction indépendante
  * de la source musicale.
  */
+/**
+ * Tirage de la manche joker (voir migration 0017), fait par l'hôte AVANT
+ * le lancement pour pouvoir l'annoncer (voir l'annonce de manche dans
+ * app/host/page.tsx). Toujours false si le bonus est désactivé.
+ */
+export function drawJokerRound(jokerEnabled: boolean): boolean {
+  return jokerEnabled && Math.random() < JOKER_ROUND_PROBABILITY;
+}
+
 export async function startRoundWithTrack(
   roomId: string,
   track: { sourceTrackId: string; title: string; artist: string },
   blindMode: boolean,
-  jokerEnabled: boolean
+  isJoker: boolean
 ): Promise<Round> {
-  return insertRound(roomId, track, blindMode, jokerEnabled);
+  return insertRound(roomId, track, blindMode, isJoker);
 }
 
 /**

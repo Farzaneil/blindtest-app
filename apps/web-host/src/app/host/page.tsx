@@ -21,6 +21,7 @@ import {
   revealRound,
   resolveRoundAttempt,
   timeoutRound,
+  drawJokerRound,
   finishRoom,
   resumeRoom,
   resetRoomScores,
@@ -58,6 +59,7 @@ import { AwardCards, TeamDot, TeamRecapTable, TeamResultBanner, TeamScoreCards }
 import { TeamSetupPanel } from "../_components/TeamSetupPanel";
 import { RejoinRequestsBanner } from "../_components/RejoinRequestsBanner";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
+import { ROUND_INTRO_MS, RoundIntroOverlay, roundAnnouncements, type RoundAnnouncement } from "../_components/RoundIntro";
 import { withRanks, formatOrdinal, podiumRowClasses } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
@@ -72,7 +74,7 @@ import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { confirmDialog } from "../_components/ConfirmDialog";
 import { DeezerPlaylistPicker } from "../_components/DeezerPlaylistPicker";
-import { getDeezerPreviewUrl, isDeezerTrackId } from "../../lib/deezer";
+import { getDeezerPreview, isDeezerTrackId } from "../../lib/deezer";
 import { usePreviewPlayer } from "../../lib/usePreviewPlayer";
 import { PlayerAvatar, avatarForPlayer } from "../../lib/avatars";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
@@ -525,7 +527,7 @@ function HostBuzzerView({
 
       <button
         onClick={onBackToAdmin}
-        className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+        className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
       >
         <LayoutDashboard className="w-3.5 h-3.5" /> Vue admin
       </button>
@@ -846,6 +848,10 @@ function HostScreenInner() {
   const preview = usePreviewPlayer();
   // Source du morceau en cours de lecture (pause/reprise au bon endroit).
   const activeSourceRef = useRef<"deezer" | "spotify" | null>(null);
+  // Annonce des bonus/malus de la manche à venir (voir RoundIntro) : affichée
+  // quelques secondes avant le lancement, passable via "C'est parti !".
+  const [roundIntro, setRoundIntro] = useState<{ number: number; items: RoundAnnouncement[] } | null>(null);
+  const skipRoundIntroRef = useRef<(() => void) | null>(null);
   const [queueIndex, setQueueIndex] = useState(0);
   const [buildingPlaylist, setBuildingPlaylist] = useState(true);
   const [myPlaylists, setMyPlaylists] = useState<spotify.SpotifyPlaylistSummary[] | null>(null);
@@ -1039,8 +1045,11 @@ function HostScreenInner() {
   // hostPlayerId) : il doit reprendre la main pour révéler la réponse et
   // juger, sans avoir à penser à rebasculer lui-même. Sens inverse (admin
   // -> buzzer au lancement d'une manche) géré dans handlePlayNextInQueue.
+  // Même bascule quand la manche se termine sans buzz (temps écoulé,
+  // statut "scored" directement depuis "playing") : l'hôte doit retrouver
+  // son écran pour afficher la réponse et lancer la manche suivante.
   useEffect(() => {
-    if (hostPlayerId && round?.status === "buzzed") {
+    if (hostPlayerId && (round?.status === "buzzed" || round?.status === "scored")) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setHostView("admin");
     }
@@ -1377,8 +1386,11 @@ function HostScreenInner() {
     }
   };
 
-  const launchRound = async (track: spotify.SpotifyTrack) => {
+  const launchRound = async (track: spotify.SpotifyTrack, isJoker: boolean) => {
     if (!room) return;
+    // Artistes de la manche : ceux de la file par défaut ; pour Deezer,
+    // remplacés par la liste complète (featurings) renvoyée avec l'extrait.
+    let artist = track.artist;
     const fromDeezer = isDeezerTrackId(track.sourceTrackId);
     if (!fromDeezer && (!spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current)) {
       setError("Ce morceau vient de Spotify : connecte Spotify (source « Spotify ») pour le jouer.");
@@ -1387,8 +1399,9 @@ function HostScreenInner() {
     try {
       if (fromDeezer) {
         // Extrait de 30 s : URL redemandée à chaque manche (elle expire).
-        const url = await getDeezerPreviewUrl(track.sourceTrackId);
-        await preview.play(url);
+        const fresh = await getDeezerPreview(track.sourceTrackId);
+        if (fresh.artist) artist = fresh.artist;
+        await preview.play(fresh.preview);
         activeSourceRef.current = "deezer";
       } else {
         const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current!);
@@ -1404,10 +1417,10 @@ function HostScreenInner() {
         {
           sourceTrackId: track.sourceTrackId,
           title: track.title,
-          artist: track.artist,
+          artist,
         },
         blindMode,
-        room.bonus_joker_enabled
+        isJoker
       );
       // Mise à jour immédiate depuis la ligne retournée par l'insert (déjà
       // au statut "playing"), sans attendre l'écho de Supabase Realtime :
@@ -1458,7 +1471,32 @@ function HostScreenInner() {
       await assignUnassignedPlayers(room.id).catch(() => {});
     }
 
-    await launchRound(queue[queueIndex]);
+    // Bonus/malus de la manche à venir, annoncés avant son lancement : le
+    // joker est tiré ici (et non plus au moment de créer la manche) pour
+    // pouvoir l'annoncer. Pas d'annonce s'il n'y a rien de spécial.
+    const isJoker = drawJokerRound(room?.bonus_joker_enabled ?? false);
+    const nextOrderIndex = Math.max(-1, round?.order_index ?? -1, ...roundHistory.map((r) => r.order_index)) + 1;
+    const announcements = roundAnnouncements({
+      isJoker,
+      nextOrderIndex,
+      players,
+      lockoutEnabled: room?.malus_streak_lockout_enabled ?? false,
+      blockEnabled: room?.malus_streak_block_enabled ?? false,
+    });
+    if (announcements.length > 0) {
+      setRoundIntro({ number: nextOrderIndex + 1, items: announcements });
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, ROUND_INTRO_MS);
+        skipRoundIntroRef.current = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+      skipRoundIntroRef.current = null;
+      setRoundIntro(null);
+    }
+
+    await launchRound(queue[queueIndex], isJoker);
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
     setLaunchingRound(false);
@@ -1971,22 +2009,22 @@ function HostScreenInner() {
           <JoinQrCode code={room.code} />
         </div>
       )}
-      <div className="flex justify-center gap-4 mt-3">
+      <div className="flex justify-center gap-5 mt-6">
         <button
           onClick={() => setShowJoinQr((s) => !s)}
-          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+          className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
         >
           <QrCode className="w-3.5 h-3.5" /> {showJoinQr ? "Masquer le QR code" : "QR code"}
         </button>
         <Link
           href="/"
-          className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+          className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
         >
           <ArrowLeft className="w-3.5 h-3.5" /> Accueil
         </Link>
         <button
           onClick={handleStartNewGame}
-          className="text-xs text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
+          className="text-sm font-bold text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
         >
           <RefreshCw className="w-3.5 h-3.5" /> Nouvelle partie
         </button>
@@ -2940,6 +2978,13 @@ function HostScreenInner() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
+      {roundIntro && (
+        <RoundIntroOverlay
+          roundNumber={roundIntro.number}
+          items={roundIntro.items}
+          onSkip={() => skipRoundIntroRef.current?.()}
+        />
+      )}
       <PlayerAccountCorner inline />
       <RejoinRequestsBanner
         requests={rejoinRequests}
@@ -3003,13 +3048,13 @@ function HostScreenInner() {
             <div className="flex gap-4">
               <Link
                 href="/"
-                className="text-xs text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
+                className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
               >
                 <ArrowLeft className="w-3.5 h-3.5" /> Accueil
               </Link>
               <button
                 onClick={handleStartNewGame}
-                className="text-xs text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
+                className="text-sm font-bold text-inkMuted hover:text-danger underline transition inline-flex items-center gap-1"
               >
                 <RefreshCw className="w-3.5 h-3.5" /> Nouvelle partie
               </button>
