@@ -8,7 +8,18 @@
 
 import type { spotify } from "@blindtest/api-clients";
 
-export type QueueTrack = spotify.SpotifyTrack;
+/**
+ * Morceau de la file d'attente de l'hôte. `playlist` = la playlist dont il
+ * vient (Deezer ou Spotify), pour l'afficher et la retirer d'un bloc ; absent
+ * pour un morceau ajouté à la main. `id` préfixé par la source
+ * ("deezer:123", "spotify:abc") pour éviter toute collision.
+ */
+export type QueueTrack = spotify.SpotifyTrack & { playlist?: { id: string; name: string } };
+
+/** Rattache des morceaux importés à leur playlist d'origine. */
+export function tagWithPlaylist(tracks: QueueTrack[], playlist: { id: string; name: string }): QueueTrack[] {
+  return tracks.map((t) => ({ ...t, playlist }));
+}
 
 export type DeezerPlaylistSummary = {
   id: string;

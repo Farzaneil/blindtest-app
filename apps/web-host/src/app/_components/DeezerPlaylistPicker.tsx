@@ -71,9 +71,14 @@ const QUICK_SEARCHES = [
  */
 export function DeezerPlaylistPicker({
   onImport,
+  importedCounts,
   disabled = false,
 }: {
   onImport: (tracks: QueueTrack[], playlist: DeezerPlaylistSummary) => void;
+  // Morceaux encore à venir dans la file, par playlist Deezer (id brut) :
+  // calculé par l'hôte à partir de la file elle-même, pour que le badge
+  // "x ajoutés" disparaisse dès que ces morceaux en sont retirés.
+  importedCounts: Record<string, number>;
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -82,7 +87,6 @@ export function DeezerPlaylistPicker({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
-  const [imported, setImported] = useState<Record<string, number>>({});
   // Nombre de morceaux JOUABLES (avec extrait) par playlist : c'est le seul
   // chiffre affiché, pour qu'il corresponde exactement à ce qui arrive dans
   // la file à l'import. Calculé à la volée pour les lignes visibles (mis en
@@ -163,7 +167,6 @@ export function DeezerPlaylistPicker({
         return;
       }
       onImport(tracks, p);
-      setImported((m) => ({ ...m, [p.id]: tracks.length }));
     } catch (e: any) {
       setError(e?.message ?? "Import impossible.");
     } finally {
@@ -225,7 +228,7 @@ export function DeezerPlaylistPicker({
       ) : (
         <ul className="flex flex-col gap-2 max-h-80 overflow-y-auto pr-1">
           {results.map((p) => {
-            const done = imported[p.id];
+            const done = importedCounts[p.id];
             const count = counts[p.id];
             const empty = count === 0;
             return (

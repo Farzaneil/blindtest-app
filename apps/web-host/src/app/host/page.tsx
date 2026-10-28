@@ -59,7 +59,6 @@ import { AwardCards, TeamDot, TeamRecapTable, TeamResultBanner, TeamScoreCards }
 import { TeamSetupPanel } from "../_components/TeamSetupPanel";
 import { RejoinRequestsBanner } from "../_components/RejoinRequestsBanner";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
-import { ROUND_INTRO_MS, RoundIntroOverlay, roundAnnouncements, type RoundAnnouncement } from "../_components/RoundIntro";
 import { withRanks, formatOrdinal, podiumRowClasses } from "../../lib/ranking";
 import { isFullyBlockedThisRound, buzzUnlockedAtMs } from "../../lib/buzzLockout";
 import { useForceLoopbackHost } from "../../lib/useForceLoopbackHost";
@@ -74,7 +73,7 @@ import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { confirmDialog } from "../_components/ConfirmDialog";
 import { DeezerPlaylistPicker } from "../_components/DeezerPlaylistPicker";
-import { getDeezerPreview, isDeezerTrackId } from "../../lib/deezer";
+import { getDeezerPreview, isDeezerTrackId, tagWithPlaylist, type QueueTrack } from "../../lib/deezer";
 import { usePreviewPlayer } from "../../lib/usePreviewPlayer";
 import { PlayerAvatar, avatarForPlayer } from "../../lib/avatars";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
@@ -114,6 +113,7 @@ import {
   TrendingUp,
   QrCode,
   Shuffle,
+  X,
 } from "lucide-react";
 
 type HostMode = "gamemaster" | "player";
@@ -812,7 +812,7 @@ function HostScreenInner() {
 
   // File d'attente : les morceaux d'indice < queueIndex ont déjà été joués,
   // ceux à partir de queueIndex restent à venir.
-  const [queue, setQueue] = useState<spotify.SpotifyTrack[]>([]);
+  const [queue, setQueue] = useState<QueueTrack[]>([]);
   // Source musicale (prototype Deezer) : "deezer" = extraits de 30 s via
   // l'API publique Deezer, sans compte ni Premium (par défaut) ;
   // "spotify" = morceaux complets via le lecteur Spotify (Premium, comptes
@@ -848,10 +848,6 @@ function HostScreenInner() {
   const preview = usePreviewPlayer();
   // Source du morceau en cours de lecture (pause/reprise au bon endroit).
   const activeSourceRef = useRef<"deezer" | "spotify" | null>(null);
-  // Annonce des bonus/malus de la manche à venir (voir RoundIntro) : affichée
-  // quelques secondes avant le lancement, passable via "C'est parti !".
-  const [roundIntro, setRoundIntro] = useState<{ number: number; items: RoundAnnouncement[] } | null>(null);
-  const skipRoundIntroRef = useRef<(() => void) | null>(null);
   const [queueIndex, setQueueIndex] = useState(0);
   const [buildingPlaylist, setBuildingPlaylist] = useState(true);
   const [myPlaylists, setMyPlaylists] = useState<spotify.SpotifyPlaylistSummary[] | null>(null);
@@ -1298,6 +1294,12 @@ function HostScreenInner() {
     setQueue((q) => q.slice(0, queueIndex));
   };
 
+  // Retire de la partie "à venir" tous les morceaux d'une playlist importée
+  // (une playlist ajoutée par erreur, sans vider le reste de la file).
+  const handleRemovePlaylistFromQueue = (playlistId: string) => {
+    setQueue((q) => [...q.slice(0, queueIndex), ...q.slice(queueIndex).filter((t) => t.playlist?.id !== playlistId)]);
+  };
+
   // Mélange la portion "à venir" (utile après l'import de plusieurs
   // playlists, sinon elles s'enchaînent bloc par bloc) ; les morceaux déjà
   // joués restent à leur place.
@@ -1370,10 +1372,11 @@ function HostScreenInner() {
         return;
       }
       const tracks = await spotify.getPlaylistTracks(playlistId, accessToken);
+      const playlistName = myPlaylists?.find((pl) => pl.id === playlistId)?.name ?? "Playlist Spotify";
       // Mélangé pour qu'un hôte qui joue aussi (mode "player") ne puisse pas
       // déduire l'ordre des prochaines manches à partir de sa propre
       // playlist.
-      setQueue((q) => [...q, ...shuffle(tracks)]);
+      setQueue((q) => [...q, ...shuffle(tagWithPlaylist(tracks, { id: `spotify:${playlistId}`, name: playlistName }))]);
       // Badge "Curateur" (voir migration 0021) : fire-and-forget, ne doit
       // jamais faire échouer l'import lui-même.
       if (room) recordPlaylistImport(room.id, playlistId).catch(() => {});
@@ -1471,31 +1474,9 @@ function HostScreenInner() {
       await assignUnassignedPlayers(room.id).catch(() => {});
     }
 
-    // Bonus/malus de la manche à venir, annoncés avant son lancement : le
-    // joker est tiré ici (et non plus au moment de créer la manche) pour
-    // pouvoir l'annoncer. Pas d'annonce s'il n'y a rien de spécial.
+    // Manche joker tirée ici (voir drawJokerRound), puis transmise au
+    // lancement.
     const isJoker = drawJokerRound(room?.bonus_joker_enabled ?? false);
-    const nextOrderIndex = Math.max(-1, round?.order_index ?? -1, ...roundHistory.map((r) => r.order_index)) + 1;
-    const announcements = roundAnnouncements({
-      isJoker,
-      nextOrderIndex,
-      players,
-      lockoutEnabled: room?.malus_streak_lockout_enabled ?? false,
-      blockEnabled: room?.malus_streak_block_enabled ?? false,
-    });
-    if (announcements.length > 0) {
-      setRoundIntro({ number: nextOrderIndex + 1, items: announcements });
-      await new Promise<void>((resolve) => {
-        const timer = setTimeout(resolve, ROUND_INTRO_MS);
-        skipRoundIntroRef.current = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
-      skipRoundIntroRef.current = null;
-      setRoundIntro(null);
-    }
-
     await launchRound(queue[queueIndex], isJoker);
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
@@ -1862,6 +1843,20 @@ function HostScreenInner() {
   // d'abord passer par handleResolve pour arriver à "scored".
   const canStartRound = !round || round.status === "scored";
   const upcomingQueue = queue.slice(queueIndex);
+  // Playlists encore présentes dans la partie "à venir" de la file, dans
+  // l'ordre de leur premier morceau, avec le nombre de morceaux restants.
+  const queuePlaylists: { id: string; name: string; count: number }[] = [];
+  for (const t of upcomingQueue) {
+    if (!t.playlist) continue;
+    const entry = queuePlaylists.find((pl) => pl.id === t.playlist!.id);
+    if (entry) entry.count += 1;
+    else queuePlaylists.push({ ...t.playlist, count: 1 });
+  }
+  const manualCount = upcomingQueue.filter((t) => !t.playlist).length;
+  const deezerImportedCounts: Record<string, number> = {};
+  for (const pl of queuePlaylists) {
+    if (pl.id.startsWith("deezer:")) deezerImportedCounts[pl.id.slice("deezer:".length)] = pl.count;
+  }
   const queueExhausted = canStartRound && queueIndex > 0 && upcomingQueue.length === 0;
   const gameStarted = queueIndex > 0;
   // Joueur(s) ayant atteint (ou dépassé) le score cible — s'il y en a
@@ -2812,10 +2807,11 @@ function HostScreenInner() {
             {effectiveMusicSource === "deezer" ? (
               <div className="flex flex-col gap-3 bg-inkSurface3 border-2 border-fg rounded-2xl p-4 min-h-[220px] min-w-0">
                 <DeezerPlaylistPicker
-                  onImport={(tracks) => {
+                  importedCounts={deezerImportedCounts}
+                  onImport={(tracks, playlist) => {
                     // Mélangé, comme l'import Spotify (l'hôte qui joue ne
                     // doit pas deviner l'ordre des manches).
-                    setQueue((q) => [...q, ...shuffle(tracks)]);
+                    setQueue((q) => [...q, ...shuffle(tagWithPlaylist(tracks, { id: `deezer:${playlist.id}`, name: playlist.title }))]);
                   }}
                 />
               </div>
@@ -2903,6 +2899,34 @@ function HostScreenInner() {
                   </div>
                 )}
               </div>
+              {queuePlaylists.length > 0 && (
+                <ul className="flex flex-wrap gap-2" aria-label="Playlists dans la file">
+                  {queuePlaylists.map((pl) => (
+                    <li
+                      key={pl.id}
+                      className="inline-flex items-center gap-1.5 max-w-full bg-inkSurface border-2 border-fg rounded-full pl-3 pr-1 py-0.5 text-sm font-bold"
+                    >
+                      <span className="truncate min-w-0" title={pl.name}>
+                        {pl.name}
+                      </span>
+                      <span className="text-inkMuted shrink-0">· {pl.count}</span>
+                      <button
+                        onClick={() => handleRemovePlaylistFromQueue(pl.id)}
+                        aria-label={`Retirer la playlist ${pl.name} de la file`}
+                        title="Retirer cette playlist de la file"
+                        className="shrink-0 w-6 h-6 rounded-full inline-flex items-center justify-center text-danger hover:bg-danger hover:text-white transition"
+                      >
+                        <X className="w-3.5 h-3.5" strokeWidth={3} />
+                      </button>
+                    </li>
+                  ))}
+                  {manualCount > 0 && (
+                    <li className="inline-flex items-center bg-inkSurface border-2 border-dashed border-fg rounded-full px-3 py-0.5 text-sm font-bold text-inkMuted">
+                      Ajouts à la main · {manualCount}
+                    </li>
+                  )}
+                </ul>
+              )}
               {upcomingQueue.length === 0 ? (
                 <p className="text-sm text-inkMuted">
                   Aucun morceau pour l’instant — utilise un des onglets à gauche pour en ajouter.
@@ -2978,13 +3002,7 @@ function HostScreenInner() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
-      {roundIntro && (
-        <RoundIntroOverlay
-          roundNumber={roundIntro.number}
-          items={roundIntro.items}
-          onSkip={() => skipRoundIntroRef.current?.()}
-        />
-      )}
+
       <PlayerAccountCorner inline />
       <RejoinRequestsBanner
         requests={rejoinRequests}

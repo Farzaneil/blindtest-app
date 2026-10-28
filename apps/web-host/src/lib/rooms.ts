@@ -657,9 +657,8 @@ export async function startTestRound(
  * de la source musicale.
  */
 /**
- * Tirage de la manche joker (voir migration 0017), fait par l'hôte AVANT
- * le lancement pour pouvoir l'annoncer (voir l'annonce de manche dans
- * app/host/page.tsx). Toujours false si le bonus est désactivé.
+ * Tirage de la manche joker (voir migration 0017), fait par l'hôte au
+ * lancement de la manche. Toujours false si le bonus est désactivé.
  */
 export function drawJokerRound(jokerEnabled: boolean): boolean {
   return jokerEnabled && Math.random() < JOKER_ROUND_PROBABILITY;
