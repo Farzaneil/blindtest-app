@@ -1,4 +1,4 @@
-import { Clock, Cookie, Database, Scale, Server, Trash2, UserRound } from "lucide-react";
+import { Clock, Cookie, Database, MessageCircle, Scale, Server, Trash2, UserRound } from "lucide-react";
 import Link from "next/link";
 import { InfoCard, InfoItem, InfoPage } from "../_components/InfoPage";
 import { ContactEmail } from "../_components/ContactEmail";
@@ -19,7 +19,8 @@ export const metadata = { title: "Confidentialité" };
  *   spotify_* (hôte Spotify uniquement), bt_analytics_consent (inutilisé
  *   tant qu'ANALYTICS_ENABLED = false) ;
  * - stockage du navigateur : thème (localStorage), partie en cours et
- *   jeton d'hôte (sessionStorage).
+ *   jeton d'hôte (sessionStorage) ;
+ * - retours de la bêta : table feedback (migration 0036), mail via Brevo.
  * À mettre à jour à chaque nouvelle donnée collectée.
  */
 export default function ConfidentialitePage() {
@@ -54,6 +55,16 @@ export default function ConfidentialitePage() {
         </p>
       </InfoCard>
 
+      <InfoCard icon={MessageCircle} title="Si tu nous envoies un retour" tone="gold">
+        <p>
+          Le bouton « ! » permet de signaler un bug ou de donner ton avis. On reçoit alors ton message, le type et
+          le sujet choisis, ton adresse e-mail si tu la laisses (ou celle de ton compte, pour pouvoir te
+          répondre), la capture d’écran si tu en joins une, et quelques infos techniques : la page, la partie en
+          cours, ton appareil et ton navigateur, et les erreurs de la page. Ces infos servent uniquement à
+          corriger le jeu.
+        </p>
+      </InfoCard>
+
       <InfoCard icon={Scale} title="Pourquoi on a le droit" tone="c2">
         <p>
           Ces données sont nécessaires pour te fournir le service que tu demandes (jouer, garder ta
@@ -74,6 +85,10 @@ export default function ConfidentialitePage() {
           <li>
             <span className="font-bold">Parties</span> (pseudos, scores, réponses) : supprimées
             automatiquement 12 mois après la partie. Ton XP et tes badges, eux, restent sur ton compte.
+          </li>
+          <li>
+            <span className="font-bold">Retours envoyés</span> : supprimés automatiquement au bout de 12 mois. La
+            capture d’écran n’est pas stockée sur le site : elle arrive seulement dans notre boîte mail.
           </li>
           <li>
             <span className="font-bold">Compteurs anti-abus</span> (adresse IP, e-mail) : effacés au bout
@@ -114,7 +129,7 @@ export default function ConfidentialitePage() {
             en {DATABASE.region}.
           </li>
           <li>
-            <span className="font-bold">Brevo</span> (France) : envoi des e-mails de connexion.
+            <span className="font-bold">Brevo</span> (France) : envoi des e-mails de connexion et transmission des retours de la bêta.
           </li>
           <li>
             <span className="font-bold">Vercel</span> (États-Unis) : hébergement du site. Les pages et les

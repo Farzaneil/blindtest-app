@@ -14,6 +14,7 @@
 // refresh/back, pas à la fermeture de l'onglet, pas partagé entre onglets.
 export const dynamic = "force-dynamic";
 
+import { useFeedbackContext } from "../../lib/feedbackContext";
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Dice5, Check } from "lucide-react";
@@ -541,6 +542,15 @@ function BuzzerView({
   // synchronisés en direct (l'hôte peut renommer ou changer de format
   // avant le lancement).
   const [gameMode, setGameMode] = useState<"solo" | "team">("solo");
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const { account: feedbackAccount } = usePlayerAccount();
+  // Contexte joint aux retours de la bêta (bouton « ! », voir FeedbackWidget).
+  useFeedbackContext({
+    roomCode,
+    role: feedbackAccount ? "joueur" : "joueur invité",
+    round: round ? round.order_index + 1 : null,
+    mode: gameMode === "team" ? "Équipes" : null,
+  });
   const [teams, setTeams] = useState<Team[]>([]);
   // Compte joueur connecté (voir usePlayerAccount) : uniquement pour savoir
   // à qui notifier un badge tout juste débloqué (voir
@@ -576,6 +586,7 @@ function BuzzerView({
     return subscribeToRoom(roomId, (room) => {
       setRoomStatus(room?.status ?? null);
       setGameMode(room?.game_mode ?? "solo");
+      setRoomCode(room?.code ?? null);
       // configure_room_teams met toujours à jour la room : on en profite
       // pour relire les équipes, sans dépendre uniquement de l'écho
       // Realtime de subscribeToTeams (même cause que le bug "Solo ->

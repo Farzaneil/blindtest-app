@@ -11,7 +11,7 @@
 export const CONTACT_EMAIL: string | null = "contact@kazouband.fr";
 
 /** Date de dernière mise à jour des documents légaux. */
-export const LEGAL_LAST_UPDATE = "27 octobre 2026";
+export const LEGAL_LAST_UPDATE = "1er novembre 2026";
 
 /** Âge minimum pour créer un compte joueur (consentement numérique en France). */
 export const MIN_ACCOUNT_AGE = 15;

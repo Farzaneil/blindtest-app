@@ -386,6 +386,7 @@ En prod, il ne fait rien.
 | 0033 | Limitation des requêtes (`rate_limits`, `hit_rate_limit`, réservée au `service_role`) |
 | 0034 | Droits explicites sur toutes les tables ; e-mails des comptes illisibles par les clients |
 | 0035 | Conservation des données : `last_seen_at`, `purge_old_data()` planifiée chaque nuit par pg_cron |
+| 0036 | Retours de la bêta (table `feedback`, écrite par le serveur seulement), purgés au bout de 12 mois |
 
 ### `apps/web-host/src` en bref
 
@@ -480,6 +481,7 @@ npm run web-host                                          # http://localhost:300
 | `SPOTIFY_HOST_EMAILS` | E-mails autorisés à utiliser Spotify, séparés par des virgules | Non |
 | `SPOTIFY_CLIENT_ID` | Spotify Developer Dashboard (pas de Client Secret, flow PKCE) | Non |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` (prod : `https://kazouband.fr/api/spotify/callback`) | Non |
+| `BREVO_API_KEY` | Brevo → SMTP & API → Clés API : envoi des retours de la bêta à contact@ (serveur uniquement) | **Oui** |
 | `NEXT_PUBLIC_SITE_URL` | Adresse publique (QR code, aperçus de lien). Facultative : `https://kazouband.fr` par défaut | Non |
 | `SPOTIFY_PLAYER_REDIRECT_URI` | Pour l'ancienne connexion joueur via Spotify, plus utilisée dans l'UI | Non |
 
@@ -495,7 +497,7 @@ Pièges :
 ### Configuration Supabase
 
 1. **Migrations** : exécuter les fichiers de `supabase/migrations/` dans l'ordre
-   (0001 → 0035), dans le SQL Editor. Une migration committée n'est **pas**
+   (0001 → 0036), dans le SQL Editor. Une migration committée n'est **pas**
    appliquée automatiquement : il faut aussi la coller dans le SQL Editor. Attention,
    la base locale et la prod sont la même base.
 2. **Realtime** : vérifier que `players`, `rounds`, `buzzes`, `rooms`,
@@ -537,6 +539,19 @@ Les cookies sont en `secure: true` en production, détecté via `NODE_ENV`.
 `kazouband.fr`. L'ancienne adresse `blindtest-app-web-host.vercel.app` est
 redirigée par `next.config.js` (`redirects`, hôte exact uniquement : les
 prévisualisations `*-git-*.vercel.app` restent accessibles).
+
+## Retours de la bêta
+
+- **Bouton « ! »** (`app/_components/FeedbackWidget.tsx`, monté dans `layout.tsx`) : bulle rose en bas à
+  gauche sur toutes les pages, texte au survol. Formulaire : type (bug, idée, avis), sujet, gravité pour
+  un bug, message (10 à 2 000 caractères), capture d'écran facultative (choisie ou collée, réduite et
+  recompressée dans le navigateur), e-mail facultatif (celui du compte par défaut).
+- **Contexte joint** (`lib/feedbackContext.ts`) : page, partie (code, manche, rôle, mode) déclarée par
+  `useFeedbackContext` sur `/host` et `/play`, appareil, version (`VERCEL_GIT_COMMIT_SHA`), 20 dernières
+  erreurs JavaScript.
+- **Envoi** (`app/api/feedback`) : 5 par heure et par IP ; enregistré dans `feedback` (sans la capture)
+  puis envoyé à `CONTACT_EMAIL` par l'API Brevo, objet `[Bêta] Bug · Buzzer · gênant — « … »`, réponse
+  directe au testeur. Sujets et libellés : `lib/feedback.ts`.
 
 ## Domaine et e-mails
 

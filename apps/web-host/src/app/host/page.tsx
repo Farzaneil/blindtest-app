@@ -72,6 +72,7 @@ import {
 import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { confirmDialog } from "../_components/ConfirmDialog";
+import { useFeedbackContext } from "../../lib/feedbackContext";
 import { DeezerPlaylistPicker } from "../_components/DeezerPlaylistPicker";
 import { getDeezerPreview, isDeezerTrackId, tagWithPlaylist, type QueueTrack } from "../../lib/deezer";
 import { usePreviewPlayer } from "../../lib/usePreviewPlayer";
@@ -762,6 +763,13 @@ function HostScreenInner() {
   const [hostJoinError, setHostJoinError] = useState<string | null>(null);
   const [hostJoinSkipped, setHostJoinSkipped] = useState(false);
   const [hostView, setHostView] = useState<"admin" | "buzzer">("admin");
+  // Contexte joint aux retours de la bêta (bouton « ! », voir FeedbackWidget).
+  useFeedbackContext({
+    roomCode: room?.code ?? null,
+    role: "hôte",
+    round: round ? round.order_index + 1 : null,
+    mode: hostMode === "player" ? "Tout le monde participe" : hostMode === "gamemaster" ? "Maître du jeu" : null,
+  });
   const [joinHostFormOpen, setJoinHostFormOpen] = useState(false);
   const [hostNameDraft, setHostNameDraft] = useState("Hôte");
   const [joiningAsHost, setJoiningAsHost] = useState(false);

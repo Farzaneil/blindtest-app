@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import { CookieConsentBanner } from "./_components/CookieConsentBanner";
 import { ConfirmDialogHost } from "./_components/ConfirmDialog";
+import { FeedbackWidget } from "./_components/FeedbackWidget";
 import { THEME_INIT_SCRIPT } from "../lib/theme";
 
 // Polices incluses dans le dépôt (src/app/_fonts, sous-ensemble latin, qui
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         {children}
         <CookieConsentBanner />
         <ConfirmDialogHost />
+        <FeedbackWidget />
       </body>
     </html>
   );
