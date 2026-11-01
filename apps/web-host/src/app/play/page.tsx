@@ -18,7 +18,8 @@ import { useFeedbackContext } from "../../lib/feedbackContext";
 import { trackAcquisition } from "../../lib/acquisition";
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, Trophy, Zap, Flame, Dice5, Check } from "lucide-react";
+import { ArrowLeft, Trophy, Zap, Flame, Check } from "lucide-react";
+import { JokerIcon } from "../../lib/jokerIcon";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
 import { KazouGameIntro, KazouLobby, KazouRankBadge } from "../_components/KazouStage";
 import {
@@ -1055,7 +1056,7 @@ function BuzzerView({
         <>
           {round.is_joker && (
             <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              <JokerIcon className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
           {alreadyBuzzed && (
@@ -1100,7 +1101,7 @@ function BuzzerView({
         <>
           {round.is_joker && (
             <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              <JokerIcon className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
           {somethingAlreadyFound && (

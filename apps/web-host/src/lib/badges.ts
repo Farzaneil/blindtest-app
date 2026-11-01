@@ -5,7 +5,6 @@ import {
   Zap,
   Flame,
   TrendingUp,
-  Dice5,
   Bell,
   Ear,
   Timer,
@@ -19,6 +18,7 @@ import {
   Palette,
   type LucideIcon,
 } from "lucide-react";
+import { JokerIcon } from "./jokerIcon";
 
 /**
  * Définitions des badges (libellés, catégories, seuils) — phase 3 du plan
@@ -108,7 +108,7 @@ export const BADGE_DEFINITIONS: BadgeDefinition[] = [
     // Même icône que le toggle "Manche joker" côté hôte (voir host/page.tsx)
     // — cohérence visuelle entre le réglage qui déclenche ces manches et le
     // badge qui en suit les victoires.
-    icon: Dice5,
+    icon: JokerIcon,
   },
   {
     key: "reflexes",

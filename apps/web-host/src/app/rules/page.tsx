@@ -1,6 +1,5 @@
 import {
   Clock,
-  Dice5,
   Flame,
   Gamepad2,
   Music2,
@@ -13,6 +12,7 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
+import { JokerIcon } from "../../lib/jokerIcon";
 import { InfoCard, InfoItem, InfoPage, Pill } from "../_components/InfoPage";
 
 export const metadata = { title: "Règles du jeu" };
@@ -100,9 +100,9 @@ export default function RulesPage() {
         </p>
       </InfoCard>
 
-      <InfoCard icon={Dice5} title="Bonus et malus" tone="gold">
+      <InfoCard icon={Sparkles} title="Bonus et malus" tone="gold">
         <p className="text-sm text-inkMuted">Tous activés par défaut, l’hôte peut les couper à tout moment.</p>
-        <InfoItem icon={Dice5} title="Manche joker">
+        <InfoItem icon={JokerIcon} title="Manche joker">
           Environ 1 manche sur 10 : points doublés dans les deux sens (+4 pour une réponse complète, -2
           pour une mauvaise).
         </InfoItem>

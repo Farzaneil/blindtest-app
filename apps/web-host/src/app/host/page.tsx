@@ -82,6 +82,7 @@ import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_c
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
 import { KazouGameIntro } from "../_components/KazouStage";
+import { JokerIcon } from "../../lib/jokerIcon";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY, type CosmeticDefinition } from "../../lib/cosmetics";
@@ -106,7 +107,6 @@ import {
   Zap,
   Flame,
   Play,
-  Dice5,
   AlertTriangle,
   Check,
   GripVertical,
@@ -411,7 +411,7 @@ function HostBuzzerView({
         <>
           {round.is_joker && (
             <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              <JokerIcon className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
           {somethingAlreadyFound && !answerRevealed && (
@@ -2045,7 +2045,7 @@ function HostScreenInner() {
         <div className="relative bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-10 animate-pulseGlow shadow-sticker">
           {round.is_joker && (
             <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full mb-3">
-              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              <JokerIcon className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
           <p className="text-2xl font-bold flex items-center justify-center gap-2">
@@ -2073,7 +2073,7 @@ function HostScreenInner() {
         <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
           {round.is_joker && (
             <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              <JokerIcon className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
           {winner && (
@@ -2124,7 +2124,7 @@ function HostScreenInner() {
         <div className="relative flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
           {round.is_joker && (
             <span className="inline-flex items-center gap-1.5 bg-amber text-amberOn font-display font-bold text-xs px-4 py-1.5 rounded-full">
-              <Dice5 className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
+              <JokerIcon className="w-3.5 h-3.5" /> JOKER — POINTS DOUBLÉS
             </span>
           )}
           {winner && (
@@ -2727,7 +2727,7 @@ function HostScreenInner() {
                   <BonusMalusToggleRow
                     label="Manche joker"
                     description="Environ 1 manche sur 10 double les points, dans les deux sens (bonne réponse complète : 4 pts au lieu de 2 ; mauvaise réponse : -2 au lieu de -1)."
-                    icon={<Dice5 className="w-4 h-4" />}
+                    icon={<JokerIcon className="w-4 h-4" />}
                     iconClassName="text-amberStrong"
                     enabled={room.bonus_joker_enabled}
                     saving={savingBonusMalusSetting === "bonus_joker_enabled"}
@@ -3181,7 +3181,7 @@ function HostScreenInner() {
                     <li key={r.id} className="bg-inkSurface2 rounded-xl px-4 py-2 text-sm">
                       <p className="truncate font-medium flex items-center gap-1.5">
                         {i + 1}. {r.title} — {r.artist}
-                        {r.is_joker && <Dice5 className="w-3.5 h-3.5 text-amberStrong shrink-0" />}
+                        {r.is_joker && <JokerIcon className="w-3.5 h-3.5 text-amberStrong shrink-0" />}
                       </p>
                       {attemptsForRound.length === 0 ? (
                         <p className="text-inkMuted">Personne n’a trouvé</p>
