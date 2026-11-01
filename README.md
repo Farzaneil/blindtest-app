@@ -387,6 +387,7 @@ En prod, il ne fait rien.
 | 0034 | Droits explicites sur toutes les tables ; e-mails des comptes illisibles par les clients |
 | 0035 | Conservation des données : `last_seen_at`, `purge_old_data()` planifiée chaque nuit par pg_cron |
 | 0036 | Retours de la bêta (table `feedback`, écrite par le serveur seulement), purgés au bout de 12 mois |
+| 0037 | Suivi des stickers / QR (`acquisition_events` : visite, partie créée, partie rejointe par code `?src=`), purgé au bout de 12 mois |
 
 ### `apps/web-host/src` en bref
 
@@ -497,7 +498,7 @@ Pièges :
 ### Configuration Supabase
 
 1. **Migrations** : exécuter les fichiers de `supabase/migrations/` dans l'ordre
-   (0001 → 0036), dans le SQL Editor. Une migration committée n'est **pas**
+   (0001 → 0037), dans le SQL Editor. Une migration committée n'est **pas**
    appliquée automatiquement : il faut aussi la coller dans le SQL Editor. Attention,
    la base locale et la prod sont la même base.
 2. **Realtime** : vérifier que `players`, `rounds`, `buzzes`, `rooms`,
@@ -552,6 +553,15 @@ prévisualisations `*-git-*.vercel.app` restent accessibles).
 - **Envoi** (`app/api/feedback`) : 5 par heure et par IP ; enregistré dans `feedback` (sans la capture)
   puis envoyé à `CONTACT_EMAIL` par l'API Brevo, objet `[Bêta] Bug · Buzzer · gênant — « … »`, réponse
   directe au testeur. Sujets et libellés : `lib/feedback.ts`.
+
+## Suivi des stickers (QR codes)
+
+- Chaque visuel et chaque ville a son lien : `https://kazouband.fr/?src=paris-kaz`, `?src=marseille-logo`…
+  (minuscules, chiffres et tirets, 40 caractères au plus).
+- `lib/acquisition.ts` (monté par `AcquisitionCapture` dans `layout.tsx`) garde le code 30 jours dans le
+  navigateur, retire `?src=` de l'adresse et envoie à `app/api/acquisition` : la visite, puis la partie
+  créée (`/host`) ou rejointe (`/play`). Aucune donnée personnelle.
+- Tableau de bord : la requête SQL en bas de `supabase/migrations/0037_acquisition.sql`.
 
 ## Domaine et e-mails
 

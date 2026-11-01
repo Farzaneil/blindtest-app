@@ -112,6 +112,11 @@ export default function ConfidentialitePage() {
             dans l’onglet, et, si l’hôte utilise Spotify, sa connexion Spotify.
           </li>
           <li>
+            <span className="font-bold">Lien de campagne</span> : si tu arrives par un sticker ou un lien
+            marqué (« ?src=… »), ce code est gardé 30 jours dans ton navigateur pour savoir quels stickers
+            font venir des joueurs. Il ne contient aucune donnée sur toi.
+          </li>
+          <li>
             <span className="font-bold">Préférences</span> : la couleur de fond choisie, gardée dans ton
             navigateur.
           </li>

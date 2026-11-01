@@ -15,6 +15,7 @@
 export const dynamic = "force-dynamic";
 
 import { useFeedbackContext } from "../../lib/feedbackContext";
+import { trackAcquisition } from "../../lib/acquisition";
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Dice5, Check } from "lucide-react";
@@ -281,6 +282,7 @@ function JoinView({ onJoined, initialCode }: { onJoined: (s: Session) => void; i
         needsTeam ? selectedTeam?.id : null,
         account?.avatarKey ? { key: account.avatarKey, color: account.avatarColor, extra: account.avatarExtra } : null
       );
+      trackAcquisition("player_joined", room.id);
       onJoined({ roomId: room.id, playerId: player.id });
     } catch (e: any) {
       if (e instanceof PseudoTakenError) {

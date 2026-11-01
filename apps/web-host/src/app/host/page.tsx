@@ -73,6 +73,7 @@ import { useSpotifyPlayer } from "../../lib/useSpotifyPlayer";
 import { endHostGame, HOST_ROOM_STORAGE_KEY } from "../../lib/hostSession";
 import { confirmDialog } from "../_components/ConfirmDialog";
 import { useFeedbackContext } from "../../lib/feedbackContext";
+import { trackAcquisition } from "../../lib/acquisition";
 import { DeezerPlaylistPicker } from "../_components/DeezerPlaylistPicker";
 import { getDeezerPreview, isDeezerTrackId, tagWithPlaylist, type QueueTrack } from "../../lib/deezer";
 import { usePreviewPlayer } from "../../lib/usePreviewPlayer";
@@ -923,6 +924,7 @@ function HostScreenInner() {
       clearStoredGameState();
       try {
         const r = await createRoom();
+        trackAcquisition("room_created", r.id);
         if (cancelled) return;
         writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
         setRoom(r);
@@ -1800,6 +1802,7 @@ function HostScreenInner() {
     setHostView("admin");
     try {
       const r = await createRoom();
+      trackAcquisition("room_created", r.id);
       writeStoredJSON(ROOM_STORAGE_KEY, { id: r.id, code: r.code });
       setRoom(r);
       setHydrated(true);
