@@ -57,15 +57,20 @@ export function Kazou({
   size = 96,
   title,
   className = "",
+  uid,
 }: {
   who: KazouKey;
   mood?: KazouMood;
   size?: number;
+  /** Suffixe rendant uniques les id du dessin (clipPath) quand plusieurs Kazous identiques sont à l'écran. */
+  uid?: string;
   /** Texte alternatif ; sans lui, le dessin est décoratif. */
   title?: string;
   className?: string;
 }) {
   const a11y = title ? { role: "img", "aria-label": title } : { "aria-hidden": true };
+  const raw = SVG[`${who}:${mood}`];
+  const html = uid ? raw.split(`kz-${who}-${mood}`).join(`kz-${who}-${mood}-${uid}`) : raw;
   return (
     <svg
       width={size}
@@ -74,7 +79,7 @@ export function Kazou({
       fill="none"
       className={`shrink-0 overflow-visible ${className}`}
       {...a11y}
-      dangerouslySetInnerHTML={{ __html: SVG[`${who}:${mood}`] }}
+      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Crown, Drum } from "lucide-react";
 import type { Player, Round, RoundAttempt } from "../../lib/rooms";
+import { KazouCeremony } from "./KazouStage";
 import { podiumRowClasses, withRanks, type RankedPlayer } from "../../lib/ranking";
 import { Avatar, PlayerAvatar } from "../../lib/avatars";
 
@@ -402,6 +403,7 @@ export function EndCeremony({
   headline,
   confetti = true,
   compact = false,
+  mascots = false,
   children,
 }: {
   title: ReactNode;
@@ -409,6 +411,8 @@ export function EndCeremony({
   headline?: ReactNode;
   confetti?: boolean;
   compact?: boolean;
+  /** Le Kazou Band au-dessus du podium (écran de l'hôte), voir KazouStage. */
+  mascots?: boolean;
   children: ReactNode;
 }) {
   const [step, setStep] = useState<CeremonyStep>("drumroll");
@@ -446,9 +450,12 @@ export function EndCeremony({
 
       <div className="flex flex-col items-center gap-2 text-center">{title}</div>
 
+      {mascots && <KazouCeremony revealed={reached("first")} />}
+
       {step === "drumroll" ? (
         <div className="flex flex-col items-center gap-4 py-6">
-          <div className="flex gap-3">
+          {/* Avec le Kazou Band, c'est Kaz qui fait le roulement. */}
+          <div className={mascots ? "hidden" : "flex gap-3"}>
             {[0, 1, 2].map((i) => (
               <span
                 key={i}

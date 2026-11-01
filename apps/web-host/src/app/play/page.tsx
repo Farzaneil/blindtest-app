@@ -20,7 +20,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Dice5, Check } from "lucide-react";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
-import { KazouTrio } from "../../lib/kazou";
+import { KazouGameIntro, KazouLobby, KazouRankBadge } from "../_components/KazouStage";
 import {
   joinRoomByCode,
   getJoinInfoByCode,
@@ -777,14 +777,20 @@ function BuzzerView({
           headline={
             myTeam &&
             myTeamRank !== null && (
-              <p
-                className="font-display text-2xl border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-2"
-                style={{ background: teamColor(myTeam), color: textOnTeamColor(myTeam) }}
-              >
-                {myTeamRank === 1
-                  ? `${myTeam.name} ${/^les\s/i.test(myTeam.name) ? "gagnent" : "gagne"} !`
-                  : `${myTeam.name} : ${formatOrdinal(myTeamRank)}`}
-              </p>
+              <div className="flex items-center gap-2">
+                <KazouRankBadge
+                  first={myTeamRank === 1}
+                  last={teamStandings.length > 1 && myTeamRank === Math.max(...teamStandings.map((st) => st.rank))}
+                />
+                <p
+                  className="font-display text-2xl border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-2"
+                  style={{ background: teamColor(myTeam), color: textOnTeamColor(myTeam) }}
+                >
+                  {myTeamRank === 1
+                    ? `${myTeam.name} ${/^les\s/i.test(myTeam.name) ? "gagnent" : "gagne"} !`
+                    : `${myTeam.name} : ${formatOrdinal(myTeamRank)}`}
+                </p>
+              </div>
             )
           }
         >
@@ -880,13 +886,19 @@ function BuzzerView({
           podium={podiumFrom(ranked, (p) => ({ id: p.id, name: p.display_name, score: p.score, avatar: avatarForPlayer(p) }))}
           headline={
             meRanked && (
-              <p
-                className={`font-display text-2xl border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-2 ${
-                  meRanked.rank === 1 ? "bg-gold" : "bg-info"
-                }`}
-              >
-                {meRanked.rank === 1 ? "Tu gagnes !" : `Tu finis ${formatOrdinal(meRanked.rank)} / ${ranked.length}`}
-              </p>
+              <div className="flex items-center gap-2">
+                <KazouRankBadge
+                  first={meRanked.rank === 1}
+                  last={ranked.length > 1 && meRanked.rank === Math.max(...ranked.map((p) => p.rank))}
+                />
+                <p
+                  className={`font-display text-2xl border-[3px] border-fg rounded-2xl shadow-sticker px-5 py-2 -rotate-2 ${
+                    meRanked.rank === 1 ? "bg-gold" : "bg-info"
+                  }`}
+                >
+                  {meRanked.rank === 1 ? "Tu gagnes !" : `Tu finis ${formatOrdinal(meRanked.rank)} / ${ranked.length}`}
+                </p>
+              </div>
             )
           }
         >
@@ -971,6 +983,7 @@ function BuzzerView({
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+      <KazouGameIntro firstRoundId={round?.order_index === 0 ? round.id : null} />
       {/* Bandeau pseudo/score/rang : masqué pendant la fenêtre de révélation
           (voir answerRevealed), où le classement complet ci-dessous prend
           le relais et rendrait ce résumé redondant. Visible dans tous les
@@ -1012,7 +1025,7 @@ function BuzzerView({
       {!round ? (
         <div className="w-full flex flex-col items-center gap-4">
           <div className="flex flex-col items-center gap-1">
-            <KazouTrio size={92} />
+            <KazouLobby size={92} />
             <p className="text-xs font-extrabold text-inkMuted">Le Kazou Band chauffe la salle…</p>
           </div>
           <p className="text-xl text-inkMuted text-center animate-pulse">

@@ -209,3 +209,105 @@ body {
   25% { transform: rotate(-12deg); }
   75% { transform: rotate(12deg); }
 }
+
+/* ===========================================================================
+ * Kazou Band en scène (voir app/_components/KazouStage.tsx). Le <span>
+ * extérieur porte le déplacement, le dessin les rebonds. Le bloc
+ * prefers-reduced-motion plus haut fige tout.
+ * =========================================================================== */
+
+/* Salle d'attente */
+.kz-beat { animation: kzBeat 0.6s ease-in-out infinite; }
+.kz-sway { animation: kzSway 1.3s ease-in-out infinite; }
+.kz-float { animation: kzFloat 1.7s ease-in-out infinite; }
+.kz-spin { animation: kzSpin 0.75s ease-in-out both; }
+@keyframes kzBeat {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-5px) rotate(-6deg); }
+}
+@keyframes kzSway {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  25% { transform: translateX(-4px) rotate(7deg); }
+  75% { transform: translateX(4px) rotate(-7deg); }
+}
+@keyframes kzFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+@keyframes kzSpin {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(200deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+/* Lancement de la partie */
+.kz-intro { background: rgb(var(--bg) / 0.92); animation: kzFadeIn 0.25s ease-out both; }
+.kz-intro-out { animation: kzFadeOut 0.45s ease-in 0.15s both; }
+.kz-drop-in { animation: kzDropIn 0.65s ease-in both; }
+.kz-from-left { animation: kzFromLeft 0.6s cubic-bezier(0.3, 1.35, 0.5, 1) 0.38s both; }
+.kz-from-right { animation: kzFromRight 0.7s cubic-bezier(0.3, 1.35, 0.5, 1) 0.76s both; }
+.kz-jump { animation: kzJump 0.52s ease-out both; }
+.kz-exit-up { animation: kzExitUp 0.52s cubic-bezier(0.5, -0.4, 0.8, 0.4) both; }
+@keyframes kzFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kzFadeOut { from { opacity: 1; } to { opacity: 0; } }
+@keyframes kzDropIn {
+  0% { transform: translateY(-110vh); }
+  72% { transform: translateY(0) scale(1.18, 0.8); animation-timing-function: ease-out; }
+  100% { transform: translateY(0) scale(1); }
+}
+@keyframes kzFromLeft {
+  from { transform: translateX(-100vw) rotate(-40deg); }
+  to { transform: none; }
+}
+@keyframes kzFromRight {
+  from { transform: translateX(100vw) rotate(400deg) scale(0.6); }
+  to { transform: none; }
+}
+@keyframes kzJump {
+  0% { transform: translateY(0); }
+  45% { transform: translateY(-30px) scale(1.05); animation-timing-function: ease-in; }
+  85% { transform: translateY(0) scale(1.12, 0.86); }
+  100% { transform: translateY(0); }
+}
+@keyframes kzExitUp {
+  from { transform: none; }
+  to { transform: translateY(-110vh) rotate(var(--kz-tilt, 0deg)); }
+}
+
+/* Fin de partie */
+.kz-drum { animation: kzDrum 0.18s linear infinite alternate; }
+.kz-lean { animation: kzLean 0.8s ease-in-out infinite alternate; }
+.kz-cheer { animation: kzCheer 0.56s ease-in-out 3 both; }
+.kz-pop { animation: kzPop 0.5s cubic-bezier(0.3, 1.5, 0.5, 1) 0.35s both; }
+.kz-hop { animation: kzHop 0.56s ease-in-out 0.85s 2 both; }
+.kz-sag { animation: kzSag 0.6s ease-in-out 0.9s both; }
+@keyframes kzDrum {
+  from { transform: rotate(-9deg); }
+  to { transform: rotate(9deg) translateY(-3px); }
+}
+@keyframes kzLean {
+  from { transform: rotate(0); }
+  to { transform: rotate(-6deg) translateX(-3px); }
+}
+@keyframes kzCheer {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-22px) rotate(-8deg); }
+}
+@keyframes kzPop {
+  from { transform: scale(0) rotate(-30deg); }
+  to { transform: none; }
+}
+@keyframes kzHop {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-14px) rotate(6deg); }
+  85% { transform: translateY(0) scale(1.08, 0.92); }
+}
+@keyframes kzSag {
+  from { transform: none; }
+  to { transform: translateY(5px) scale(1.04, 0.9) rotate(-4deg); }
+}
+/* Décalages (déclarés après les raccourcis ci-dessus pour l'emporter). */
+.kz-d1 { animation-delay: 0.11s; }
+.kz-d2 { animation-delay: 0.22s; }
+.kz-late { animation-delay: 0.85s; }
+.kz-now { animation-delay: 0s; }

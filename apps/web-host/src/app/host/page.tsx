@@ -81,6 +81,7 @@ import { PlayerAvatar, avatarForPlayer } from "../../lib/avatars";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
+import { KazouGameIntro } from "../_components/KazouStage";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY, type CosmeticDefinition } from "../../lib/cosmetics";
@@ -2461,6 +2462,7 @@ function HostScreenInner() {
       {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && gameOver && !buildingPlaylist && (
         <div className="relative flex flex-col items-center gap-6 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
           <EndCeremony
+            mascots
             title={
               <>
                 <Trophy className="w-10 h-10 text-fg" />
@@ -3013,6 +3015,7 @@ function HostScreenInner() {
 
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
+      <KazouGameIntro firstRoundId={round?.order_index === 0 ? round.id : null} />
 
       <PlayerAccountCorner inline />
       <RejoinRequestsBanner
