@@ -977,7 +977,7 @@ export async function joinRoomByCode(
     .single();
 
   if (roomError || !room) {
-    throw new Error("Code de partie introuvable. Vérifie qu'il est bien affiché sur l'écran hôte.");
+    throw new Error("Code de partie introuvable. Vérifie le code affiché chez l'hôte.");
   }
 
   // Pseudo déjà utilisé dans CETTE partie (casse et espaces ignorés) :

@@ -13,8 +13,9 @@ export default function AboutPage() {
       <InfoCard icon={Heart} title="Le projet">
         <p>
           Kazou Band est né d’une envie simple : faire des blind tests entre potes sans tableur bricolé ni
-          personne coincée à lancer les sons. Un écran diffuse la musique, les téléphones servent de
-          buzzers, et l’appli s’occupe du chrono, des points et du classement.
+          personne coincée à lancer les sons. L’hôte lance la musique depuis son téléphone (ou un ordi
+          branché à la télé, si vous en avez envie), tous les téléphones servent de buzzers, et l’appli
+          s’occupe du chrono, des points et du classement.
         </p>
         <p className="text-sm text-inkMuted">
           C’est un projet indépendant : sans pub, et jouable sans compte.
@@ -29,11 +30,15 @@ export default function AboutPage() {
         </p>
       </InfoCard>
 
-      <InfoCard icon={Smile} title="Kaz, Zou & Zazou" tone="gold">
+      <InfoCard icon={Smile} title="Le Kazou Band anime le jeu" tone="gold">
         <p>
-          Le Kazou Band, ce sont trois kazoos-buzzers : Kaz le meneur, Zou le blagueur et Zazou la star.
-          Chacun veille sur un des fonds de l’appli. Autour d’eux, une petite troupe d’instruments sert
-          d’avatars aux joueurs, à habiller d’effets que tu débloques en jouant.
+          Kaz le meneur, Zou le blagueur et Zazou la star sont les trois kazoos qui animent tes parties :
+          ils lancent les manches, réagissent aux buzz et applaudissent les champions. Chacun veille sur un
+          des fonds de l’appli. Eux ne jouent pas : les stars de la soirée, c’est vous.
+        </p>
+        <p>
+          Pour jouer, chacun choisit son avatar parmi <span className="font-bold">Les Musiciens</span>,
+          une troupe de 12 instruments à habiller d’effets que tu débloques en jouant.
         </p>
       </InfoCard>
 

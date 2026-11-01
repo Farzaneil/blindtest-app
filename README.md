@@ -189,7 +189,7 @@ toute façon que 5 utilisateurs de test.
 - **Ancien code** : les routes `api/player-auth/login` et `callback` (connexion
   joueur via Spotify) sont l'ancien système. Elles ne sont plus proposées dans l'UI.
 
-### Avatars
+### Avatars « Les Musiciens »
 
 - **Les avatars** : 12 personnages musicaux, tous gratuits, chacun avec sa couleur de
   rond. Les invités reçoivent un avatar déterminé par le hash de leur pseudo.
@@ -256,6 +256,9 @@ victoires, et la barre d'XP. Cinq onglets :
   KAZOU (rose `#FF6FB5`, texte noir) et BAND (bleu `#4D7CFF`, texte blanc), avec
   une pastille ronde accrochée au coin haut-droit de KAZOU, à l'extérieur, pour ne
   jamais couvrir le U.
+- **Rôles** : le Kazou Band **anime** le jeu, les joueurs sont les stars (« Kaz, Zou & Zazou
+  animent. Toi, tu buzzes. »). Les mascottes n'apparaissent jamais là où sont les joueurs (listes,
+  scores, podium, choix d'avatar), réservés aux avatars « Les Musiciens » (portraits ronds).
 - **Le Kazou Band** (`lib/kazou.tsx`) : trois kazoos-buzzers à visage, un par fond.
   Kaz (jaune, le meneur, éclair), Zou (bleu ciel, le blagueur, pois), Zazou (lilas,
   la star, étoile). Quatre humeurs : `joie`, `buzz`, `triste`, `champion`.

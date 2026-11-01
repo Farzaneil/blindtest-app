@@ -1011,7 +1011,10 @@ function BuzzerView({
 
       {!round ? (
         <div className="w-full flex flex-col items-center gap-4">
-          <KazouTrio size={92} />
+          <div className="flex flex-col items-center gap-1">
+            <KazouTrio size={92} />
+            <p className="text-xs font-extrabold text-inkMuted">Le Kazou Band chauffe la salle…</p>
+          </div>
           <p className="text-xl text-inkMuted text-center animate-pulse">
             En attente du lancement d’une manche par l’hôte…
           </p>

@@ -1,8 +1,11 @@
 /**
- * Avatars "La Bande-Son" (DA Arcade autocollants, maquettes validées dans le
+ * Avatars "Les Musiciens" (DA Arcade autocollants, maquettes validées dans le
  * canvas "Blindtest — Refonte Arcade", page Avatars) : 12 objets de musique
  * avec un visage, dessinés en SVG (viewBox 0 0 100 100) — pas de fichiers
  * image, net à toutes les tailles. Tous disponibles dès le départ.
+ * Ne pas confondre avec les mascottes Kaz, Zou et Zazou (lib/kazou.tsx), qui
+ * ANIMENT le jeu sans y jouer : elles n'apparaissent jamais là où sont les
+ * joueurs (listes, scores, podium, choix d'avatar).
  *
  * - Un compte choisit son avatar et la couleur du rond (profil), stockés
  *   dans player_accounts (migration 0030) et recopiés sur sa ligne

@@ -32,7 +32,7 @@ const KIND_ICONS = { bug: Bug, idee: Lightbulb, avis: MessageCircle } as const;
 const KIND_ACTIVE = { bug: "bg-[#FFD2DA]", idee: "bg-[#C9B6FF]", avis: "bg-[#FFE14D]" } as const;
 const SEVERITY_ACTIVE = { bloquant: "bg-[#FFB3BF]", genant: "bg-amber", detail: "bg-[#E8E4D6]" } as const;
 const MESSAGE_HELP: Record<FeedbackKind, { label: string; placeholder: string }> = {
-  bug: { label: "Qu’est-ce qui s’est passé ?", placeholder: "Ex. : j’ai buzzé mais mon nom ne s’est pas affiché sur la télé." },
+  bug: { label: "Qu’est-ce qui s’est passé ?", placeholder: "Ex. : j’ai buzzé mais mon nom ne s’est pas affiché chez l’hôte." },
   idee: { label: "Ton idée", placeholder: "Ex. : pouvoir choisir la durée des extraits." },
   avis: { label: "Ton avis", placeholder: "Ce que tu as adoré, ce qui t’a fait décrocher…" },
 };

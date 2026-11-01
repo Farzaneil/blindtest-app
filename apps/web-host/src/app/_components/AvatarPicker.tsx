@@ -8,8 +8,8 @@ import { usePlayerBadges } from "../../lib/usePlayerBadges";
 import { AVATAR_EXTRAS, isAvatarExtraUnlocked } from "../../lib/avatarExtras";
 
 /**
- * Choix de l'avatar du compte (profil) : grille des 12 avatars "La
- * Bande-Son" + couleur du rond + effet spécial (voir lib/avatarExtras.ts),
+ * Choix de l'avatar du compte (profil) : grille des 12 avatars "Les
+ * Musiciens" + couleur du rond + effet spécial (voir lib/avatarExtras.ts),
  * enregistrés via
  * api/player-account/update-avatar (maquette "Choisir son avatar").
  */
@@ -66,6 +66,7 @@ export function AvatarPicker({ className = "" }: { className?: string }) {
         </span>
         <div className="min-w-0">
           <h2 className="font-display text-xl">Ton avatar</h2>
+          <p className="text-xs font-extrabold uppercase tracking-wide text-inkMuted">Les Musiciens</p>
           {def && (
             <p className="text-sm font-bold text-inkMuted">
               {def.name}, {def.what}

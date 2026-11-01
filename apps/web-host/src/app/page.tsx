@@ -33,7 +33,7 @@ export default function HomePage() {
 
       <div className="flex flex-col items-center gap-1">
         <KazouTrio size={104} />
-        <p className="text-sm font-extrabold">Kaz, Zou et Zazou t’attendent !</p>
+        <p className="text-sm font-extrabold">Kaz, Zou &amp; Zazou animent. À toi de buzzer !</p>
       </div>
 
       <ThemePicker className="w-full max-w-lg" />

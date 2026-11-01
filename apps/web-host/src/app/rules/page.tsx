@@ -28,7 +28,7 @@ export default function RulesPage() {
     <InfoPage
       current="/rules"
       title="Règles du jeu"
-      intro="Un écran hôte diffuse la musique, chaque joueur buzze depuis son téléphone. Rien à installer."
+      intro="L’hôte lance la musique depuis son téléphone ou un ordi, chaque joueur buzze depuis le sien. Rien à installer."
     >
       <InfoCard icon={Music2} title="Le principe">
         <p>

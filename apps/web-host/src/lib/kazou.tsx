@@ -2,6 +2,10 @@
  * Kaz, Zou & Zazou — le Kazou Band (maquettes validées : canvas "Blindtest —
  * Refonte Arcade", page "Nom, logo & goodies", planche "Le Kazou Band").
  *
+ * Les mascottes ANIMENT le jeu (« Kaz, Zou & Zazou animent. Toi, tu buzzes. ») :
+ * jamais dans les listes de joueurs, les scores, le podium ni le choix
+ * d'avatar, réservés aux avatars des joueurs (« Les Musiciens », lib/avatars.tsx).
+ *
  * Un kazoo-buzzer avec un visage, un personnage par fond de l'app :
  * - Kaz (jaune) : le meneur, sourire en coin, éclair sur le flanc ;
  * - Zou (bleu ciel) : le blagueur, clin d'œil, langue tirée, pois ;
