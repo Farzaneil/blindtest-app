@@ -12,7 +12,7 @@ import {
   type QueueTrack,
   withAnswerMode,
 } from "../../lib/deezer";
-import { EXAMPLES, EXAMPLE_BY_ID, MIX_PLAYLISTS, MIX_SIZES, THEME_CHIPS, answerModeHint, type ThemeChip } from "../../lib/themes";
+import { EXAMPLES, EXAMPLE_BY_ID, MIX_DEFAULT, MIX_MAX, MIX_MIN, MIX_PLAYLISTS, THEME_CHIPS, answerModeHint, type ThemeChip } from "../../lib/themes";
 import type { AnswerMode } from "../../lib/answers";
 
 /** Nos exemples, sous la forme des résultats de recherche. */
@@ -101,6 +101,7 @@ export function DeezerPlaylistPicker({
   const [mixBusy, setMixBusy] = useState(false);
   const [mixDone, setMixDone] = useState<string | null>(null);
   const mixSeq = useRef(0);
+  const [mixSize, setMixSize] = useState(String(MIX_DEFAULT));
   // Playlist (hors thèmes) dont on demande le type de réponse avant l'import.
   const [choosingId, setChoosingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -300,21 +301,39 @@ export function DeezerPlaylistPicker({
           <p className="text-sm font-extrabold">Mix surprise « {chip.label} »</p>
           <p className="text-xs text-inkMuted">
             Des morceaux tirés au hasard dans les {MIX_PLAYLISTS} premières playlists du thème : une sélection différente à chaque fois.
-            Combien de morceaux ?
           </p>
-          <div className="flex gap-2 flex-wrap">
-            {MIX_SIZES.map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => runMix(n)}
-                disabled={mixBusy}
-                className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-lg px-3 py-1 text-sm font-bold disabled:opacity-50"
-              >
-                {mixBusy ? "…" : n}
-              </button>
-            ))}
-          </div>
+          <form
+            className="flex gap-2 items-center flex-wrap"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const n = Math.round(Number(mixSize));
+              if (Number.isFinite(n) && n >= MIX_MIN && n <= MIX_MAX) runMix(n);
+            }}
+          >
+            <label className="flex items-center gap-2 text-sm font-bold">
+              <span className="sr-only">Nombre de morceaux</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={MIX_MIN}
+                max={MIX_MAX}
+                value={mixSize}
+                onChange={(e) => setMixSize(e.target.value.replace(/\D/g, "").slice(0, 3))}
+                className="w-20 bg-inkSurface border-2 border-fg rounded-lg px-2 py-1 text-center font-display text-lg outline-none"
+              />
+              morceaux
+            </label>
+            <button
+              type="submit"
+              disabled={mixBusy || !(Number(mixSize) >= MIX_MIN && Number(mixSize) <= MIX_MAX)}
+              className="bg-[#FFE14D] border-2 border-fg shadow-sticker-sm rounded-lg px-3 py-1 text-sm font-extrabold disabled:opacity-50"
+            >
+              {mixBusy ? "Tirage…" : "Ajouter"}
+            </button>
+            <span className="text-xs text-inkMuted">
+              entre {MIX_MIN} et {MIX_MAX}
+            </span>
+          </form>
         </div>
       )}
       {chip && mixDone && !mixOpen && (

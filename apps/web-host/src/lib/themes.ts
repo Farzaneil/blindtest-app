@@ -54,7 +54,9 @@ export function answerModeHint(mode: AnswerMode): string | null {
   return null;
 }
 
-/** Nombres de morceaux proposés pour le Mix surprise. */
-export const MIX_SIZES = [20, 30, 50];
+/** Nombre de morceaux du Mix surprise : choisi librement par l'hôte. */
+export const MIX_DEFAULT = 30;
+export const MIX_MIN = 5;
+export const MIX_MAX = 100;
 /** Le Mix puise dans les N premières playlists du thème. */
 export const MIX_PLAYLISTS = 5;
