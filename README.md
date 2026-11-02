@@ -66,6 +66,13 @@ réseaux différents, y compris tout depuis des téléphones.
   et le timer se fige pendant le jugement.
 - L'hôte juge la réponse : titre, artiste, les deux ou rien, avec des boutons colorés
   **+2 / +1 / -1**.
+- **Type de réponse** (`lib/answers.ts`, migration 0038), réglé par playlist :
+  - **Titre + artiste** (par défaut) : 1 point chacun ;
+  - **Film / série** : une seule réponse, l'œuvre, validée d'un bouton « Trouvé (+2) » ;
+  - **Chanson + film** (Disney) : la chanson et le film, 1 point chacun.
+  L'œuvre est devinée à l'import (`guessWork`) : mention « From "…" » dans le titre,
+  sinon album de bande originale (pas une compilation), sinon titre nettoyé. La
+  révélation rappelle aussi le morceau d'origine en petit.
   - **Maître du jeu** : une réponse partielle relance la musique là où elle s'était
     arrêtée. Le joueur qui vient de répondre reste bloqué jusqu'au buzz de quelqu'un
     d'autre.
@@ -78,7 +85,8 @@ réseaux différents, y compris tout depuis des téléphones.
 - **Bonus vitesse** : +1 pour une réponse complète en moins de 2 s.
 - **Bonus remontada** : +1 si le joueur est strictement dernier, à plus de 5 points de
   l'avant-dernier.
-- **Manche joker** : environ 1 manche sur 10, points de base doublés dans les deux sens.
+- **Manche joker** : environ 1 manche sur 10, points de base doublés dans les deux sens
+  (icône « ×2 », `lib/jokerIcon.ts`).
 - **Malus série gagnante** : le détenteur d'une série d'au moins 3 bonnes réponses
   buzze en différé.
 - **Malus série perdante** : après 3 erreurs d'affilée, le joueur est bloqué la
@@ -90,6 +98,24 @@ réseaux différents, y compris tout depuis des téléphones.
 - L'historique des manches est replié, avec le détail de chaque tentative.
 - **Cérémonie de fin**, côté hôte comme côté joueurs : podium avec avatars, confettis,
   buzzeur le plus rapide, manche la plus disputée.
+- **Récap à partager** (`_components/ShareRecap.tsx`) : bouton « Partager le récap »
+  sur l'écran de fin. Image au format story (1080 × 1920) dessinée dans le navigateur
+  (canvas, rien n'est envoyé) : podium ou classement des équipes, moments forts,
+  QR code `?src=recap`. « Envoyer » ouvre le partage natif du téléphone,
+  « Enregistrer » télécharge le PNG.
+
+**Le Kazou Band en scène** (`_components/KazouStage.tsx`, animations CSS dans
+`globals.css`, section « Kazou Band en scène »)
+- **Début et fin** : trio animé dans la salle d'attente, entrée en scène en bandeau
+  au lancement de la manche 1 (sans fond, le buzzer reste visible), roulement de
+  tambour et joie au-dessus du podium côté hôte, petite mascotte à côté de « Tu
+  finis 3e » côté joueur.
+- **Pendant la partie** (`useKazouCameos`) : une mascotte passe la tête par un bord de
+  l'écran (nouvelle manche, joker, bonne réponse, raté, personne n'a trouvé, série,
+  malus série) ; le Kazou du thème est posé à côté du buzzer et s'écrase avec lui.
+- **Règle** : rien n'attend les mascottes. Elles réagissent aux changements d'état
+  déjà reçus, sur un calque sans clic, une à la fois, et ne rejouent rien après un
+  rechargement. Muettes, silencieuses, désactivées si « Réduire les animations ».
 - Pages annexes : `/rules`, `/about`, `/confidentialite`, `/cgu` et
   `/mentions-legales` (gabarit commun `InfoPage`), plus un bandeau cookies
   (l'analytics est prévu mais pas branché, `ANALYTICS_ENABLED = false`).
@@ -124,10 +150,21 @@ choix du fond (jaune, ciel ou lilas) et accès au compte joueur.
 - **Fonctionnement** : on cherche ou on importe une **playlist publique Deezer**, et
   le jeu utilise les extraits de 30 s fournis par l'API publique. Ni compte ni clé
   pour l'hôte.
+- **Choix des playlists** (`_components/DeezerPlaylistPicker.tsx`, réglages dans
+  `lib/themes.ts`) :
+  - **thèmes cliquables** (Années 80 à 2010, Rap français, Variété, Rock, Pop, Hits du
+    moment, Disney, Films, Génériques) : ils lancent une recherche Deezer, pour varier
+    les playlists d'une partie à l'autre ;
+  - **dix exemples pour démarrer**, avec leur type de réponse déjà réglé ;
+  - **Mix surprise** : N morceaux (5 à 100, au choix de l'hôte) tirés au hasard dans
+    les 5 premières playlists du thème, sans doublon ;
+  - une playlist hors exemples demande à l'import « Titre + artiste » ou « Film /
+    série » (le bon choix est surligné selon le thème).
 - **Code** :
   - `lib/deezer.ts` (types et appels client) ;
   - routes proxy `api/deezer/{search,featured,playlist/[id],track/[id]}` qui passent
-    par `lib/deezerServer.ts`, car l'API Deezer n'autorise pas le CORS ;
+    par `lib/deezerServer.ts`, car l'API Deezer n'autorise pas le CORS (`featured`
+    n'est plus utilisée par l'interface) ;
   - choix de la playlist dans `_components/DeezerPlaylistPicker.tsx`.
 - **Lecture** : `lib/usePreviewPlayer.ts`, un seul élément `<audio>` avec
   pause/reprise. Un lien d'extrait expire : il est donc rafraîchi via
@@ -179,6 +216,9 @@ toute façon que 5 utilisateurs de test.
     un cookie httpOnly `player_magic_verifier`.
   - `api/player-auth/confirm` traite le lien.
   - `api/player-auth/verify-code` traite le code saisi à la main.
+  - Supabase impose environ une minute entre deux envois à la même adresse : une
+    demande trop rapprochée (429) ramène sur l'écran du code, le précédent restant
+    valable. Un nouvel envoi rend l'ancien code invalide.
 - **Comptes** : `lib/playerEmailAccount.ts` (`findOrCreateAccountForEmail`). La
   session de jeu est notre propre cookie signé `player_session` (HMAC
   `PLAYER_SESSION_SECRET`, 180 jours), lu par `api/player-auth/me`.
@@ -256,13 +296,21 @@ victoires, et la barre d'XP. Cinq onglets :
   KAZOU (rose `#FF6FB5`, texte noir) et BAND (bleu `#4D7CFF`, texte blanc), avec
   une pastille ronde accrochée au coin haut-droit de KAZOU, à l'extérieur, pour ne
   jamais couvrir le U.
+- **Marque déposée** à l'INPI : « Kazou Band », marque verbale n° **5315881**
+  (dépôt du 02/11/2026, classes 9, 28 et 41).
+- **Instagram** : [@kazouband](https://www.instagram.com/kazouband/), lien de bio
+  `https://kazouband.fr/?src=insta-bio`.
 - **Rôles** : le Kazou Band **anime** le jeu, les joueurs sont les stars (« Kaz, Zou & Zazou
   animent. Toi, tu buzzes. »). Les mascottes n'apparaissent jamais là où sont les joueurs (listes,
   scores, podium, choix d'avatar), réservés aux avatars « Les Musiciens » (portraits ronds).
 - **Le Kazou Band** (`lib/kazou.tsx`) : trois kazoos-buzzers à visage, un par fond.
   Kaz (jaune, le meneur, éclair), Zou (bleu ciel, le blagueur, pois), Zazou (lilas,
   la star, étoile). Quatre humeurs : `joie`, `buzz`, `triste`, `champion`.
-  - `Kazou` / `kazouSvgString` : un personnage ; `KazouTrio` : les trois ;
+  - `Kazou` / `kazouSvgString` : un personnage ; `KazouTrio` : les trois. L'option
+    `uid` rend uniques les `clipPath` quand plusieurs Kazous identiques sont à
+    l'écran ;
+  - dans une pastille ronde, ajouter la classe `kazou-centre` : le centre visuel
+    du dessin est en (53,9 ; 56,6) dans son cadre 0-100, pas au milieu ;
   - `KazouForTheme` : affiche celui du fond courant, en CSS seul (classes
     `.kazou-fond-*` et `.kazou-badge` dans `globals.css`, pilotées par
     `data-fond`), donc sans clignotement au chargement.
@@ -293,7 +341,9 @@ victoires, et la barre d'XP. Cinq onglets :
   - Cycle de vie : `pending → playing → buzzed → revealed → scored`. En Maître du jeu,
     une réponse partielle fait repasser la manche de `revealed` à `playing`.
   - Colonnes : `title_found` / `artist_found`, `locked_player_id`,
-    `elapsed_seconds`, `is_joker`, mode dénormalisé.
+    `elapsed_seconds`, `is_joker`, mode dénormalisé, `answer_mode` et `work`
+    (type de réponse et œuvre, 0038). En « Film / série », la réponse unique coche
+    titre **et** artiste : le calcul des points ne change pas.
 - **`buzzes`** : chaque tentative de buzz, horodatée côté serveur.
 - **`round_attempts`** : une ligne par tentative jugée (points, bonus, temps de
   réaction).
@@ -391,6 +441,7 @@ En prod, il ne fait rien.
 | 0035 | Conservation des données : `last_seen_at`, `purge_old_data()` planifiée chaque nuit par pg_cron |
 | 0036 | Retours de la bêta (table `feedback`, écrite par le serveur seulement), purgés au bout de 12 mois |
 | 0037 | Suivi des stickers / QR (`acquisition_events` : visite, partie créée, partie rejointe par code `?src=`), purgé au bout de 12 mois |
+| 0038 | Types de réponse : `rounds.answer_mode` / `work`, `start_round` avec deux paramètres facultatifs (à exécuter **avant** de déployer le code) |
 
 ### `apps/web-host/src` en bref
 
@@ -410,7 +461,9 @@ En prod, il ne fait rien.
   - `HomeActions`, `PlayerAccountCorner`, `RejoinRequestsBanner` ;
   - `CookieConsentBanner` ;
   - `KazouBandLogo`, `InfoPage` (gabarit des pages d'info), `ContactEmail`,
-    `RoundTimer`.
+    `RoundTimer` ;
+  - `KazouStage` (mascottes animées), `ShareRecap` (récap à partager),
+    `FeedbackWidget`, `AcquisitionCapture`.
 - **`app/api/`** :
   - `deezer/*` (proxy) ;
   - `spotify/*` (OAuth de l'hôte, token, logout) ;
@@ -434,7 +487,10 @@ En prod, il ne fait rien.
   - `kazou.tsx` (personnages), `legal.ts` (adresse de contact, date des
     documents légaux, âge minimum, hébergeurs) ;
   - `rateLimit.ts` (limitation des requêtes), `deezerServer.ts` (proxy Deezer
-    avec cache).
+    avec cache) ;
+  - `answers.ts` (types de réponse, œuvre devinée), `themes.ts` (thèmes, exemples,
+    Mix surprise), `jokerIcon.ts` ;
+  - `feedback.ts`, `feedbackContext.ts`, `acquisition.ts`.
 
 ## Sécurité / RLS
 
@@ -501,7 +557,7 @@ Pièges :
 ### Configuration Supabase
 
 1. **Migrations** : exécuter les fichiers de `supabase/migrations/` dans l'ordre
-   (0001 → 0037), dans le SQL Editor. Une migration committée n'est **pas**
+   (0001 → 0038), dans le SQL Editor. Une migration committée n'est **pas**
    appliquée automatiquement : il faut aussi la coller dans le SQL Editor. Attention,
    la base locale et la prod sont la même base.
 2. **Realtime** : vérifier que `players`, `rounds`, `buzzes`, `rooms`,
@@ -564,7 +620,13 @@ prévisualisations `*-git-*.vercel.app` restent accessibles).
 - `lib/acquisition.ts` (monté par `AcquisitionCapture` dans `layout.tsx`) garde le code 30 jours dans le
   navigateur, retire `?src=` de l'adresse et envoie à `app/api/acquisition` : la visite, puis la partie
   créée (`/host`) ou rejointe (`/play`). Aucune donnée personnelle.
-- Tableau de bord : la requête SQL en bas de `supabase/migrations/0037_acquisition.sql`.
+- Codes en service : `insta-bio` (lien de la bio Instagram), `stk-kaz`, `stk-zou`,
+  `stk-zazou`, `stk-band` (un par sticker), `recap` (QR code du récap partagé).
+- Tableau de bord : la requête SQL en bas de `supabase/migrations/0037_acquisition.sql`,
+  ou par source :
+  ```sql
+  select source, kind, count(*) from acquisition_events group by source, kind order by source, kind;
+  ```
 
 ## Domaine et e-mails
 
@@ -649,15 +711,25 @@ prévisualisations `*-git-*.vercel.app` restent accessibles).
 - Marque Kazou Band : nom, logo, personnages, icônes, aperçu de lien.
 - Domaine kazouband.fr, adresse de contact, e-mails de connexion authentifiés et
   aux couleurs du jeu.
+- Bouton de retours de la bêta, suivi des QR codes et stickers.
+- Le Kazou Band en scène (début, fin et pendant la partie).
+- Choix des playlists : thèmes, exemples, Mix surprise ; types de réponse (film /
+  série, chanson + film).
+- Récap de fin de partie à partager.
+- Instagram @kazouband, stickers prêts à imprimer, marque déposée à l'INPI.
 
 🔜 **Prochaines étapes**
 - Redéfinir les règles de déblocage des skins (`lib/cosmetics.tsx`).
 - Fonctionnalité **amis**, avec un classement entre amis.
-- Humeurs des Kazous dans le jeu (buzz, trop tard, champion).
+- Passe de fiabilité : veille du téléphone, perte de réseau, hôte qui recharge en
+  pleine manche.
+- Écran « Personne avec toi ? » dans la salle d'attente (partage du lien), à
+  décider selon les chiffres d'acquisition.
 - Sécurité, phase 2 : jeton joueur pour les buzz ; titre illisible pendant la
   manche.
 - Bêta publique : testeurs, recueil des retours, puis mail à Deezer.
-- Marque : comptes @kazouband sur les réseaux, dépôt INPI (et EUIPO).
+- Marque : suivre le dépôt INPI (publication au BOPI, 2 mois d'opposition), puis
+  éventuellement l'EUIPO et le logo en marque figurative.
 - Style de jeu dans les stats (il faudrait stocker plus de données).
 - Persister les playlists côté serveur pour les réutiliser d'une partie à l'autre.
 - App mobile native, seulement si le besoin d'une app installable se confirme.
