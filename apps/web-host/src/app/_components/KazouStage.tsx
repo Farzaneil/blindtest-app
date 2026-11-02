@@ -13,14 +13,16 @@
  * - KazouGameIntro : entrée en scène au lancement de la toute première manche.
  * - KazouCeremony : roulement de tambour puis joie, au-dessus du podium (hôte).
  * - KazouRankBadge : petite mascotte à côté de « Tu gagnes ! / Tu finis 3e ».
+ * - useKazouCameos : apparitions en bord d'écran pendant la partie (lot 2).
+ * - KazouBuzzBuddy : le Kazou du thème posé au bord du buzzer.
  *
  * Les mouvements sont des animations CSS (globals.css, section « Kazou Band
  * en scène »). Si « Réduire les animations » est activé, l'entrée en scène
  * n'est pas jouée et les autres scènes s'affichent figées.
  */
 
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { Kazou, type KazouKey, type KazouMood } from "../../lib/kazou";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { KAZOUS, Kazou, type KazouKey, type KazouMood } from "../../lib/kazou";
 
 function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -225,4 +227,151 @@ export function KazouRankBadge({ first, last, size = 54 }: { first: boolean; las
   const mood: KazouMood = who === "zazou" ? "champion" : who === "zou" && !cheeredUp ? "triste" : "joie";
   const inner = who === "zazou" ? "kz-cheer kz-late" : who === "kaz" ? "kz-hop" : cheeredUp ? "kz-hop kz-now" : "kz-sag";
   return <Actor who={who} mood={mood} size={size} outer="kz-pop" inner={inner} />;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Pendant la partie (lot 2)                                                */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * Règle du lot 2 : l'écran du jeu ne les attend JAMAIS. Le jeu change d'état
+ * comme avant ; la mascotte passe en même temps, en petit, depuis un bord
+ * de l'écran (calque fixe, pointer-events: none), puis repart. Rien ne
+ * dépend de la fin d'une animation.
+ */
+export type CameoKind = "round" | "last" | "joker" | "correct" | "late" | "wrong" | "nobody" | "streak" | "lockout";
+
+type Side = "left" | "right" | "bottom-left" | "bottom-right" | "bottom";
+type CameoDef = {
+  cast: { who: KazouKey; mood: KazouMood; x?: string; delayMs?: number }[];
+  side: Side;
+  /** Hauteur (bords gauche/droit), en % de l'écran. */
+  top?: string;
+  /** Geste joué une fois la tête sortie (classe sur le dessin). */
+  act: string;
+  size: number;
+  ms: number;
+  extra?: "x2" | "drop";
+};
+
+const CAMEOS: Record<CameoKind, CameoDef> = {
+  round: { cast: [{ who: "kaz", mood: "joie" }], side: "bottom-left", act: "kz-act-nod", size: 66, ms: 1500 },
+  last: { cast: [{ who: "kaz", mood: "buzz" }], side: "bottom-left", act: "kz-act-hop", size: 66, ms: 1500 },
+  joker: { cast: [{ who: "zou", mood: "joie" }], side: "right", top: "26%", act: "kz-act-wiggle", size: 70, ms: 1600, extra: "x2" },
+  correct: { cast: [{ who: "zazou", mood: "joie" }], side: "bottom-right", act: "kz-act-twirl", size: 68, ms: 1500 },
+  late: { cast: [{ who: "zou", mood: "triste" }], side: "left", top: "38%", act: "kz-act-sag", size: 68, ms: 1800, extra: "drop" },
+  wrong: { cast: [{ who: "zou", mood: "triste" }], side: "left", top: "38%", act: "kz-act-sag", size: 68, ms: 1800, extra: "drop" },
+  nobody: {
+    cast: [
+      { who: "kaz", mood: "triste", x: "calc(50% - 92px)" },
+      { who: "zou", mood: "triste", x: "calc(50% - 28px)", delayMs: 120 },
+      { who: "zazou", mood: "triste", x: "calc(50% + 36px)", delayMs: 240 },
+    ],
+    side: "bottom",
+    act: "kz-act-sigh",
+    size: 56,
+    ms: 2000,
+  },
+  streak: { cast: [{ who: "zazou", mood: "champion" }], side: "right", top: "16%", act: "kz-act-vibe", size: 64, ms: 1500 },
+  lockout: { cast: [{ who: "zou", mood: "joie" }], side: "right", top: "40%", act: "kz-act-nono", size: 70, ms: 1700 },
+};
+
+/**
+ * File des apparitions : une à la fois, deux en attente au plus (les
+ * suivantes sont ignorées plutôt que d'arriver en retard). `replace`
+ * interrompt l'apparition en cours (malus série, qui doit coller au délai).
+ */
+export function useKazouCameos() {
+  const [current, setCurrent] = useState<{ id: number; kind: CameoKind } | null>(null);
+  const queue = useRef<CameoKind[]>([]);
+  const nextId = useRef(1);
+  const busy = useRef(false);
+
+  const push = useCallback((kind: CameoKind, opts?: { replace?: boolean }) => {
+    if (prefersReducedMotion()) return;
+    const item = { id: nextId.current++, kind };
+    if (!busy.current || opts?.replace) {
+      busy.current = true;
+      if (opts?.replace) queue.current = [];
+      setCurrent(item);
+    } else if (queue.current.length < 2 && !queue.current.includes(kind)) {
+      queue.current.push(kind);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!current) return;
+    const t = setTimeout(() => {
+      const next = queue.current.shift();
+      if (next) {
+        setCurrent({ id: nextId.current++, kind: next });
+      } else {
+        busy.current = false;
+        setCurrent(null);
+      }
+    }, CAMEOS[current.kind].ms + 60);
+    return () => clearTimeout(t);
+  }, [current]);
+
+  const node = current ? <KazouCameo key={current.id} kind={current.kind} /> : null;
+  return { push, node };
+}
+
+function KazouCameo({ kind }: { kind: CameoKind }) {
+  const def = CAMEOS[kind];
+  return (
+    <div aria-hidden="true" className="fixed inset-0 z-50 pointer-events-none overflow-hidden">
+      {def.cast.map((c) => (
+        <span
+          key={c.who}
+          className={`kz-peek kz-peek-${def.side}`}
+          style={
+            {
+              "--kz-ms": `${def.ms}ms`,
+              animationDelay: `${c.delayMs ?? 0}ms`,
+              ...(def.top ? { top: def.top } : {}),
+              ...(c.x ? { left: c.x } : {}),
+            } as CSSProperties
+          }
+        >
+          {def.extra === "x2" && (
+            <span className="kz-extra-x2 absolute -top-7 left-1">
+              <svg width="30" height="30" viewBox="0 0 40 40">
+                <circle cx="20" cy="20" r="17" fill="#FFE14D" stroke="#111111" strokeWidth="3.5" />
+                <g transform="translate(8 8)" fill="none" stroke="#111111" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 9l6 6M9 9l-6 6" />
+                  <path d="M13.5 9.5a3.5 3.5 0 0 1 7 0c0 2.6-7 4.6-7 8.5h7" />
+                </g>
+              </svg>
+            </span>
+          )}
+          {def.extra === "drop" && (
+            <span className="kz-extra-drop absolute" style={{ left: "62%", top: "14%" }}>
+              <svg width="11" height="15" viewBox="0 0 12 16">
+                <path d="M6 1 C10 7 10 11 6 13.5 C2 11 2 7 6 1Z" fill="#A8DCFF" stroke="#111111" strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+            </span>
+          )}
+          <Actor who={c.who} mood={c.mood} size={def.size} inner={def.act} innerStyle={{ animationDelay: `${300 + (c.delayMs ?? 0)}ms` }} />
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Le Kazou du thème, posé au bord du buzzer : il s'écrase en même temps que
+ * le bouton (`pressKey` change à chaque appui) et garde l'humeur « buzz »
+ * tant que `pressed`. Positionné en absolu : ne décale rien.
+ */
+export function KazouBuzzBuddy({ pressed, pressKey, size = 58 }: { pressed: boolean; pressKey: number; size?: number }) {
+  return (
+    <span aria-hidden="true" className="absolute -right-11 -top-3 pointer-events-none -rotate-12">
+      {KAZOUS.map((k) => (
+        <span key={k.key} className={`kazou-fond kazou-fond-${k.theme}`}>
+          <Actor key={pressKey} who={k.key} mood={pressed ? "buzz" : "joie"} size={size} inner={pressKey > 0 ? "kz-squash" : ""} />
+        </span>
+      ))}
+    </span>
+  );
 }

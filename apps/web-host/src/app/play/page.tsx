@@ -21,7 +21,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Check } from "lucide-react";
 import { JokerIcon } from "../../lib/jokerIcon";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
-import { KazouGameIntro, KazouLobby, KazouRankBadge } from "../_components/KazouStage";
+import { KazouBuzzBuddy, KazouGameIntro, KazouLobby, KazouRankBadge, useKazouCameos } from "../_components/KazouStage";
 import {
   joinRoomByCode,
   getJoinInfoByCode,
@@ -751,8 +751,74 @@ function BuzzerView({
     }
   }
 
+  // Le Kazou Band pendant la partie (lot 2, voir KazouStage) : purement
+  // visuel, déclenché par les changements d'état déjà reçus, il ne retarde
+  // ni n'attend rien. Les refs évitent de rejouer une apparition après un
+  // rechargement (tentatives antérieures à l'ouverture de la page ignorées).
+  const cameos = useKazouCameos();
+  const pushCameo = cameos.push;
+  const [pressKey, setPressKey] = useState(0);
+  const pressedRoundRef = useRef<string | null>(null);
+  const cameoRoundRef = useRef<string | null>(null);
+  const cameoPlayingSeen = useRef<Set<string>>(new Set());
+  const cameoDone = useRef<Set<string>>(new Set());
+  const cameoMountedAt = useRef(Number.MAX_SAFE_INTEGER);
+  const cameoAttemptsSeen = useRef<Set<string>>(new Set());
+  const cameoStreak = useRef<number | null>(null);
+  useEffect(() => {
+    cameoMountedAt.current = Date.now();
+  }, []);
+  // Nouvelle manche (Kaz) ou manche joker (Zou). La manche 1 a déjà
+  // l'entrée en scène (KazouGameIntro), et rien au premier affichage.
+  useEffect(() => {
+    if (!round || round.status !== "playing") return;
+    cameoPlayingSeen.current.add(round.id);
+    if (cameoRoundRef.current === round.id) return;
+    const first = cameoRoundRef.current === null;
+    cameoRoundRef.current = round.id;
+    if (!first) pushCameo(round.is_joker ? "joker" : "round");
+  }, [round, pushCameo]);
+  // Malus série : Zou fait « non non » pendant le délai (interrompt Kaz).
+  useEffect(() => {
+    if (!round || !isLockedOut || cameoDone.current.has(`lock:${round.id}`)) return;
+    cameoDone.current.add(`lock:${round.id}`);
+    pushCameo("lockout", { replace: true });
+  }, [round, isLockedOut, pushCameo]);
+  // J'ai appuyé mais quelqu'un d'autre a eu la main : trop tard.
+  useEffect(() => {
+    if (!round || !alreadyBuzzed || iWon || !round.buzzed_by_player_id || pressedRoundRef.current !== round.id) return;
+    pressedRoundRef.current = null;
+    pushCameo("late");
+  }, [round, alreadyBuzzed, iWon, pushCameo]);
+  // Mes réponses jugées : bonne (Zazou) ou mauvaise (Zou).
+  useEffect(() => {
+    for (const a of roundAttempts) {
+      if (cameoAttemptsSeen.current.has(a.id)) continue;
+      cameoAttemptsSeen.current.add(a.id);
+      if (a.player_id !== playerId || new Date(a.created_at).getTime() <= cameoMountedAt.current) continue;
+      pushCameo(a.title_found || a.artist_found ? "correct" : "wrong");
+    }
+  }, [roundAttempts, playerId, pushCameo]);
+  // Manche terminée sans que personne ne trouve : le trio soupire.
+  useEffect(() => {
+    if (!round || round.status !== "scored" || !cameoPlayingSeen.current.has(round.id)) return;
+    if (cameoDone.current.has(`nobody:${round.id}`)) return;
+    cameoDone.current.add(`nobody:${round.id}`);
+    if (!round.title_found && !round.artist_found) pushCameo("nobody");
+  }, [round, pushCameo]);
+  // Ma série passe à 3 bonnes réponses ou plus : Zazou.
+  const myStreak = meForLockout?.correct_streak_count ?? null;
+  useEffect(() => {
+    if (myStreak === null) return;
+    const prev = cameoStreak.current;
+    cameoStreak.current = myStreak;
+    if (prev !== null && prev < 3 && myStreak >= 3) pushCameo("streak");
+  }, [myStreak, pushCameo]);
+
   const onBuzz = async () => {
     if (!round || !canBuzz) return;
+    pressedRoundRef.current = round.id;
+    setPressKey((n) => n + 1);
     setSending(true);
     try {
       await sendBuzz(round.id, playerId);
@@ -985,6 +1051,7 @@ function BuzzerView({
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-sm">
       <KazouGameIntro firstRoundId={round?.order_index === 0 ? round.id : null} />
+      {cameos.node}
       {/* Bandeau pseudo/score/rang : masqué pendant la fenêtre de révélation
           (voir answerRevealed), où le classement complet ci-dessous prend
           le relais et rendrait ce résumé redondant. Visible dans tous les
@@ -1113,6 +1180,7 @@ function BuzzerView({
             </p>
           )}
           <RoundTimer timeLeft={timeLeft} />
+          <div className="relative">
           <button
             onClick={onBuzz}
             disabled={!canBuzz}
@@ -1169,6 +1237,8 @@ function BuzzerView({
               )}
             </span>
           </button>
+          <KazouBuzzBuddy pressed={sending || (alreadyBuzzed && iWon)} pressKey={pressKey} />
+          </div>
           {alreadyBuzzed && (
             <p className={`text-xl font-bold text-center text-fg`}>
               {iWon

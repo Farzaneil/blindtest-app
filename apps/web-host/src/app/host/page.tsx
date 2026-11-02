@@ -81,7 +81,7 @@ import { PlayerAvatar, avatarForPlayer } from "../../lib/avatars";
 import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_components/ScoreAnimations";
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
-import { KazouGameIntro } from "../_components/KazouStage";
+import { KazouGameIntro, useKazouCameos } from "../_components/KazouStage";
 import { JokerIcon } from "../../lib/jokerIcon";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
@@ -1153,6 +1153,56 @@ function HostScreenInner() {
   // (somme de ses joueurs), pas aux scores individuels.
   const teamMode = room?.game_mode === "team" && teams.length > 0;
   const teamStandings = teamMode ? computeTeamStandings(teams, players) : [];
+
+  // Le Kazou Band pendant la partie (lot 2, voir KazouStage) : purement
+  // visuel, déclenché par les changements d'état déjà reçus, il ne retarde
+  // ni n'attend rien. Rien n'est rejoué après un rechargement de la page.
+  const cameos = useKazouCameos();
+  const pushCameo = cameos.push;
+  const cameoRoundRef = useRef<string | null>(null);
+  const cameoPlayingSeen = useRef<Set<string>>(new Set());
+  const cameoNobodyDone = useRef<Set<string>>(new Set());
+  const cameoMountedAt = useRef(Number.MAX_SAFE_INTEGER);
+  const cameoAttemptsSeen = useRef<Set<string>>(new Set());
+  const cameoStreaks = useRef<Map<string, number> | null>(null);
+  const cameoTotalRounds = maxRounds !== null ? Math.min(maxRounds, queue.length) : queue.length;
+  useEffect(() => {
+    cameoMountedAt.current = Date.now();
+  }, []);
+  // Nouvelle manche (Kaz), dernière manche (Kaz qui sautille) ou joker (Zou).
+  useEffect(() => {
+    if (!round || round.status !== "playing") return;
+    cameoPlayingSeen.current.add(round.id);
+    if (cameoRoundRef.current === round.id) return;
+    const first = cameoRoundRef.current === null;
+    cameoRoundRef.current = round.id;
+    if (first) return;
+    const isLast = cameoTotalRounds > 1 && round.order_index + 1 >= cameoTotalRounds;
+    pushCameo(round.is_joker ? "joker" : isLast ? "last" : "round");
+  }, [round, cameoTotalRounds, pushCameo]);
+  // Bonne réponse validée : Zazou.
+  useEffect(() => {
+    for (const a of roundAttempts) {
+      if (cameoAttemptsSeen.current.has(a.id)) continue;
+      cameoAttemptsSeen.current.add(a.id);
+      if (new Date(a.created_at).getTime() <= cameoMountedAt.current) continue;
+      if (a.title_found || a.artist_found) pushCameo("correct");
+    }
+  }, [roundAttempts, pushCameo]);
+  // Manche terminée sans que personne ne trouve : le trio soupire.
+  useEffect(() => {
+    if (!round || round.status !== "scored" || !cameoPlayingSeen.current.has(round.id)) return;
+    if (cameoNobodyDone.current.has(round.id)) return;
+    cameoNobodyDone.current.add(round.id);
+    if (!round.title_found && !round.artist_found) pushCameo("nobody");
+  }, [round, pushCameo]);
+  // Un joueur passe à 3 bonnes réponses d'affilée ou plus : Zazou.
+  useEffect(() => {
+    const prev = cameoStreaks.current;
+    cameoStreaks.current = new Map(players.map((p) => [p.id, p.correct_streak_count]));
+    if (!prev) return;
+    if (players.some((p) => prev.has(p.id) && (prev.get(p.id) ?? 0) < 3 && p.correct_streak_count >= 3)) pushCameo("streak");
+  }, [players, pushCameo]);
   const targetHitNow =
     targetScore !== null &&
     (teamMode
@@ -3016,6 +3066,7 @@ function HostScreenInner() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen gap-6 p-6 md:p-10 bg-page">
       <KazouGameIntro firstRoundId={round?.order_index === 0 ? round.id : null} />
+      {cameos.node}
 
       <PlayerAccountCorner inline />
       <RejoinRequestsBanner

@@ -311,3 +311,99 @@ body {
 .kz-d2 { animation-delay: 0.22s; }
 .kz-late { animation-delay: 0.85s; }
 .kz-now { animation-delay: 0s; }
+
+/* --- Pendant la partie (lot 2) : apparitions en bord d'écran. La durée
+   totale est passée en --kz-ms ; l'entrée et la sortie prennent ~20 % chacune. */
+.kz-peek {
+  position: absolute;
+  display: inline-block;
+  animation-duration: var(--kz-ms, 1500ms);
+  animation-fill-mode: both;
+  animation-timing-function: ease-out;
+}
+.kz-peek-left { left: 0; animation-name: kzPeekLeft; }
+.kz-peek-right { right: 0; animation-name: kzPeekRight; }
+.kz-peek-bottom-left { left: 0; bottom: env(safe-area-inset-bottom, 0px); animation-name: kzPeekBottomLeft; }
+.kz-peek-bottom-right { right: 0; bottom: env(safe-area-inset-bottom, 0px); animation-name: kzPeekBottomRight; }
+.kz-peek-bottom { bottom: env(safe-area-inset-bottom, 0px); animation-name: kzPeekBottom; }
+@keyframes kzPeekLeft {
+  0%, 100% { transform: translateX(-100%) rotate(20deg); }
+  20%, 82% { transform: translateX(-38%) rotate(0); }
+}
+@keyframes kzPeekRight {
+  0%, 100% { transform: translateX(100%) rotate(-20deg); }
+  20%, 82% { transform: translateX(28%) rotate(0); }
+}
+@keyframes kzPeekBottomLeft {
+  0%, 100% { transform: translate(-60%, 100%) rotate(35deg); }
+  20%, 82% { transform: translate(-12%, 18%) rotate(-6deg); }
+}
+@keyframes kzPeekBottomRight {
+  0%, 100% { transform: translate(60%, 100%) rotate(-35deg); }
+  20%, 82% { transform: translate(12%, 18%) rotate(6deg); }
+}
+@keyframes kzPeekBottom {
+  0%, 100% { transform: translateY(100%); }
+  20%, 82% { transform: translateY(22%); }
+}
+
+/* Gestes, joués une fois la tête sortie (délai posé en ligne). */
+.kz-act-nod { animation: kzNod 0.38s ease-in-out 2 both; }
+.kz-act-hop { animation: kzHopQuick 0.3s ease-in-out 3 both; }
+.kz-act-wiggle { animation: kzWiggle 0.34s ease-in-out 2 both; }
+.kz-act-twirl { animation: kzTwirl 0.62s ease-in-out both; }
+.kz-act-sag { animation: kzSagDown 0.45s ease-in-out both; }
+.kz-act-sigh { animation: kzSigh 0.7s ease-in-out 2 both; }
+.kz-act-vibe { animation: kzVibe 0.11s linear 8 alternate both; }
+.kz-act-nono { animation: kzNoNo 0.22s ease-in-out 4 alternate both; }
+.kz-squash { animation: kzSquash 0.38s ease-out both; }
+.kz-extra-x2 { animation: kzX2 0.48s cubic-bezier(0.3, 1.4, 0.5, 1) 0.35s both; }
+.kz-extra-drop { animation: kzDrop 0.6s ease-in 0.55s both; }
+@keyframes kzNod {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(14deg) translateY(3px); }
+}
+@keyframes kzHopQuick {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-14px) rotate(-8deg); }
+}
+@keyframes kzWiggle {
+  0%, 100% { transform: rotate(0); }
+  50% { transform: rotate(-12deg) translateY(-4px); }
+}
+@keyframes kzTwirl {
+  0% { transform: translateY(0) rotate(0); }
+  45% { transform: translateY(-22px) rotate(-180deg); }
+  100% { transform: translateY(0) rotate(-360deg); }
+}
+@keyframes kzSagDown {
+  from { transform: none; }
+  to { transform: translateY(6px) scale(1.05, 0.88) rotate(-4deg); }
+}
+@keyframes kzSigh {
+  0%, 100% { transform: none; }
+  50% { transform: translateY(7px) scale(1.05, 0.88); }
+}
+@keyframes kzVibe {
+  from { transform: scale(1) rotate(-4deg); }
+  to { transform: scale(1.1) rotate(4deg); }
+}
+@keyframes kzNoNo {
+  from { transform: rotate(-12deg); }
+  to { transform: rotate(12deg); }
+}
+@keyframes kzSquash {
+  0% { transform: none; }
+  30% { transform: scale(1.18, 0.78) translateY(6px); }
+  65% { transform: scale(0.94, 1.08) translateY(-5px); }
+  100% { transform: none; }
+}
+@keyframes kzX2 {
+  from { opacity: 0; transform: translateY(16px) scale(0.3) rotate(-30deg); }
+  to { opacity: 1; transform: rotate(-6deg); }
+}
+@keyframes kzDrop {
+  0% { opacity: 1; transform: none; }
+  85% { opacity: 1; transform: translateY(54px); }
+  100% { opacity: 0; transform: translateY(58px) scale(2, 0.3); }
+}
