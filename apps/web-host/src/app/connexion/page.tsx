@@ -45,6 +45,8 @@ function ConnexionForm() {
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(urlError);
+  // Message neutre (pas une erreur) affiché sur l'écran du code.
+  const [notice, setNotice] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [checkingCode, setCheckingCode] = useState(false);
 
@@ -82,7 +84,16 @@ function ConnexionForm() {
         body: JSON.stringify({ email, next, acceptedTerms: accepted }),
       });
       const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      // Demande trop rapprochée (Supabase impose ~1 min entre deux envois) :
+      // le code précédent reste valable et arrive souvent en retard. On
+      // ramène sur l'écran du code au lieu de bloquer sur le formulaire.
+      if (res.status === 429) {
+        setSentTo(email.trim());
+        setNotice("Un code t’a déjà été envoyé il y a peu. Les e-mails peuvent mettre 1 à 2 minutes à arriver : tape le dernier code reçu.");
+        return;
+      }
       if (!res.ok || !data.ok) throw new Error(data.error ?? "Envoi impossible, réessaie.");
+      setNotice(null);
       setSentTo(email.trim());
     } catch (e: any) {
       setError(e?.message ?? "Envoi impossible, réessaie.");
@@ -113,6 +124,9 @@ function ConnexionForm() {
               <MailCheck className="w-7 h-7" strokeWidth={2.5} />
             </span>
             <p className="font-display text-lg">Regarde tes e-mails !</p>
+            {notice && (
+              <p className="text-sm font-bold bg-inkSurface2 border-2 border-fg rounded-lg px-3 py-2">{notice}</p>
+            )}
             <p className="text-sm text-inkMuted">
               On a envoyé un e-mail à <span className="font-bold text-fg">{sentTo}</span>. Clique sur le lien
               <span className="font-bold text-fg"> sur cet appareil</span>, ou tape le code reçu :
@@ -143,10 +157,16 @@ function ConnexionForm() {
                 {checkingCode ? "…" : "OK"}
               </button>
             </form>
-            <p className="text-xs text-inkMuted">Rien reçu ? Regarde dans les spams, ou</p>
+            <p className="text-xs text-inkMuted">
+              L’e-mail peut mettre 1 à 2 minutes. Rien reçu ? Regarde dans les spams, ou
+            </p>
             <button
               type="button"
-              onClick={() => setSentTo(null)}
+              onClick={() => {
+                setSentTo(null);
+                setNotice(null);
+                setCode("");
+              }}
               className="text-sm font-bold underline hover:text-fg transition"
             >
               renvoyer un lien
