@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Check, Plus, Search } from "lucide-react";
 import {
-  featuredDeezerPlaylists,
   getDeezerPlayableCount,
   getDeezerPlaylistInfo,
   getDeezerPlaylistTracks,
@@ -11,7 +10,20 @@ import {
   searchDeezerPlaylists,
   type DeezerPlaylistSummary,
   type QueueTrack,
+  withAnswerMode,
 } from "../../lib/deezer";
+import { THEMES, THEME_BY_ID, answerModeHint } from "../../lib/themes";
+import type { AnswerMode } from "../../lib/answers";
+
+/** Nos playlists proposées, sous la forme des résultats de recherche. */
+const THEME_SUMMARIES: DeezerPlaylistSummary[] = THEMES.map((t) => ({
+  id: t.id,
+  title: t.title,
+  trackCount: 0,
+  pictureUrl: `https://api.deezer.com/playlist/${t.id}/image`,
+  creator: null,
+}));
+const THEMES_LABEL = "Nos playlists";
 
 // Recherches rapides proposées sans rien taper.
 // Comptages "morceaux jouables" lancés en parallèle au maximum (l'API
@@ -51,23 +63,12 @@ function VisibleRow({ onVisible, children }: { onVisible: () => void; children: 
   );
 }
 
-const QUICK_SEARCHES = [
-  "Blind test",
-  "Années 80",
-  "Années 90",
-  "Années 2000",
-  "Rap français",
-  "Variété française",
-  "Disney",
-  "Rock",
-  "Dance",
-  "Séries TV",
-];
-
 /**
  * Recherche et import de playlists Deezer publiques (source "Deezer",
- * extraits de 30 s, sans compte). Affiche les playlists du moment au
- * départ ; accepte aussi un lien de playlist Deezer collé dans la barre.
+ * extraits de 30 s, sans compte). Affiche nos playlists thématiques au
+ * départ (lib/themes.ts, type de réponse déjà réglé) ; une playlist trouvée
+ * par la recherche ou par un lien collé demande, à l'import, ce qu'il faut
+ * trouver : « Titre + artiste » ou « Film / série ».
  */
 export function DeezerPlaylistPicker({
   onImport,
@@ -82,8 +83,10 @@ export function DeezerPlaylistPicker({
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<DeezerPlaylistSummary[] | null>(null);
-  const [label, setLabel] = useState("Playlists du moment");
+  const [results, setResults] = useState<DeezerPlaylistSummary[] | null>(THEME_SUMMARIES);
+  const [label, setLabel] = useState(THEMES_LABEL);
+  // Playlist (hors thèmes) dont on demande le type de réponse avant l'import.
+  const [choosingId, setChoosingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
@@ -121,20 +124,6 @@ export function DeezerPlaylistPicker({
     pump();
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    featuredDeezerPlaylists()
-      .then((p) => {
-        if (!cancelled) setResults(p);
-      })
-      .catch(() => {
-        if (!cancelled) setResults([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const runSearch = async (q: string) => {
     const text = q.trim();
     if (!text) return;
@@ -156,7 +145,8 @@ export function DeezerPlaylistPicker({
     }
   };
 
-  const importPlaylist = async (p: DeezerPlaylistSummary) => {
+  const importPlaylist = async (p: DeezerPlaylistSummary, mode: AnswerMode) => {
+    setChoosingId(null);
     setImportingId(p.id);
     setError(null);
     try {
@@ -166,7 +156,7 @@ export function DeezerPlaylistPicker({
         setError("Aucun morceau de cette playlist n’a d’extrait disponible.");
         return;
       }
-      onImport(tracks, p);
+      onImport(withAnswerMode(tracks, mode), p);
     } catch (e: any) {
       setError(e?.message ?? "Import impossible.");
     } finally {
@@ -202,21 +192,20 @@ export function DeezerPlaylistPicker({
         </button>
       </form>
 
-      <div className="flex flex-wrap gap-1.5">
-        {QUICK_SEARCHES.map((q) => (
-          <button
-            key={q}
-            type="button"
-            onClick={() => {
-              setQuery(q);
-              runSearch(q);
-            }}
-            className="bg-inkSurface border-2 border-fg rounded-full px-3 py-1 text-xs font-bold transition-transform hover:-translate-y-0.5"
-          >
-            {q}
-          </button>
-        ))}
-      </div>
+      {label !== THEMES_LABEL && (
+        <button
+          type="button"
+          onClick={() => {
+            setResults(THEME_SUMMARIES);
+            setLabel(THEMES_LABEL);
+            setQuery("");
+            setChoosingId(null);
+          }}
+          className="self-start text-xs font-bold underline text-inkMuted hover:text-fg"
+        >
+          ← Revenir à nos playlists
+        </button>
+      )}
 
       {error && <p className="text-sm text-danger font-bold">{error}</p>}
 
@@ -256,10 +245,36 @@ export function DeezerPlaylistPicker({
                     )}
                     {p.creator ? ` · ${p.creator}` : ""}
                   </span>
+                  {THEME_BY_ID[p.id] && answerModeHint(THEME_BY_ID[p.id].answerMode) && (
+                    <span className="block text-xs font-bold text-fg">{answerModeHint(THEME_BY_ID[p.id].answerMode)}</span>
+                  )}
                 </span>
+                {choosingId === p.id ? (
+                  <span className="shrink-0 flex flex-col gap-1">
+                    <span className="text-[11px] font-extrabold text-inkMuted text-center">À trouver :</span>
+                    <button
+                      type="button"
+                      onClick={() => importPlaylist(p, "classic")}
+                      className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap"
+                    >
+                      Titre + artiste
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => importPlaylist(p, "work")}
+                      className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap"
+                    >
+                      Film / série
+                    </button>
+                  </span>
+                ) : (
                 <button
                   type="button"
-                  onClick={() => importPlaylist(p)}
+                  onClick={() => {
+                    const theme = THEME_BY_ID[p.id];
+                    if (theme) importPlaylist(p, theme.answerMode);
+                    else setChoosingId(p.id);
+                  }}
                   disabled={disabled || importingId !== null || empty}
                   aria-label={done ? `${p.title} : ${done} morceaux ajoutés` : `Importer ${p.title}`}
                   // Téléphone : bouton compact (icône seule) pour laisser la
@@ -282,6 +297,7 @@ export function DeezerPlaylistPicker({
                     </>
                   )}
                 </button>
+                )}
               </VisibleRow>
             );
           })}

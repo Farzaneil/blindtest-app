@@ -83,6 +83,7 @@ import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
 import { KazouGameIntro, useKazouCameos } from "../_components/KazouStage";
 import { JokerIcon } from "../../lib/jokerIcon";
+import { answerLabels, answerParts, answerText, originalTrackText } from "../../lib/answers";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerCosmetics } from "../../lib/usePlayerCosmetics";
 import { COSMETIC_BY_KEY, DEFAULT_COSMETIC_KEY, type CosmeticDefinition } from "../../lib/cosmetics";
@@ -416,7 +417,7 @@ function HostBuzzerView({
           )}
           {somethingAlreadyFound && !answerRevealed && (
             <p className="text-sm text-inkMuted text-center">
-              Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+              Déjà trouvé : {[round.title_found && answerLabels(round).first.toLowerCase(), round.artist_found && (answerLabels(round).second ?? "").toLowerCase()]
                 .filter(Boolean)
                 .join(" et ")}
               {" — à vous de jouer pour le reste !"}
@@ -511,7 +512,7 @@ function HostBuzzerView({
             <div className="w-full text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-4 shadow-sticker">
               <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
               <p className="text-xl font-bold text-fg font-display">
-                {round.title} — {round.artist}
+                {answerText(round)}
               </p>
             </div>
           )}
@@ -1450,7 +1451,7 @@ function HostScreenInner() {
     }
   };
 
-  const launchRound = async (track: spotify.SpotifyTrack, isJoker: boolean) => {
+  const launchRound = async (track: QueueTrack, isJoker: boolean) => {
     if (!room) return;
     // Artistes de la manche : ceux de la file par défaut ; pour Deezer,
     // remplacés par la liste complète (featurings) renvoyée avec l'extrait.
@@ -1482,6 +1483,8 @@ function HostScreenInner() {
           sourceTrackId: track.sourceTrackId,
           title: track.title,
           artist,
+          answerMode: track.answerMode,
+          work: track.work,
         },
         blindMode,
         isJoker
@@ -2103,14 +2106,16 @@ function HostScreenInner() {
           </p>
           {!blindMode && (
             <p className="text-lg text-inkMuted mt-1">
-              {round.title} — {round.artist}
+              {answerText(round)}
+              {originalTrackText(round) && <span className="block text-sm">{originalTrackText(round)}</span>}
             </p>
           )}
           {(round.title_found || round.artist_found) && (
             <p className="text-lg text-inkMuted mt-2">
-              {round.title_found ? `Titre trouvé : ${round.title}` : "Titre encore à trouver"}
-              {" · "}
-              {round.artist_found ? `Artiste trouvé : ${round.artist}` : "Artiste encore à trouver"}
+              {round.title_found ? `${answerLabels(round).first} trouvé : ${answerParts(round).first}` : `${answerLabels(round).first} encore à trouver`}
+              {answerLabels(round).second && " · "}
+              {answerLabels(round).second &&
+                (round.artist_found ? `${answerLabels(round).second} trouvé : ${answerParts(round).second}` : `${answerLabels(round).second} encore à trouver`)}
             </p>
           )}
           {timeLeft !== null && (
@@ -2139,12 +2144,12 @@ function HostScreenInner() {
           )}
           {!blindMode && (
             <p className="text-lg text-inkMuted">
-              {round.title} — {round.artist}
+              {answerText(round)}
             </p>
           )}
           {(round.title_found || round.artist_found) && (
             <p className="text-sm text-inkMuted">
-              Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+              Déjà trouvé : {[round.title_found && answerLabels(round).first.toLowerCase(), round.artist_found && (answerLabels(round).second ?? "").toLowerCase()]
                 .filter(Boolean)
                 .join(" et ")}
             </p>
@@ -2189,7 +2194,7 @@ function HostScreenInner() {
             </p>
           )}
           <p className="text-lg text-inkMuted">
-            {round.title} — {round.artist}
+            {answerText(round)}
           </p>
           {round.title_found && !round.artist_found ? (
             <div className="flex gap-4 w-full max-w-md">
@@ -2197,7 +2202,7 @@ function HostScreenInner() {
                 onClick={() => handleJudge(false, true)}
                 className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
-                <CheckCircle2 className="w-5 h-5" /> Artiste trouvé
+                <CheckCircle2 className="w-5 h-5" /> {answerLabels(round).second} trouvé
               </button>
               <button
                 onClick={() => handleJudge(false, false)}
@@ -2212,7 +2217,7 @@ function HostScreenInner() {
                 onClick={() => handleJudge(true, false)}
                 className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
-                <CheckCircle2 className="w-5 h-5" /> Titre trouvé
+                <CheckCircle2 className="w-5 h-5" /> {answerLabels(round).first} trouvé
               </button>
               <button
                 onClick={() => handleJudge(false, false)}
@@ -2221,19 +2226,36 @@ function HostScreenInner() {
                 <XCircle className="w-5 h-5" /> Toujours pas
               </button>
             </div>
+          ) : answerLabels(round).second === null ? (
+            // Réponse unique (film / série) : un seul bouton, qui coche
+            // titre ET artiste côté serveur, d'où 2 points.
+            <div className="grid grid-cols-2 gap-3 w-full max-w-md">
+              <button
+                onClick={() => handleJudge(true, true)}
+                className="bg-sage text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Trouvé (+2)
+              </button>
+              <button
+                onClick={() => handleJudge(false, false)}
+                className="bg-danger text-white px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
+              >
+                <XCircle className="w-4 h-4" /> Raté (-1)
+              </button>
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 w-full max-w-md">
               <button
                 onClick={() => handleJudge(true, false)}
                 className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
-                <Music className="w-4 h-4" /> Titre seul (+1)
+                <Music className="w-4 h-4" /> {answerLabels(round).first} seul{answerLabels(round).first === "Chanson" ? "e" : ""} (+1)
               </button>
               <button
                 onClick={() => handleJudge(false, true)}
                 className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
-                <Mic className="w-4 h-4" /> Artiste seul (+1)
+                <Mic className="w-4 h-4" /> {answerLabels(round).second} seul (+1)
               </button>
               <button
                 onClick={() => handleJudge(true, true)}
@@ -2259,7 +2281,7 @@ function HostScreenInner() {
           <p className="text-lg text-inkMuted">
             La réponse était :{" "}
             <span className="font-bold text-fg">
-              {round.title} — {round.artist}
+              {answerText(round)}
             </span>
           </p>
           <button
@@ -3231,7 +3253,7 @@ function HostScreenInner() {
                   return (
                     <li key={r.id} className="bg-inkSurface2 rounded-xl px-4 py-2 text-sm">
                       <p className="truncate font-medium flex items-center gap-1.5">
-                        {i + 1}. {r.title} — {r.artist}
+                        {i + 1}. {answerText(r)}
                         {r.is_joker && <JokerIcon className="w-3.5 h-3.5 text-amberStrong shrink-0" />}
                       </p>
                       {attemptsForRound.length === 0 ? (

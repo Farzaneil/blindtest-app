@@ -85,7 +85,7 @@ export type RawTrack = {
   // tous les artistes du morceau, artiste principal compris (featurings,
   // duos…).
   contributors?: { name?: string }[];
-  album?: { cover_medium?: string };
+  album?: { cover_medium?: string; title?: string };
 };
 
 /**
@@ -118,6 +118,9 @@ export type PlayableTrack = {
   artist: string;
   durationMs: number;
   albumImageUrl: string | null;
+  // Nom de l'album : sert de nom d'œuvre (film, série) pour les réponses
+  // « Film / série » et « Chanson + film » (voir lib/answers.ts).
+  albumTitle?: string | null;
 };
 
 const MAX_TRACKS = 500;
@@ -140,6 +143,7 @@ async function fetchPlayableTracks(id: string): Promise<PlayableTrack[]> {
       artist: t.artist?.name ?? "",
       durationMs: 30_000,
       albumImageUrl: t.album?.cover_medium ?? null,
+      albumTitle: t.album?.title ?? null,
     }));
 }
 

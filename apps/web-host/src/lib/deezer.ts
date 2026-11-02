@@ -7,6 +7,7 @@
  */
 
 import type { spotify } from "@blindtest/api-clients";
+import { cleanSongTitle, cleanWorkName, type AnswerMode } from "./answers";
 
 /**
  * Morceau de la file d'attente de l'hôte. `playlist` = la playlist dont il
@@ -14,7 +15,28 @@ import type { spotify } from "@blindtest/api-clients";
  * pour un morceau ajouté à la main. `id` préfixé par la source
  * ("deezer:123", "spotify:abc") pour éviter toute collision.
  */
-export type QueueTrack = spotify.SpotifyTrack & { playlist?: { id: string; name: string } };
+export type QueueTrack = spotify.SpotifyTrack & {
+  playlist?: { id: string; name: string };
+  albumTitle?: string | null;
+  // Ce qu'il faut trouver (voir lib/answers.ts) ; absent = titre + artiste.
+  answerMode?: AnswerMode;
+  work?: string | null;
+};
+
+/**
+ * Applique un type de réponse à des morceaux importés : l'œuvre (film,
+ * série) est tirée du nom de l'album ; en « Chanson + film », le titre est
+ * débarrassé des mentions « (De "…") ».
+ */
+export function withAnswerMode(tracks: QueueTrack[], mode: AnswerMode): QueueTrack[] {
+  if (mode === "classic") return tracks;
+  return tracks.map((t) => ({
+    ...t,
+    title: mode === "song_work" ? cleanSongTitle(t.title) : t.title,
+    answerMode: mode,
+    work: cleanWorkName(t.albumTitle),
+  }));
+}
 
 /** Rattache des morceaux importés à leur playlist d'origine. */
 export function tagWithPlaylist(tracks: QueueTrack[], playlist: { id: string; name: string }): QueueTrack[] {

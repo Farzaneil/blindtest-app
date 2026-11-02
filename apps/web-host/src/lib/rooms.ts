@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { generateRoomCode } from "@blindtest/game-logic";
+import type { AnswerMode } from "./answers";
 
 export type Room = {
   id: string;
@@ -107,6 +108,9 @@ export type Round = {
   // insertRound, migration 0017) : double les points de cette manche,
   // dans les deux sens (resolve_round_attempt).
   is_joker: boolean;
+  // Type de réponse (migration 0038, voir lib/answers.ts).
+  answer_mode?: AnswerMode;
+  work?: string | null;
 };
 
 export type RoundAttempt = {
@@ -600,9 +604,11 @@ export function subscribeToRoundAttempts(
 // première partie de test) : reste une surprise sans devenir la norme.
 const JOKER_ROUND_PROBABILITY = 0.1;
 
+type RoundTrack = { sourceTrackId: string; title: string; artist: string; answerMode?: AnswerMode; work?: string | null };
+
 async function insertRound(
   roomId: string,
-  track: { sourceTrackId: string; title: string; artist: string },
+  track: RoundTrack,
   blindMode: boolean,
   isJoker: boolean
 ): Promise<Round> {
@@ -619,10 +625,18 @@ async function insertRound(
     p_blind_mode: blindMode,
     p_is_joker: isJoker,
     p_started_at: new Date().toISOString(),
+    // Type de réponse (migration 0038) : envoyé seulement s'il n'est pas
+    // classique, pour rester compatible avec l'ancienne fonction.
+    ...(track.answerMode && track.answerMode !== "classic"
+      ? { p_answer_mode: track.answerMode, p_work: track.work ?? null }
+      : {}),
   });
 
   if (error || !data) {
-    throw new Error("Impossible de créer la manche.");
+    // Détail technique gardé dans la console (et dans le message) pour
+    // pouvoir diagnostiquer, par ex. une migration pas encore exécutée.
+    console.error("start_round", error);
+    throw new Error(`Impossible de créer la manche.${error?.message ? ` (${error.message})` : ""}`);
   }
 
   return data as Round;
@@ -666,7 +680,7 @@ export function drawJokerRound(jokerEnabled: boolean): boolean {
 
 export async function startRoundWithTrack(
   roomId: string,
-  track: { sourceTrackId: string; title: string; artist: string },
+  track: RoundTrack,
   blindMode: boolean,
   isJoker: boolean
 ): Promise<Round> {
@@ -771,6 +785,9 @@ export type PlayerRound = {
   // Temps déjà joué avant la reprise en cours (migration 0009) : sert au
   // compte à rebours affiché côté joueur, calculé comme côté hôte.
   elapsed_seconds: number;
+  // Type de réponse (migration 0038, voir lib/answers.ts).
+  answer_mode?: AnswerMode;
+  work?: string | null;
 };
 
 function generateWebDeviceId(): string {
@@ -1034,7 +1051,9 @@ export function subscribeToCurrentRoundForPlayer(
     const { data } = await supabase
       .from("rounds")
       .select(
-        "id, status, buzzed_by_player_id, locked_player_id, title_found, artist_found, title, artist, blind_mode, is_joker, order_index, started_at, elapsed_seconds"
+        // "*" plutôt qu'une liste : inclut answer_mode / work (migration
+        // 0038) quand ils existent, sans casser avant la migration.
+        "*"
       )
       .eq("room_id", roomId)
       .order("order_index", { ascending: false })

@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Check } from "lucide-react";
 import { JokerIcon } from "../../lib/jokerIcon";
+import { answerLabels, answerText } from "../../lib/answers";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
 import { KazouBuzzBuddy, KazouGameIntro, KazouLobby, KazouRankBadge, useKazouCameos } from "../_components/KazouStage";
 import {
@@ -1138,7 +1139,7 @@ function BuzzerView({
           <div className="relative w-full text-center bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-6 py-4 shadow-sticker">
             <p className="text-sm text-inkMuted mb-1">La réponse était :</p>
             <p className="text-xl font-bold text-fg font-display">
-              {round.title} — {round.artist}
+              {answerText(round)}
             </p>
             {(currentRoundHadSpeedBonus || currentRoundHadRemontadaBonus) && (
               <p className="text-xs text-amberStrong mt-2">
@@ -1173,7 +1174,7 @@ function BuzzerView({
           )}
           {somethingAlreadyFound && (
             <p className="text-sm text-inkMuted text-center">
-              Déjà trouvé : {[round.title_found && "titre", round.artist_found && "artiste"]
+              Déjà trouvé : {[round.title_found && answerLabels(round).first.toLowerCase(), round.artist_found && (answerLabels(round).second ?? "").toLowerCase()]
                 .filter(Boolean)
                 .join(" et ")}
               {" — à vous de jouer pour le reste !"}
