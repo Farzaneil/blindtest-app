@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, Plus, Search } from "lucide-react";
+import { Check, Dices, Plus, Search } from "lucide-react";
 import {
   getDeezerPlayableCount,
   getDeezerPlaylistInfo,
@@ -12,18 +12,27 @@ import {
   type QueueTrack,
   withAnswerMode,
 } from "../../lib/deezer";
-import { THEMES, THEME_BY_ID, answerModeHint } from "../../lib/themes";
+import { EXAMPLES, EXAMPLE_BY_ID, MIX_PLAYLISTS, MIX_SIZES, THEME_CHIPS, answerModeHint, type ThemeChip } from "../../lib/themes";
 import type { AnswerMode } from "../../lib/answers";
 
-/** Nos playlists proposées, sous la forme des résultats de recherche. */
-const THEME_SUMMARIES: DeezerPlaylistSummary[] = THEMES.map((t) => ({
+/** Nos exemples, sous la forme des résultats de recherche. */
+const EXAMPLE_SUMMARIES: DeezerPlaylistSummary[] = EXAMPLES.map((t) => ({
   id: t.id,
   title: t.title,
   trackCount: 0,
   pictureUrl: `https://api.deezer.com/playlist/${t.id}/image`,
   creator: null,
 }));
-const THEMES_LABEL = "Nos playlists";
+const EXAMPLES_LABEL = "Exemples pour démarrer";
+
+function shuffled<T>(items: T[]): T[] {
+  const a = [...items];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
 // Recherches rapides proposées sans rien taper.
 // Comptages "morceaux jouables" lancés en parallèle au maximum (l'API
@@ -83,8 +92,15 @@ export function DeezerPlaylistPicker({
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<DeezerPlaylistSummary[] | null>(THEME_SUMMARIES);
-  const [label, setLabel] = useState(THEMES_LABEL);
+  const [results, setResults] = useState<DeezerPlaylistSummary[] | null>(EXAMPLE_SUMMARIES);
+  const [label, setLabel] = useState(EXAMPLES_LABEL);
+  // Thème cliqué (recherche en cours) : type de réponse conseillé à l'import
+  // et Mix surprise.
+  const [chip, setChip] = useState<ThemeChip | null>(null);
+  const [mixOpen, setMixOpen] = useState(false);
+  const [mixBusy, setMixBusy] = useState(false);
+  const [mixDone, setMixDone] = useState<string | null>(null);
+  const mixSeq = useRef(0);
   // Playlist (hors thèmes) dont on demande le type de réponse avant l'import.
   const [choosingId, setChoosingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -124,9 +140,13 @@ export function DeezerPlaylistPicker({
     pump();
   };
 
-  const runSearch = async (q: string) => {
+  const runSearch = async (q: string, theme: ThemeChip | null = null) => {
     const text = q.trim();
     if (!text) return;
+    setChip(theme);
+    setMixOpen(false);
+    setMixDone(null);
+    setChoosingId(null);
     setLoading(true);
     setError(null);
     try {
@@ -136,7 +156,7 @@ export function DeezerPlaylistPicker({
         setLabel("Playlist du lien");
       } else {
         setResults(await searchDeezerPlaylists(text));
-        setLabel(`Résultats pour « ${text} »`);
+        setLabel(theme ? `Playlists « ${theme.label} »` : `Résultats pour « ${text} »`);
       }
     } catch (e: any) {
       setError(e?.message ?? "Recherche impossible.");
@@ -163,6 +183,54 @@ export function DeezerPlaylistPicker({
       setImportingId(null);
     }
   };
+
+  // Mix surprise : N morceaux tirés au hasard dans les premières playlists du
+  // thème (sans doublon), pour que deux parties ne se ressemblent jamais.
+  const runMix = async (size: number) => {
+    if (!chip || !results) return;
+    const pool = results.filter((p) => counts[p.id] !== 0).slice(0, MIX_PLAYLISTS);
+    if (pool.length === 0) return;
+    setMixBusy(true);
+    setError(null);
+    try {
+      const lists = await Promise.allSettled(pool.map((p) => getDeezerPlaylistTracks(p.id)));
+      const seen = new Set<string>();
+      const all: QueueTrack[] = [];
+      for (const r of lists) {
+        if (r.status !== "fulfilled") continue;
+        for (const t of r.value) {
+          const key = `${t.title}|${t.artist}`.toLowerCase();
+          if (seen.has(t.sourceTrackId) || seen.has(key)) continue;
+          seen.add(t.sourceTrackId);
+          seen.add(key);
+          all.push(t);
+        }
+      }
+      const picked = shuffled(all).slice(0, size);
+      if (picked.length === 0) {
+        setError("Aucun morceau disponible pour ce mix, essaie un autre thème.");
+        return;
+      }
+      onImport(withAnswerMode(picked, chip.answerMode), {
+        id: `mix-${chip.label}-${(mixSeq.current += 1)}`,
+        title: `Mix ${chip.label}`,
+        trackCount: picked.length,
+        pictureUrl: null,
+        creator: null,
+      });
+      setMixDone(`${picked.length} morceaux ajoutés`);
+      setMixOpen(false);
+    } catch (e: any) {
+      setError(e?.message ?? "Mix impossible, réessaie.");
+    } finally {
+      setMixBusy(false);
+    }
+  };
+
+  // Type de réponse proposé par le 2e bouton à l'import (hors exemples).
+  const altMode: AnswerMode = chip?.answerMode === "song_work" ? "song_work" : "work";
+  const altLabel = altMode === "song_work" ? "Chanson + film" : "Film / série";
+  const recommended: AnswerMode = chip?.answerMode ?? "classic";
 
   return (
     <div className="flex flex-col gap-3 min-w-0">
@@ -192,24 +260,71 @@ export function DeezerPlaylistPicker({
         </button>
       </form>
 
-      {label !== THEMES_LABEL && (
-        <button
-          type="button"
-          onClick={() => {
-            setResults(THEME_SUMMARIES);
-            setLabel(THEMES_LABEL);
-            setQuery("");
-            setChoosingId(null);
-          }}
-          className="self-start text-xs font-bold underline text-inkMuted hover:text-fg"
-        >
-          ← Revenir à nos playlists
-        </button>
-      )}
+      <div className="flex flex-wrap gap-1.5">
+        {THEME_CHIPS.map((c) => (
+          <button
+            key={c.label}
+            type="button"
+            onClick={() => {
+              setQuery(c.label);
+              runSearch(c.query, c);
+            }}
+            aria-pressed={chip?.label === c.label}
+            className={`border-2 border-fg rounded-full px-3 py-1 text-xs font-bold transition-transform hover:-translate-y-0.5 ${
+              chip?.label === c.label ? "bg-[#FFE14D] shadow-sticker-sm" : "bg-inkSurface"
+            }`}
+          >
+            {c.label}
+          </button>
+        ))}
+      </div>
 
       {error && <p className="text-sm text-danger font-bold">{error}</p>}
 
-      <p className="text-xs font-extrabold uppercase tracking-wide text-inkMuted">{label}</p>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-inkMuted">{label}</p>
+        {chip && results && results.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setMixOpen((o) => !o)}
+            disabled={disabled || mixBusy}
+            className="bg-[#FF6FB5] border-2 border-fg shadow-sticker-sm rounded-lg px-2.5 py-1 text-xs font-extrabold inline-flex items-center gap-1 disabled:opacity-50"
+          >
+            <Dices className="w-3.5 h-3.5" /> Mix surprise
+          </button>
+        )}
+      </div>
+
+      {chip && mixOpen && (
+        <div className="bg-inkSurface border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-2.5 flex flex-col gap-2">
+          <p className="text-sm font-extrabold">Mix surprise « {chip.label} »</p>
+          <p className="text-xs text-inkMuted">
+            Des morceaux tirés au hasard dans les {MIX_PLAYLISTS} premières playlists du thème : une sélection différente à chaque fois.
+            Combien de morceaux ?
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            {MIX_SIZES.map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => runMix(n)}
+                disabled={mixBusy}
+                className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-lg px-3 py-1 text-sm font-bold disabled:opacity-50"
+              >
+                {mixBusy ? "…" : n}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {chip && mixDone && !mixOpen && (
+        <p className="text-xs font-bold text-fg">
+          ✓ Mix « {chip.label} » : {mixDone}.{" "}
+          <button type="button" onClick={() => setMixOpen(true)} className="underline">
+            Autre tirage
+          </button>
+        </p>
+      )}
       {results === null ? (
         <p className="text-sm text-inkMuted animate-pulse">Chargement…</p>
       ) : results.length === 0 ? (
@@ -245,8 +360,8 @@ export function DeezerPlaylistPicker({
                     )}
                     {p.creator ? ` · ${p.creator}` : ""}
                   </span>
-                  {THEME_BY_ID[p.id] && answerModeHint(THEME_BY_ID[p.id].answerMode) && (
-                    <span className="block text-xs font-bold text-fg">{answerModeHint(THEME_BY_ID[p.id].answerMode)}</span>
+                  {EXAMPLE_BY_ID[p.id] && answerModeHint(EXAMPLE_BY_ID[p.id].answerMode) && (
+                    <span className="block text-xs font-bold text-fg">{answerModeHint(EXAMPLE_BY_ID[p.id].answerMode)}</span>
                   )}
                 </span>
                 {choosingId === p.id ? (
@@ -255,24 +370,28 @@ export function DeezerPlaylistPicker({
                     <button
                       type="button"
                       onClick={() => importPlaylist(p, "classic")}
-                      className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap"
+                      className={`border-2 border-fg shadow-sticker-sm rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap ${
+                        recommended === "classic" ? "bg-[#FFE14D]" : "bg-inkSurface"
+                      }`}
                     >
                       Titre + artiste
                     </button>
                     <button
                       type="button"
-                      onClick={() => importPlaylist(p, "work")}
-                      className="bg-inkSurface border-2 border-fg shadow-sticker-sm rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap"
+                      onClick={() => importPlaylist(p, altMode)}
+                      className={`border-2 border-fg shadow-sticker-sm rounded-lg px-2 py-1 text-xs font-bold whitespace-nowrap ${
+                        recommended !== "classic" ? "bg-[#FFE14D]" : "bg-inkSurface"
+                      }`}
                     >
-                      Film / série
+                      {altLabel}
                     </button>
                   </span>
                 ) : (
                 <button
                   type="button"
                   onClick={() => {
-                    const theme = THEME_BY_ID[p.id];
-                    if (theme) importPlaylist(p, theme.answerMode);
+                    const example = EXAMPLE_BY_ID[p.id];
+                    if (example) importPlaylist(p, example.answerMode);
                     else setChoosingId(p.id);
                   }}
                   disabled={disabled || importingId !== null || empty}
@@ -302,6 +421,23 @@ export function DeezerPlaylistPicker({
             );
           })}
         </ul>
+      )}
+      {label !== EXAMPLES_LABEL && (
+        <button
+          type="button"
+          onClick={() => {
+            setResults(EXAMPLE_SUMMARIES);
+            setLabel(EXAMPLES_LABEL);
+            setQuery("");
+            setChip(null);
+            setMixOpen(false);
+            setMixDone(null);
+            setChoosingId(null);
+          }}
+          className="self-start text-xs font-bold underline text-inkMuted hover:text-fg"
+        >
+          ← Revenir aux exemples
+        </button>
       )}
       <p className="text-[11px] text-inkMuted">Musique fournie par Deezer · extraits de 30 secondes.</p>
     </div>
