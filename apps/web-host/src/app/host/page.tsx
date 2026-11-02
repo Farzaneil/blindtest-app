@@ -1452,15 +1452,18 @@ function HostScreenInner() {
     }
   };
 
-  const launchRound = async (track: QueueTrack, isJoker: boolean) => {
-    if (!room) return;
+  // Renvoie true si la manche a bien démarré : un échec (erreur réseau,
+  // migration manquante…) ne doit pas faire avancer la file, sinon la partie
+  // se croit commencée et le morceau est perdu.
+  const launchRound = async (track: QueueTrack, isJoker: boolean): Promise<boolean> => {
+    if (!room) return false;
     // Artistes de la manche : ceux de la file par défaut ; pour Deezer,
     // remplacés par la liste complète (featurings) renvoyée avec l'extrait.
     let artist = track.artist;
     const fromDeezer = isDeezerTrackId(track.sourceTrackId);
     if (!fromDeezer && (!spotifyPlayer.deviceId || !spotifyPlayer.accessTokenRef.current)) {
       setError("Ce morceau vient de Spotify : connecte Spotify (source « Spotify ») pour le jouer.");
-      return;
+      return false;
     }
     try {
       if (fromDeezer) {
@@ -1473,7 +1476,7 @@ function HostScreenInner() {
         const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current!);
         if (!accessToken) {
           setError("Connexion Spotify perdue — recharge la page pour te reconnecter, puis réessaie.");
-          return;
+          return false;
         }
         await spotify.playTrackOnHostDevice(track.sourceTrackId, spotifyPlayer.deviceId!, accessToken);
         activeSourceRef.current = "spotify";
@@ -1497,8 +1500,10 @@ function HostScreenInner() {
       // éliminer. Le realtime finira par renvoyer la même donnée un peu
       // plus tard (idempotent, sans effet visible).
       setRound(newRound);
+      return true;
     } catch (e: any) {
       setError(e?.message ?? "Impossible de lancer la manche.");
+      return false;
     }
   };
 
@@ -1542,10 +1547,11 @@ function HostScreenInner() {
     // Manche joker tirée ici (voir drawJokerRound), puis transmise au
     // lancement.
     const isJoker = drawJokerRound(room?.bonus_joker_enabled ?? false);
-    await launchRound(queue[queueIndex], isJoker);
+    const started = await launchRound(queue[queueIndex], isJoker);
+    setLaunchingRound(false);
+    if (!started) return;
     setQueueIndex((i) => i + 1);
     setBuildingPlaylist(false);
-    setLaunchingRound(false);
     // Bascule automatique sur le buzzer dès qu'une manche démarre, pour
     // l'hôte qui joue aussi (voir hostJoinResolved/hostPlayerId) : couvre
     // à la fois "Démarrer la partie" (première manche) et "Manche
