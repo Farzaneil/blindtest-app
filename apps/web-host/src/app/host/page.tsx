@@ -82,6 +82,7 @@ import { AnimatedScoreboard, EndCeremony, podiumFrom, roundBonuses } from "../_c
 import { PlayerAccountCorner } from "../_components/PlayerAccountCorner";
 import { JoinQrCode } from "../_components/JoinQrCode";
 import { KazouGameIntro, useKazouCameos } from "../_components/KazouStage";
+import { ShareRecap, buildSoloRecap, buildTeamRecap, roundShortName } from "../_components/ShareRecap";
 import { JokerIcon } from "../../lib/jokerIcon";
 import { answerLabels, answerParts, answerText, originalTrackText } from "../../lib/answers";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
@@ -2009,6 +2010,14 @@ function HostScreenInner() {
       mostContestedRound = r;
     }
   }
+  // Moments forts du récap à partager (voir ShareRecap).
+  const recapHighlights = {
+    fastest:
+      fastestAttempt && fastestPlayer
+        ? { name: fastestPlayer.display_name, seconds: fastestAttempt.reaction_seconds as number }
+        : null,
+    contested: mostContestedRound ? { name: roundShortName(mostContestedRound), count: mostContestedCount } : null,
+  };
 
   // Bascule complète de l'écran hôte vers un buzzer, pilotée
   // automatiquement (voir handlePlayNextInQueue et l'effet de bascule
@@ -2559,6 +2568,13 @@ function HostScreenInner() {
                 : podiumFrom(rankedPlayers, (p) => ({ id: p.id, name: p.display_name, score: p.score, avatar: avatarForPlayer(p) }))
             }
           >
+            <ShareRecap
+              data={
+                teamMode
+                  ? buildTeamRecap(teamStandings, teamColor, roundHistory.length, players.length, recapHighlights)
+                  : buildSoloRecap(rankedPlayers, avatarForPlayer, roundHistory.length, recapHighlights)
+              }
+            />
             {/* Mode équipes : récap "à la Call of Duty" (bandeau victoire,
                 tableau par équipe avec MVP, distinctions) à la place du
                 podium individuel. */}

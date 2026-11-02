@@ -22,6 +22,7 @@ import { ArrowLeft, Trophy, Zap, Flame, Check } from "lucide-react";
 import { JokerIcon } from "../../lib/jokerIcon";
 import { answerLabels, answerText } from "../../lib/answers";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
+import { ShareRecap, buildSoloRecap, buildTeamRecap, roundShortName } from "../_components/ShareRecap";
 import { KazouBuzzBuddy, KazouGameIntro, KazouLobby, KazouRankBadge, useKazouCameos } from "../_components/KazouStage";
 import {
   joinRoomByCode,
@@ -751,6 +752,14 @@ function BuzzerView({
       mostContestedRound = r;
     }
   }
+  // Moments forts du récap à partager (voir ShareRecap).
+  const recapHighlights = {
+    fastest:
+      fastestAttempt && fastestPlayer
+        ? { name: fastestPlayer.display_name, seconds: fastestAttempt.reaction_seconds as number }
+        : null,
+    contested: mostContestedRound ? { name: roundShortName(mostContestedRound), count: mostContestedCount } : null,
+  };
 
   // Le Kazou Band pendant la partie (lot 2, voir KazouStage) : purement
   // visuel, déclenché par les changements d'état déjà reçus, il ne retarde
@@ -862,6 +871,7 @@ function BuzzerView({
             )
           }
         >
+          <ShareRecap data={buildTeamRecap(teamStandings, teamColor, roundHistory.length, players.length, recapHighlights)} />
           <TeamResultBanner standings={teamStandings} perspectiveTeamId={myTeam?.id ?? null} />
 
           {newlyUnlockedBadges.length > 0 && (
@@ -970,6 +980,7 @@ function BuzzerView({
             )
           }
         >
+          <ShareRecap data={buildSoloRecap(ranked, avatarForPlayer, roundHistory.length, recapHighlights)} />
 
           {newlyUnlockedBadges.length > 0 && (
             <div className="w-full flex flex-col gap-2">
