@@ -207,7 +207,7 @@ export function FeedbackWidget() {
           >
             <div className="flex items-center gap-3 mb-4">
               <span className="w-12 h-12 shrink-0 rounded-full bg-[#A8DCFF] border-2 border-fg flex items-center justify-center">
-                <Kazou who="zou" size={40} />
+                <Kazou who="zou" size={40} className="kazou-centre" />
               </span>
               <div className="min-w-0">
                 <h2 id="feedback-title" className="font-display text-lg leading-tight">

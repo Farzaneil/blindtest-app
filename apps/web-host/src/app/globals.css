@@ -47,6 +47,11 @@
 .kazou-badge {
   background: #a8dcff;
 }
+/* Recentre un Kazou dans une pastille ronde : le dessin (viewBox 0-100) a
+   son centre visuel en (53,9 ; 56,6), un peu à droite et en bas. */
+.kazou-centre {
+  transform: translate(-3.9%, -6.6%);
+}
 :root[data-fond="ciel"] .kazou-badge {
   background: #c9b6ff;
 }
