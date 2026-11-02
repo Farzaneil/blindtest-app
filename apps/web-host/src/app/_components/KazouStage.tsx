@@ -120,8 +120,8 @@ const INTRO_END_MS = 3100;
  * null : l'animation se joue quand il passe de null à un id. Une page
  * rechargée en pleine partie ne la rejoue donc pas (manche > 1).
  *
- * Calque plein écran SANS interaction (pointer-events: none) : la musique
- * démarre en même temps, un joueur rapide peut buzzer à travers.
+ * Bandeau en haut de l'écran, sans fond ni interaction (pointer-events:
+ * none) : la musique démarre en même temps, le buzzer reste visible.
  */
 export function KazouGameIntro({ firstRoundId }: { firstRoundId: string | null }) {
   const sawNoRound = useRef(firstRoundId === null);
@@ -162,7 +162,9 @@ export function KazouGameIntro({ firstRoundId }: { firstRoundId: string | null }
   return (
     <div
       aria-hidden="true"
-      className={`fixed inset-0 z-[60] pointer-events-none flex flex-col items-center justify-center gap-6 overflow-hidden kz-intro ${leaving ? "kz-intro-out" : ""}`}
+      // Bandeau en haut de l'écran, sans fond : le buzzer et la musique,
+      // qui démarrent en même temps, restent visibles et utilisables.
+      className={`fixed inset-x-0 top-0 z-[60] pointer-events-none flex flex-col items-center gap-1 pt-[calc(env(safe-area-inset-top,0px)+8px)] ${leaving ? "kz-intro-out" : ""}`}
     >
       <div className="flex items-end">
         {cast.map((c, i) => (
@@ -170,7 +172,7 @@ export function KazouGameIntro({ firstRoundId }: { firstRoundId: string | null }
             key={c.who}
             who={c.who}
             mood={jumping ? "buzz" : "joie"}
-            size={112}
+            size={72}
             outer={leaving ? "kz-exit-up" : c.enter}
             style={leaving ? ({ animationDelay: `${i * 80}ms`, "--kz-tilt": c.tilt } as CSSProperties) : undefined}
             inner={jumping ? "kz-jump" : ""}
@@ -179,7 +181,7 @@ export function KazouGameIntro({ firstRoundId }: { firstRoundId: string | null }
         ))}
       </div>
       {phase !== "enter" && (
-        <p className="font-display text-5xl text-fg text-center animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]">
+        <p className="font-display text-xl text-fg text-center bg-inkSurface border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-0.5 -rotate-2 animate-[stampIn_0.5s_cubic-bezier(0.3,1.6,0.5,1)_both]">
           C’est parti !
         </p>
       )}

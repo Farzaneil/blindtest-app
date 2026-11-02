@@ -20,7 +20,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Trophy, Zap, Flame, Check } from "lucide-react";
 import { JokerIcon } from "../../lib/jokerIcon";
-import { answerLabels, answerText } from "../../lib/answers";
+import { answerLabels, answerText, originalTrackText } from "../../lib/answers";
 import { RoundTimer, roundTimeLeft } from "../_components/RoundTimer";
 import { ShareRecap, buildSoloRecap, buildTeamRecap, roundShortName } from "../_components/ShareRecap";
 import { KazouBuzzBuddy, KazouGameIntro, KazouLobby, KazouRankBadge, useKazouCameos } from "../_components/KazouStage";
@@ -1152,6 +1152,7 @@ function BuzzerView({
             <p className="text-xl font-bold text-fg font-display">
               {answerText(round)}
             </p>
+            {originalTrackText(round) && <p className="text-xs text-inkMuted mt-1">{originalTrackText(round)}</p>}
             {(currentRoundHadSpeedBonus || currentRoundHadRemontadaBonus) && (
               <p className="text-xs text-amberStrong mt-2">
                 {[currentRoundHadSpeedBonus && "bonus vitesse", currentRoundHadRemontadaBonus && "bonus remontada"]

@@ -7,7 +7,7 @@
  */
 
 import type { spotify } from "@blindtest/api-clients";
-import { cleanSongTitle, cleanWorkName, type AnswerMode } from "./answers";
+import { cleanSongTitle, cleanWorkName, guessWork, type AnswerMode } from "./answers";
 
 /**
  * Morceau de la file d'attente de l'hôte. `playlist` = la playlist dont il
@@ -25,7 +25,7 @@ export type QueueTrack = spotify.SpotifyTrack & {
 
 /**
  * Applique un type de réponse à des morceaux importés : l'œuvre (film,
- * série) est tirée du nom de l'album ; en « Chanson + film », le titre est
+ * série) est devinée (voir guessWork) ; en « Chanson + film », le titre est
  * débarrassé des mentions « (De "…") ».
  */
 export function withAnswerMode(tracks: QueueTrack[], mode: AnswerMode): QueueTrack[] {
@@ -34,7 +34,9 @@ export function withAnswerMode(tracks: QueueTrack[], mode: AnswerMode): QueueTra
     ...t,
     title: mode === "song_work" ? cleanSongTitle(t.title) : t.title,
     answerMode: mode,
-    work: cleanWorkName(t.albumTitle),
+    // Film / série : œuvre devinée (titre, puis album de BO) ; chanson +
+    // film (Disney) : l'album est toujours la BO du film.
+    work: mode === "work" ? guessWork(t.title, t.albumTitle) : cleanWorkName(t.albumTitle),
   }));
 }
 

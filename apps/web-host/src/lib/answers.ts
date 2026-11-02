@@ -62,6 +62,29 @@ export function cleanWorkName(album: string | null | undefined): string | null {
   return s || album.trim();
 }
 
+const SOUNDTRACK_ALBUM = /soundtrack|motion picture|bande originale du film|original score|music from (the|and)|movie|du film/i;
+// Albums de compilation (« Les Meilleures Musiques De Dessins Animés Vol. 1 ») :
+// leur nom ne dit rien de l'œuvre, on se rabat alors sur le titre du morceau.
+const COMPILATION_ALBUM = /best|meilleur|hits?\b|vol\.|volume|compil|collection|génériques|generiques|musiques de|thèmes|themes|classics|greatest|cultes|enfants|génération|generation|\b\d{2,3}\b/i;
+
+/**
+ * Œuvre (film, série, dessin animé) d'un morceau, pour les réponses
+ * « Film / série ». Dans l'ordre :
+ * 1. mention explicite dans le titre : Stayin' Alive (From "Saturday Night Fever") ;
+ * 2. album de bande originale (pas une compilation) : Pulp Fiction (Music From The Motion Picture) ;
+ * 3. sinon le titre du morceau nettoyé : « Dragon Ball (Générique) » → « Dragon Ball ».
+ */
+export function guessWork(title: string, album: string | null | undefined): string {
+  const quoted = title.match(/(?:from|de|du film|extrait du dessin animé|extrait de)\s*(?:the\s+)?["“'‘]([^"”'’]+)["”'’]/i);
+  if (quoted) return quoted[1].trim();
+  if (album && SOUNDTRACK_ALBUM.test(album) && !COMPILATION_ALBUM.test(album)) {
+    const a = cleanWorkName(album);
+    if (a) return a;
+  }
+  const t = (cleanWorkName(title) ?? title).replace(/\s*[-–:]?\s*(main title( theme)?|main theme|theme|thème)$/i, "").trim();
+  return t || title;
+}
+
 /** Titre de chanson sans les mentions « (De "…"/Bande Originale…) » ou « (From …) ». */
 export function cleanSongTitle(title: string): string {
   const s = title.replace(/\s*\((de|from|du film|tiré de)\b[^)]*\)/gi, "").trim();

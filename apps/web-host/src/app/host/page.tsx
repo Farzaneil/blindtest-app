@@ -2210,6 +2210,7 @@ function HostScreenInner() {
           )}
           <p className="text-lg text-inkMuted">
             {answerText(round)}
+            {originalTrackText(round) && <span className="block text-sm">{originalTrackText(round)}</span>}
           </p>
           {round.title_found && !round.artist_found ? (
             <div className="flex gap-4 w-full max-w-md">

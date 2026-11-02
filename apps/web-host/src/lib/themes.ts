@@ -3,9 +3,10 @@ import type { AnswerMode } from "./answers";
 /**
  * Nos playlists proposées (« thèmes ») : playlists Deezer choisies pour le
  * blind test, avec le type de réponse déjà réglé (voir lib/answers.ts).
- * Officielles Deezer autant que possible ; « Génériques » vient d'un
- * utilisateur (aucune playlist officielle) et peut disparaître : son import
- * échoue alors avec un message, sans bloquer le reste.
+ * Officielles Deezer autant que possible ; « Génériques » et « Musiques de
+ * films » viennent d'utilisateurs (choisies parce que leurs morceaux
+ * donnent bien le nom de l'œuvre, voir guessWork) et peuvent disparaître :
+ * l'import échoue alors avec un message, sans bloquer le reste.
  * Pour en changer une : remplacer l'identifiant (deezer.com/fr/playlist/<id>).
  */
 export type Theme = { id: string; title: string; group: "Années" | "France" | "Styles" | "Ciné & TV"; answerMode: AnswerMode };
@@ -26,7 +27,7 @@ export const THEMES: Theme[] = [
   { id: "1306931615", title: "Rock", group: "Styles", answerMode: "classic" },
   { id: "5506526242", title: "Tubes de l’été", group: "Styles", answerMode: "classic" },
   { id: "613860315", title: "Disney", group: "Ciné & TV", answerMode: "song_work" },
-  { id: "754776991", title: "Musiques de films", group: "Ciné & TV", answerMode: "work" },
+  { id: "8531512122", title: "Musiques de films et dessins animés", group: "Ciné & TV", answerMode: "work" },
   { id: "9976576142", title: "Génériques dessins animés et séries", group: "Ciné & TV", answerMode: "work" },
 ];
 
