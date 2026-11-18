@@ -5,7 +5,7 @@ import { Check, Lock } from "lucide-react";
 import { AVATARS, AVATAR_BY_KEY, AVATAR_COLORS, Avatar, avatarForPlayer } from "../../lib/avatars";
 import { usePlayerAccount } from "../../lib/usePlayerAccount";
 import { usePlayerBadges } from "../../lib/usePlayerBadges";
-import { AVATAR_EXTRAS, isAvatarExtraUnlocked } from "../../lib/avatarExtras";
+import { AVATAR_EXTRAS, isAvatarExtraUnlocked, isSeasonal } from "../../lib/avatarExtras";
 
 /**
  * Choix de l'avatar du compte (profil) : grille des 12 avatars "Les
@@ -124,7 +124,8 @@ export function AvatarPicker({ className = "" }: { className?: string }) {
       <div className="flex flex-col gap-2">
         <span className="font-display text-sm">Effet spécial</span>
         <div role="radiogroup" aria-label="Effet spécial" className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-          {[null, ...AVATAR_EXTRAS].map((x) => {
+          {/* Accessoires de saison : seulement pendant leur période, sans en afficher les dates. */}
+          {[null, ...AVATAR_EXTRAS.filter((x) => !isSeasonal(x) || isAvatarExtraUnlocked(x, unlockCtx))].map((x) => {
             const key = x?.key ?? null;
             const unlocked = !x || isAvatarExtraUnlocked(x, unlockCtx);
             const selected = chosen.extra === key;

@@ -3,6 +3,8 @@
  * utilisable aussi côté serveur (validation dans api/player-account/update-avatar).
  */
 
+import { SEASONAL_GENERIC, SEASONAL_PER_AVATAR } from "./avatarSeasonal";
+
 // ============================================================================
 // Effets spéciaux (un seul à la fois, par-dessus l'avatar) : version or,
 // avatar animé, chapeaux de saison, accessoires "légende" liés aux badges.
@@ -10,12 +12,32 @@
 // api/player-account/update-avatar), à partir de l'XP et des badges.
 // ============================================================================
 
-export type AvatarExtraKey = "anime" | "or" | "couronne" | "star" | "halloween" | "noel" | "ete";
+export type AvatarExtraKey =
+  | "anime"
+  | "or"
+  | "couronne"
+  | "star"
+  // Accessoires de saison (proposés seulement pendant leur période, voir isSeasonal).
+  | "halloween"
+  | "vampire"
+  | "diable"
+  | "noel"
+  | "renne"
+  | "lutin"
+  | "fete"
+  | "antennes"
+  | "coeurs"
+  | "lapin"
+  | "oeufs"
+  | "ete"
+  | "soleil"
+  | "casquette";
 
 export type AvatarExtraUnlock =
   | { type: "level"; level: number }
   | { type: "badge"; badgeKey: string; progress?: number; tier?: "bronze" | "argent" | "or" }
-  | { type: "season"; from: [number, number]; to: [number, number] }; // [mois, jour], bornes incluses
+  | { type: "season"; from: [number, number]; to: [number, number] } // [mois, jour], bornes incluses
+  | { type: "easter"; daysBefore: number; daysAfter: number }; // autour du dimanche de Pâques
 
 export type AvatarExtraDefinition = {
   key: AvatarExtraKey;
@@ -25,14 +47,32 @@ export type AvatarExtraDefinition = {
   unlock: AvatarExtraUnlock;
 };
 
+const HALLOWEEN: AvatarExtraUnlock = { type: "season", from: [10, 15], to: [11, 5] };
+const NOEL: AvatarExtraUnlock = { type: "season", from: [12, 1], to: [1, 6] };
+const VALENTIN: AvatarExtraUnlock = { type: "season", from: [2, 7], to: [2, 15] };
+const PAQUES: AvatarExtraUnlock = { type: "easter", daysBefore: 7, daysAfter: 7 };
+const ETE: AvatarExtraUnlock = { type: "season", from: [6, 21], to: [9, 21] };
+
 export const AVATAR_EXTRAS: AvatarExtraDefinition[] = [
   { key: "anime", label: "Animé", description: "Ton avatar s’anime quand tu buzzes et sur le podium.", unlockHint: "Niveau 5", unlock: { type: "level", level: 5 } },
   { key: "or", label: "Version or", description: "Rond doré et paillettes.", unlockHint: "10 victoires", unlock: { type: "badge", badgeKey: "champion", progress: 10 } },
   { key: "couronne", label: "Couronne", description: "Pour les buzzeurs les plus rapides.", unlockHint: "Badge Éclair en or", unlock: { type: "badge", badgeKey: "eclair", tier: "or" } },
   { key: "star", label: "Lunettes de star", description: "Pour celles et ceux qui ont du goût.", unlockHint: "Badge Curateur en argent", unlock: { type: "badge", badgeKey: "curateur", tier: "argent" } },
-  { key: "halloween", label: "Chapeau de sorcière", description: "Édition Halloween.", unlockHint: "Du 15 octobre au 5 novembre", unlock: { type: "season", from: [10, 15], to: [11, 5] } },
-  { key: "noel", label: "Bonnet de Noël", description: "Édition Noël.", unlockHint: "Du 1er décembre au 6 janvier", unlock: { type: "season", from: [12, 1], to: [1, 6] } },
-  { key: "ete", label: "Chapeau de paille", description: "Édition été.", unlockHint: "Du 21 juin au 21 septembre", unlock: { type: "season", from: [6, 21], to: [9, 21] } },
+  // Saisons : jamais affichées aux joueurs (unlockHint sert de mémo dans le code).
+  { key: "halloween", label: "Chapeau de sorcière", description: "Édition Halloween.", unlockHint: "Du 15 octobre au 5 novembre", unlock: HALLOWEEN },
+  { key: "vampire", label: "Dents de vampire", description: "Édition Halloween.", unlockHint: "Du 15 octobre au 5 novembre", unlock: HALLOWEEN },
+  { key: "diable", label: "Cornes de diable", description: "Édition Halloween.", unlockHint: "Du 15 octobre au 5 novembre", unlock: HALLOWEEN },
+  { key: "noel", label: "Bonnet de Noël", description: "Édition Noël.", unlockHint: "Du 1er décembre au 6 janvier", unlock: NOEL },
+  { key: "renne", label: "Bois de renne", description: "Édition Noël.", unlockHint: "Du 1er décembre au 6 janvier", unlock: NOEL },
+  { key: "lutin", label: "Lutin", description: "Édition Noël.", unlockHint: "Du 1er décembre au 6 janvier", unlock: NOEL },
+  { key: "fete", label: "Chapeau de fête", description: "Édition Nouvel An.", unlockHint: "Du 26 décembre au 6 janvier", unlock: { type: "season", from: [12, 26], to: [1, 6] } },
+  { key: "antennes", label: "Antennes cœur", description: "Édition Saint-Valentin.", unlockHint: "Du 7 au 15 février", unlock: VALENTIN },
+  { key: "coeurs", label: "Lunettes cœur", description: "Édition Saint-Valentin.", unlockHint: "Du 7 au 15 février", unlock: VALENTIN },
+  { key: "lapin", label: "Oreilles de lapin", description: "Édition Pâques.", unlockHint: "Une semaine avant et après Pâques", unlock: PAQUES },
+  { key: "oeufs", label: "Œufs de Pâques", description: "Édition Pâques.", unlockHint: "Une semaine avant et après Pâques", unlock: PAQUES },
+  { key: "ete", label: "Chapeau de paille", description: "Édition été.", unlockHint: "Du 21 juin au 21 septembre", unlock: ETE },
+  { key: "soleil", label: "Lunettes de soleil", description: "Édition été.", unlockHint: "Du 21 juin au 21 septembre", unlock: ETE },
+  { key: "casquette", label: "Casquette", description: "Édition été.", unlockHint: "Du 21 juin au 21 septembre", unlock: ETE },
 ];
 
 export const AVATAR_EXTRA_BY_KEY: Record<string, AvatarExtraDefinition> = Object.fromEntries(AVATAR_EXTRAS.map((e) => [e.key, e]));
@@ -53,10 +93,51 @@ function inSeason(now: Date, from: [number, number], to: [number, number]): bool
   return a <= b ? v >= a && v <= b : v >= a || v <= b;
 }
 
+/** Dimanche de Pâques (calendrier grégorien, algorithme de Meeus/Jones/Butcher). */
+export function easterSunday(year: number): Date {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+function aroundEaster(now: Date, before: number, after: number): boolean {
+  const day = 86_400_000;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const easter = easterSunday(now.getFullYear()).getTime();
+  return today >= easter - before * day && today <= easter + after * day;
+}
+
+/** Accessoire de saison : proposé (et affiché) seulement pendant sa période. */
+export function isSeasonal(def: AvatarExtraDefinition | undefined): boolean {
+  return def?.unlock.type === "season" || def?.unlock.type === "easter";
+}
+
+/** Effet réellement affiché : un accessoire de saison hors période est masqué (il reviendra l'an prochain). */
+export function displayedExtra(extra: string | null | undefined, now: Date = new Date()): string | null {
+  if (!extra) return null;
+  const def = AVATAR_EXTRA_BY_KEY[extra];
+  if (!def) return null;
+  if (isSeasonal(def) && !isAvatarExtraUnlocked(def, { xp: 0, badges: {}, now })) return null;
+  return extra;
+}
+
 export function isAvatarExtraUnlocked(def: AvatarExtraDefinition, ctx: AvatarUnlockContext): boolean {
   const u = def.unlock;
   if (u.type === "level") return Math.floor(Math.max(ctx.xp, 0) / 100) + 1 >= u.level;
   if (u.type === "season") return inSeason(ctx.now ?? new Date(), u.from, u.to);
+  if (u.type === "easter") return aroundEaster(ctx.now ?? new Date(), u.daysBefore, u.daysAfter);
   const b = ctx.badges[u.badgeKey];
   if (!b) return false;
   if (u.progress !== undefined && b.progress < u.progress) return false;
@@ -99,9 +180,11 @@ const ANIMATION_CLASS: Record<string, string> = {
 };
 
 export function avatarOverlay(avatarKey: string, extra: string | null | undefined): string {
-  if (!extra) return "";
-  if (extra === "star") return STAR_GLASSES[avatarKey] ?? "";
-  return EXTRA_OVERLAYS[extra] ?? "";
+  const shown = displayedExtra(extra);
+  if (!shown) return "";
+  if (shown === "star") return STAR_GLASSES[avatarKey] ?? "";
+  if (SEASONAL_PER_AVATAR[shown]) return SEASONAL_PER_AVATAR[shown][avatarKey] ?? "";
+  return EXTRA_OVERLAYS[shown] ?? SEASONAL_GENERIC[shown] ?? "";
 }
 
 export function avatarAnimationClass(avatarKey: string): string {

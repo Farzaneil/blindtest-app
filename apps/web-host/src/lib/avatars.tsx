@@ -23,7 +23,7 @@
  * lib/avatarExtras.ts.
  */
 
-import { avatarAnimationClass, avatarOverlay, isAvatarExtraKey } from "./avatarExtras";
+import { avatarAnimationClass, avatarOverlay, isAvatarExtraKey, displayedExtra } from "./avatarExtras";
 
 export type AvatarDefinition = { key: string; name: string; what: string; bg: string; svg: string };
 
@@ -145,7 +145,9 @@ export function avatarForPlayer(p: {
     : isAvatarKey(p.avatar_key)
       ? AVATAR_BY_KEY[key].bg
       : AVATAR_COLORS[(h >>> 8) % (AVATAR_COLORS.length - 1)];
-  const extra = isAvatarKey(p.avatar_key) && isAvatarExtraKey(p.avatar_extra) ? p.avatar_extra : null;
+  // displayedExtra : un accessoire de saison hors période n'est pas affiché
+  // (gardé en base, il réapparaîtra à la saison suivante).
+  const extra = isAvatarKey(p.avatar_key) && isAvatarExtraKey(p.avatar_extra) ? displayedExtra(p.avatar_extra) : null;
   return { key, color, extra };
 }
 
