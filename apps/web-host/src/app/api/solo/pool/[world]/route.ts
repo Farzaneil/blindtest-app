@@ -32,6 +32,7 @@ function featured(fullTitle: string): string[] {
   return m ? m[1].split(/\s*(?:,|&|\bet\b|\band\b)\s*/i).map((x) => x.trim()).filter(Boolean) : [];
 }
 const MAX_PER_PLAYLIST = 300;
+const PER_PLAYLIST = 120;
 
 async function playlistTracks(id: string): Promise<RankedTrack[]> {
   const out: RankedTrack[] = [];
@@ -77,15 +78,22 @@ async function buildPool(worldId: string): Promise<PoolTrack[]> {
       tracks.push({ id: tid, title, artist: artists.join(", "), tier: 1, rank: t.rank ?? 0, pl, fr: looksFrench(title) });
     }
   }
-  // Tranches : le tiers le plus populaire = 1, puis 2, puis 3.
-  const sorted = [...tracks].sort((a, b) => b.rank - a.rank);
-  sorted.forEach((t, i) => {
-    t.tier = (i < sorted.length / 3 ? 1 : i < (2 * sorted.length) / 3 ? 2 : 3) as Tier;
-  });
-  return sorted;
+  // Tranches calculées DANS chaque playlist (le tiers le plus populaire = 1,
+  // puis 2, puis 3) et au plus PER_PLAYLIST morceaux par playlist : sinon les
+  // tubes du moment (souvent du rap), très écoutés, prendraient toute la
+  // tranche « très connu » et écraseraient les playlists des années 80.
+  const out: (PoolTrack & { rank: number })[] = [];
+  for (const pl of new Set(tracks.map((t) => t.pl))) {
+    const group = tracks.filter((t) => t.pl === pl).sort((a, b) => b.rank - a.rank).slice(0, PER_PLAYLIST);
+    group.forEach((t, i) => {
+      t.tier = (i < group.length / 3 ? 1 : i < (2 * group.length) / 3 ? 2 : 3) as Tier;
+    });
+    out.push(...group);
+  }
+  return out;
 }
 
-const cachedPool = unstable_cache(buildPool, ["solo-pool-v3"], { revalidate: 6 * 3600 });
+const cachedPool = unstable_cache(buildPool, ["solo-pool-v4"], { revalidate: 6 * 3600 });
 
 export async function GET(request: Request, { params }: { params: Promise<{ world: string }> }) {
   if (!(await rateLimit(`deezer:${clientIp(request)}`, DEEZER_LIMIT_PER_MINUTE, 60))) return tooManyRequests();

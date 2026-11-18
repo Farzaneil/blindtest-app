@@ -6,7 +6,7 @@
  * les étoiles honnêtes (impossible d'apprendre les réponses par cœur).
  *
  * Réserve d'un monde = les morceaux jouables de ses playlists Deezer
- * (`playlistIds`, voir CLASSIC_POOL / PARTY_POOL). `searchQuery` ne sert
+ * (`playlistIds`, voir GARAGE_POOL / FETE_POOL / PARTY_POOL). `searchQuery` ne sert
  * que de dépannage pour un monde sans playlist.
  * Difficulté d'un morceau = sa popularité Deezer (`rank`), découpée en
  * trois tranches dans la réserve : 1 = très connu, 2 = connu, 3 = pointu.
@@ -87,8 +87,11 @@ function world(
  * leur DIFFICULTÉ (tranches de popularité, durée d'écoute, type de réponse)
  * plutôt que par leurs morceaux.
  */
-// 80s, 90s et 00s Party Hits, Rapstars 2010, Essentiels variété française, Rock Essentials, Top France.
-const CLASSIC_POOL = ["1913763402", "2322259622", "1977689462", "5175061384", "1420459465", "1306931615", "1109890291"];
+// Le Garage : 80s, 90s et 00s Party Hits, Essentiels variété française, Rock Essentials.
+const GARAGE_POOL = ["1913763402", "2322259622", "1977689462", "1420459465", "1306931615"];
+// La Fête de la musique : la même chose + Rapstars 2010 (le rap reste une part
+// parmi six, voir le tirage équilibré par playlist dans engine.drawTracks).
+const FETE_POOL = [...GARAGE_POOL, "5175061384"];
 // Les tubes de soirée : 80s, 90s et 00s Party Hits.
 const PARTY_POOL = ["1913763402", "2322259622", "1977689462"];
 
@@ -101,7 +104,7 @@ export const WORLDS: WorldDef[] = [
       tagline: "Les premières répètes : que des tubes ultra-connus, avec des réponses au choix.",
       color: "#FFE14D",
       playable: true,
-      playlistIds: CLASSIC_POOL,
+      playlistIds: GARAGE_POOL,
       searchQuery: "",
     },
     [
@@ -139,7 +142,7 @@ export const WORLDS: WorldDef[] = [
       tagline: "Tous les styles, des tubes un peu moins évidents, et tu commences à taper tes réponses.",
       color: "#A8DCFF",
       playable: true,
-      playlistIds: CLASSIC_POOL,
+      playlistIds: FETE_POOL,
       searchQuery: "",
     },
     [

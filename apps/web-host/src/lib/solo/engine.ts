@@ -31,6 +31,24 @@ function shuffle<T>(items: T[], rand: () => number = Math.random): T[] {
 }
 
 /**
+ * Mélange qui alterne les playlists d'origine (une de chaque, à tour de rôle) :
+ * chaque style a la même part, quelle que soit la taille de sa playlist.
+ */
+function mixByPlaylist(items: PoolTrack[]): PoolTrack[] {
+  const groups = new Map<number, PoolTrack[]>();
+  for (const t of shuffle(items)) {
+    const k = t.pl ?? 0;
+    groups.set(k, [...(groups.get(k) ?? []), t]);
+  }
+  const lists = shuffle([...groups.values()]);
+  const out: PoolTrack[] = [];
+  for (let i = 0; out.length < items.length; i++) {
+    for (const l of lists) if (l[i]) out.push(l[i]);
+  }
+  return out;
+}
+
+/**
  * Morceaux d'une tentative : dans les tranches du niveau, en écartant les
  * morceaux entendus à la tentative précédente (`recent`) puis, si possible,
  * ceux déjà trouvés dans le monde (`found`). On élargit aux autres tranches
@@ -50,7 +68,7 @@ export function drawTracks(pool: PoolTrack[], level: LevelDef, recent: Set<strin
   // Premier passage : un seul morceau par artiste ; second : on complète.
   for (const strictArtist of [true, false]) {
     for (const bucket of buckets) {
-      for (const t of shuffle(bucket)) {
+      for (const t of mixByPlaylist(bucket)) {
         if (picked.length >= n) break;
         if (picked.some((p) => p.id === t.id)) continue;
         const key = t.artist.toLowerCase();
