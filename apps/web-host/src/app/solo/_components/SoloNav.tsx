@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { PlayerAvatar } from "../../../lib/avatars";
+import { usePlayerAccount } from "../../../lib/usePlayerAccount";
 import { IconAvatar, IconCalendar, IconMap, IconTrophy } from "./SoloIcons";
 
 /**
@@ -7,6 +11,8 @@ import { IconAvatar, IconCalendar, IconMap, IconTrophy } from "./SoloIcons";
  * arrivent ensuite (désactivés pour l'instant).
  */
 export function SoloNav({ active }: { active: "tour" }) {
+  // À droite : l'avatar « Les Musiciens » du joueur connecté (lien vers son profil).
+  const { account } = usePlayerAccount();
   const soon = "w-14 h-12 rounded-full flex items-center justify-center opacity-45 cursor-not-allowed";
   return (
     <nav
@@ -26,8 +32,15 @@ export function SoloNav({ active }: { active: "tour" }) {
       <span className={soon} title="Collection : bientôt" aria-label="Collection (bientôt)">
         <IconTrophy size={32} />
       </span>
-      <Link href="/profil" className="w-14 h-12 rounded-full flex items-center justify-center" aria-label="Mon Musicien">
-        <IconAvatar size={32} />
+      <Link href="/profil" className="w-14 h-12 rounded-full flex items-center justify-center" aria-label="Mon profil">
+        {account ? (
+          <PlayerAvatar
+            player={{ display_name: account.pseudo, avatar_key: account.avatarKey, avatar_color: account.avatarColor, avatar_extra: account.avatarExtra }}
+            size={38}
+          />
+        ) : (
+          <IconAvatar size={32} />
+        )}
       </Link>
     </nav>
   );
