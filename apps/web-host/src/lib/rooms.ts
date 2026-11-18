@@ -1047,8 +1047,11 @@ export function subscribeToCurrentRoundForPlayer(
   roomId: string,
   onChange: (round: PlayerRound | null) => void
 ) {
+  // Dernière version transmise : la relecture périodique (plus bas) ne
+  // réémet que si la manche a vraiment changé.
+  let last: string | undefined;
   const fetchAndEmit = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("rounds")
       .select(
         // "*" plutôt qu'une liste : inclut answer_mode / work (migration
@@ -1059,6 +1062,10 @@ export function subscribeToCurrentRoundForPlayer(
       .order("order_index", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (error) return;
+    const json = JSON.stringify(data ?? null);
+    if (json === last) return;
+    last = json;
     onChange((data as PlayerRound) ?? null);
   };
   fetchAndEmit();
@@ -1072,7 +1079,14 @@ export function subscribeToCurrentRoundForPlayer(
     )
     .subscribe();
 
+  // Filet de sécurité : relecture toutes les 4 s. Sur certains navigateurs
+  // mobiles (retour bêta « je n'ai pas accès à mon buzzer », iPhone), le
+  // canal Realtime se coupe sans prévenir et le joueur restait bloqué sur
+  // la manche précédente pendant que les autres buzzaient.
+  const poll = setInterval(fetchAndEmit, 4000);
+
   return () => {
+    clearInterval(poll);
     supabase.removeChannel(channel);
   };
 }

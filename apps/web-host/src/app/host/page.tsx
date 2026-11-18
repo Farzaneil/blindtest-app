@@ -323,10 +323,15 @@ function HostBuzzerView({
   team = null,
   roundAttempts,
   teamStandings,
+  noSound = false,
+  onSkipTrack,
 }: {
   round: Round | null;
   players: Player[];
   hostPlayerId: string;
+  // « Pas de son » détecté sur l'extrait en cours (voir usePreviewPlayer).
+  noSound?: boolean;
+  onSkipTrack?: () => void;
   // Mode équipes : équipe de l'hôte-joueur (bandeau + séries d'équipe).
   team?: Team | null;
   gameOver: boolean;
@@ -530,6 +535,7 @@ function HostBuzzerView({
         </>
       )}
 
+      {round?.status === "playing" && onSkipTrack && <SkipTrackLink noSound={noSound} onSkip={onSkipTrack} />}
       <button
         onClick={onBackToAdmin}
         className="text-sm font-bold text-inkMuted hover:text-fg underline transition inline-flex items-center gap-1"
@@ -537,6 +543,29 @@ function HostBuzzerView({
         <LayoutDashboard className="w-3.5 h-3.5" /> Vue admin
       </button>
     </div>
+  );
+}
+
+/**
+ * « Pas de son ? Passer ce morceau » pendant une manche : discret par
+ * défaut, mis en avant si le lecteur a détecté un extrait muet.
+ */
+function SkipTrackLink({ noSound, onSkip }: { noSound: boolean; onSkip: () => void }) {
+  return noSound ? (
+    <div className="w-full max-w-sm flex flex-col items-center gap-2 bg-inkSurface border-[3px] border-fg rounded-2xl shadow-sticker-sm px-4 py-3 text-center">
+      <p className="text-sm font-bold">On dirait que ce morceau ne joue pas.</p>
+      <button
+        type="button"
+        onClick={onSkip}
+        className="bg-[#FFE14D] border-2 border-fg shadow-sticker-sm rounded-xl px-4 py-2 text-sm font-extrabold"
+      >
+        Passer ce morceau
+      </button>
+    </div>
+  ) : (
+    <button type="button" onClick={onSkip} className="text-xs font-bold text-inkMuted hover:text-fg underline">
+      Pas de son ? Passer ce morceau
+    </button>
   );
 }
 
@@ -792,6 +821,13 @@ function HostScreenInner() {
   // plein écran (voir le rendu `if (error)` plus bas) alors que la manche
   // avait en réalité déjà été révélée avec succès par le premier clic.
   const [revealing, setRevealing] = useState(false);
+  // Extrait muet détecté (voir usePreviewPlayer.play) : propose de passer.
+  const [noSound, setNoSound] = useState(false);
+  // Boutons de jugement inactifs pendant un court instant après la
+  // révélation : un double appui sur « Révéler la réponse » validait sinon
+  // aussitôt un jugement (le bouton suivant apparaît au même endroit), et
+  // la réponse disparaissait avant que l'hôte ait pu la lire.
+  const [judgeReady, setJudgeReady] = useState(true);
   // null = pas de score cible, la partie dure jusqu'à la fin de la
   // playlist (comportement historique). Sinon, la partie se termine dès
   // qu'un joueur atteint (ou dépasse) ce score, même si la playlist n'est
@@ -1470,7 +1506,8 @@ function HostScreenInner() {
         // Extrait de 30 s : URL redemandée à chaque manche (elle expire).
         const fresh = await getDeezerPreview(track.sourceTrackId);
         if (fresh.artist) artist = fresh.artist;
-        await preview.play(fresh.preview);
+        setNoSound(false);
+        await preview.play(fresh.preview, () => setNoSound(true));
         activeSourceRef.current = "deezer";
       } else {
         const accessToken = await getFreshSpotifyAccessToken(spotifyPlayer.accessTokenRef.current!);
@@ -1559,6 +1596,30 @@ function HostScreenInner() {
     // Le sens inverse (buzz -> vue admin) est géré par un effet séparé plus
     // bas, sur round?.status.
     if (hostPlayerId) setHostView("buzzer");
+  };
+
+  const revealedRoundId = round?.status === "revealed" ? round.id : null;
+  useEffect(() => {
+    if (!revealedRoundId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setJudgeReady(false);
+    const t = setTimeout(() => setJudgeReady(true), 900);
+    return () => clearTimeout(t);
+  }, [revealedRoundId]);
+
+  // Morceau muet (ou que l'hôte veut passer) : la manche se termine sans
+  // gagnant ni points, sans l'écran « Personne n'a buzzé », et l'hôte
+  // enchaîne sur la manche suivante.
+  const handleSkipTrack = async () => {
+    if (!round || round.status !== "playing") return;
+    preview.pause();
+    setNoSound(false);
+    setAcknowledgedTimeoutRoundId(round.id);
+    try {
+      await timeoutRound(round.id);
+    } catch (e: any) {
+      setError(e?.message ?? "Impossible de passer ce morceau.");
+    }
   };
 
   const handleReveal = async () => {
@@ -1756,7 +1817,7 @@ function HostScreenInner() {
   // résultat — contrairement au mode "Maître du jeu" où seule la
   // complétude (titre ET artiste trouvés, cumulativement) clôture.
   const handleJudge = async (titleFound: boolean, artistFound: boolean) => {
-    if (!round) return;
+    if (!round || !judgeReady) return;
     try {
       await resolveRoundAttempt(round.id, titleFound, artistFound, blindMode);
     } catch (e: any) {
@@ -2054,6 +2115,8 @@ function HostScreenInner() {
           team={teamOfPlayer(hostPlayerId)}
           roundAttempts={roundAttempts}
           teamStandings={teamStandings}
+          noSound={noSound}
+          onSkipTrack={handleSkipTrack}
         />
       </main>
     );
@@ -2136,6 +2199,9 @@ function HostScreenInner() {
           {timeLeft !== null && (
             <p className="text-4xl sm:text-5xl font-bold mt-4 text-fg tabular-nums font-display">{timeLeft}s</p>
           )}
+          <div className="mt-3 flex justify-center">
+            <SkipTrackLink noSound={noSound} onSkip={handleSkipTrack} />
+          </div>
           {backToBuzzerButton}
         </div>
       )}
@@ -2215,13 +2281,13 @@ function HostScreenInner() {
           {round.title_found && !round.artist_found ? (
             <div className="flex gap-4 w-full max-w-md">
               <button
-                onClick={() => handleJudge(false, true)}
+                disabled={!judgeReady} onClick={() => handleJudge(false, true)}
                 className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-5 h-5" /> {answerLabels(round).second} trouvé
               </button>
               <button
-                onClick={() => handleJudge(false, false)}
+                disabled={!judgeReady} onClick={() => handleJudge(false, false)}
                 className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <XCircle className="w-5 h-5" /> Toujours pas
@@ -2230,13 +2296,13 @@ function HostScreenInner() {
           ) : !round.title_found && round.artist_found ? (
             <div className="flex gap-4 w-full max-w-md">
               <button
-                onClick={() => handleJudge(true, false)}
+                disabled={!judgeReady} onClick={() => handleJudge(true, false)}
                 className="bg-info text-fg flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-5 h-5" /> {answerLabels(round).first} trouvé
               </button>
               <button
-                onClick={() => handleJudge(false, false)}
+                disabled={!judgeReady} onClick={() => handleJudge(false, false)}
                 className="bg-danger text-white flex-1 px-6 py-3 text-lg transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <XCircle className="w-5 h-5" /> Toujours pas
@@ -2247,13 +2313,13 @@ function HostScreenInner() {
             // titre ET artiste côté serveur, d'où 2 points.
             <div className="grid grid-cols-2 gap-3 w-full max-w-md">
               <button
-                onClick={() => handleJudge(true, true)}
+                disabled={!judgeReady} onClick={() => handleJudge(true, true)}
                 className="bg-sage text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" /> Trouvé (+2)
               </button>
               <button
-                onClick={() => handleJudge(false, false)}
+                disabled={!judgeReady} onClick={() => handleJudge(false, false)}
                 className="bg-danger text-white px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <XCircle className="w-4 h-4" /> Raté (-1)
@@ -2262,25 +2328,25 @@ function HostScreenInner() {
           ) : (
             <div className="grid grid-cols-2 gap-3 w-full max-w-md">
               <button
-                onClick={() => handleJudge(true, false)}
+                disabled={!judgeReady} onClick={() => handleJudge(true, false)}
                 className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <Music className="w-4 h-4" /> {answerLabels(round).first} seul{answerLabels(round).first === "Chanson" ? "e" : ""} (+1)
               </button>
               <button
-                onClick={() => handleJudge(false, true)}
+                disabled={!judgeReady} onClick={() => handleJudge(false, true)}
                 className="bg-info text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <Mic className="w-4 h-4" /> {answerLabels(round).second} seul (+1)
               </button>
               <button
-                onClick={() => handleJudge(true, true)}
+                disabled={!judgeReady} onClick={() => handleJudge(true, true)}
                 className="bg-sage text-fg px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" /> Les deux (+2)
               </button>
               <button
-                onClick={() => handleJudge(false, false)}
+                disabled={!judgeReady} onClick={() => handleJudge(false, false)}
                 className="bg-danger text-white px-4 py-3 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none border-2 border-fg shadow-sticker-sm rounded-xl font-bold inline-flex items-center justify-center gap-2"
               >
                 <XCircle className="w-4 h-4" /> Aucun (-1)
@@ -2670,6 +2736,13 @@ function HostScreenInner() {
 
       {canStartRound && modeChosen && hostJoinResolved && !isUnresolvedTimeout && (effectiveMusicSource === "deezer" || spotifyPlayer.state === "ready") && !gameOver && !buildingPlaylist && (
         <div className="flex flex-col items-center gap-4 bg-inkSurface border-[3px] border-inkBorder rounded-2xl px-8 py-8 shadow-sticker">
+          {/* Réponse de la manche qui vient de se terminer, toujours lisible ici
+              (elle disparaissait de l'écran dès le jugement). */}
+          {round?.status === "scored" && !launchingRound && (
+            <p className="text-sm text-inkMuted text-center">
+              Manche précédente : <span className="font-bold text-fg">{answerText(round)}</span>
+            </p>
+          )}
           {launchingRound ? (
             <p className="text-xl font-bold text-inkMuted animate-pulse">Lancement de la manche…</p>
           ) : (

@@ -16,6 +16,12 @@ const SILENT_WAV =
  */
 export function usePreviewPlayer() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  // Surveillance « pas de son » de l'extrait en cours (voir play).
+  const watchTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearWatch = useCallback(() => {
+    watchTimers.current.forEach(clearTimeout);
+    watchTimers.current = [];
+  }, []);
 
   const audio = useCallback(() => {
     if (!audioRef.current) {
@@ -46,20 +52,41 @@ export function usePreviewPlayer() {
     }
   }, [audio]);
 
+  /**
+   * Joue un extrait. `onStuck` est appelé si le son ne démarre pas vraiment
+   * (retours bêta « pas de son » sur certains morceaux, iPhone) : lecture
+   * censée en cours mais position bloquée à 0 au bout de 3 s → on recharge
+   * une fois ; toujours bloquée à 7 s → onStuck. Rien n'est signalé si la
+   * lecture a été mise en pause entre-temps (buzz).
+   */
   const play = useCallback(
-    async (url: string) => {
+    async (url: string, onStuck?: () => void) => {
       const a = audio();
+      clearWatch();
       a.pause();
       a.src = url;
       a.currentTime = 0;
       await a.play();
+      if (!onStuck) return;
+      const stuck = () => a.src === url && !a.paused && a.currentTime < 0.3;
+      watchTimers.current.push(
+        setTimeout(() => {
+          if (!stuck()) return;
+          a.load();
+          a.play().catch(() => {});
+        }, 3000),
+        setTimeout(() => {
+          if (stuck()) onStuck();
+        }, 7000)
+      );
     },
-    [audio]
+    [audio, clearWatch]
   );
 
   const pause = useCallback(() => {
+    clearWatch();
     audioRef.current?.pause();
-  }, []);
+  }, [clearWatch]);
 
   const resume = useCallback(async () => {
     const a = audioRef.current;
