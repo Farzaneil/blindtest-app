@@ -1,9 +1,12 @@
 /**
- * Progression du mode solo, gardée sur l'appareil (localStorage) pour la
- * première version : étoiles par niveau, bonus en stock, morceaux déjà
- * trouvés et entendus récemment par monde (pour que chaque tentative tire
- * d'autres morceaux, voir engine.drawTracks). La synchronisation avec le
- * compte joueur viendra ensuite (table Supabase dédiée).
+ * Progression du mode solo : étoiles par niveau, bonus en stock, morceaux
+ * déjà trouvés et entendus récemment par monde (pour que chaque tentative
+ * tire d'autres morceaux, voir engine.drawTracks).
+ *
+ * Le mode solo exige d'être connecté (voir app/solo/_components/SoloGate) :
+ * la progression est enregistrée sur le compte (table solo_progress,
+ * migration 0039, route /api/solo/progress) et gardée en copie sur
+ * l'appareil (localStorage, une clé par compte) pour un affichage immédiat.
  */
 
 import { WORLDS, type LevelDef, type WorldDef } from "./worlds";
@@ -29,26 +32,95 @@ export function emptyProgress(): SoloProgress {
   return { version: 1, stars: {}, best: {}, boosters: { time: 1, hint: 1, replay: 1, skip: 1 }, found: {}, recent: {} };
 }
 
-export function loadProgress(): SoloProgress {
+// Compte dont on lit / écrit la progression (fixé par SoloGate une fois connecté).
+let owner: string | null = null;
+const keyFor = (id: string | null) => (id ? `${KEY}:${id}` : KEY);
+
+function normalizeProgress(p: unknown): SoloProgress | null {
+  const o = p as SoloProgress | null;
+  if (!o || o.version !== 1) return null;
+  const boosters = { ...emptyProgress().boosters, ...o.boosters };
+  for (const k of BOOSTERS) boosters[k] = Math.min(MAX_PER_BOOSTER, Math.max(0, Number(boosters[k]) || 0));
+  return { ...emptyProgress(), ...o, boosters };
+}
+
+function readLocal(key: string): SoloProgress | null {
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return emptyProgress();
-    const p = JSON.parse(raw) as SoloProgress;
-    if (p?.version !== 1) return emptyProgress();
-    const boosters = { ...emptyProgress().boosters, ...p.boosters };
-    for (const k of BOOSTERS) boosters[k] = Math.min(MAX_PER_BOOSTER, boosters[k]);
-    return { ...emptyProgress(), ...p, boosters };
+    const raw = localStorage.getItem(key);
+    return raw ? normalizeProgress(JSON.parse(raw)) : null;
   } catch {
-    return emptyProgress();
+    return null;
   }
 }
 
+export function loadProgress(): SoloProgress {
+  return readLocal(keyFor(owner)) ?? emptyProgress();
+}
+
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Enregistre sur l'appareil tout de suite, et sur le compte (regroupé, 600 ms). */
 export function saveProgress(p: SoloProgress) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(p));
+    localStorage.setItem(keyFor(owner), JSON.stringify(p));
   } catch {
-    // stockage indisponible (navigation privée) : la partie continue, sans sauvegarde
+    // stockage indisponible (navigation privée) : le compte garde la sauvegarde
   }
+  if (!owner) return;
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    fetch("/api/solo/progress", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ progress: p }),
+      keepalive: true,
+    }).catch(() => {});
+  }, 600);
+}
+
+/** Fusion de deux progressions : le meilleur de chacune (étoiles, records, morceaux trouvés) ; les bonus de `a`. */
+export function mergeProgress(a: SoloProgress, b: SoloProgress): SoloProgress {
+  const out = emptyProgress();
+  for (const id of new Set([...Object.keys(a.stars), ...Object.keys(b.stars)])) {
+    out.stars[id] = Math.max(a.stars[id] ?? 0, b.stars[id] ?? 0) as 0 | 1 | 2 | 3;
+  }
+  for (const id of new Set([...Object.keys(a.best), ...Object.keys(b.best)])) out.best[id] = Math.max(a.best[id] ?? 0, b.best[id] ?? 0);
+  // Bonus : ceux de `a` (le compte fait foi), sinon un bonus dépensé ailleurs reviendrait.
+  for (const k of BOOSTERS) out.boosters[k] = Math.min(MAX_PER_BOOSTER, a.boosters[k] ?? 0);
+  for (const w of new Set([...Object.keys(a.found), ...Object.keys(b.found)])) {
+    out.found[w] = Array.from(new Set([...(a.found[w] ?? []), ...(b.found[w] ?? [])])).slice(-MAX_FOUND_PER_WORLD);
+  }
+  out.recent = { ...b.recent, ...a.recent };
+  return out;
+}
+
+/**
+ * À la connexion : récupère la progression du compte, la fusionne avec la
+ * copie de l'appareil (et avec une éventuelle progression jouée sans compte
+ * avant que la connexion soit obligatoire), puis enregistre le résultat.
+ */
+export async function syncProgress(accountId: string): Promise<SoloProgress> {
+  owner = accountId;
+  let local = readLocal(keyFor(accountId)) ?? emptyProgress();
+  const guest = readLocal(KEY);
+  if (guest) {
+    local = mergeProgress(local, guest);
+    try {
+      localStorage.removeItem(KEY);
+    } catch {
+      // ignore
+    }
+  }
+  let server: SoloProgress | null = null;
+  try {
+    const res = await fetch("/api/solo/progress", { cache: "no-store" });
+    if (res.ok) server = normalizeProgress(((await res.json()) as { progress?: unknown }).progress);
+  } catch {
+    // hors ligne : on garde la copie de l'appareil
+  }
+  const merged = server ? mergeProgress(server, local) : local;
+  saveProgress(merged);
+  return merged;
 }
 
 export function totalStars(p: SoloProgress, world?: WorldDef): number {

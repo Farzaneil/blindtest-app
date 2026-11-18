@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Mic2, Play, Plus, Smartphone } from "lucide-react";
-import { Kazou, KazouForTheme } from "../../lib/kazou";
 import { IconMap } from "../solo/_components/SoloIcons";
 import { confirmDialog } from "./ConfirmDialog";
 import { endHostGame, forgetHostGame, readOngoingHostGame, type OngoingHostGame } from "../../lib/hostSession";
@@ -77,13 +76,10 @@ export function HomeActions() {
       <h2 className="font-display text-2xl">Choisis ton mode</h2>
 
       {/* Multijoueur : couleur d'action du thème (jamais celle du fond). */}
-      <section className="relative overflow-hidden bg-sage text-fg border-[3px] border-fg rounded-3xl shadow-sticker p-5 text-left">
-        <span className="absolute -right-2 top-2 pointer-events-none" aria-hidden>
-          <KazouForTheme mood="joie" size={88} />
-        </span>
+      <section className="bg-sage text-fg border-[3px] border-fg rounded-3xl shadow-sticker p-5 text-left">
         <p className="text-xs font-extrabold tracking-[0.18em] uppercase">Multijoueur</p>
         <h3 className="font-display text-3xl leading-tight mt-0.5">Entre potes</h3>
-        <p className="text-sm font-bold mt-1 max-w-[62%]">Un téléphone chacun : l’hôte lance la musique, le plus rapide buzze.</p>
+        <p className="text-sm font-bold mt-1">Un téléphone chacun : l’hôte lance la musique, le plus rapide buzze.</p>
         <div className="grid grid-cols-2 gap-3 mt-4">
           {ongoing ? (
             <button type="button" onClick={startNewGame} disabled={ending} className="bg-inkSurface text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-3 font-display text-base flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60">
@@ -102,13 +98,10 @@ export function HomeActions() {
       </section>
 
       {/* Solo : rose, couleur qui n'est jamais un fond de l'app. */}
-      <section className="relative overflow-hidden bg-logo text-fg border-[3px] border-fg rounded-3xl shadow-sticker p-5 text-left">
-        <span className="absolute -right-2 top-2 pointer-events-none" aria-hidden>
-          <Kazou who="zou" mood="joie" size={88} />
-        </span>
+      <section className="bg-logo text-fg border-[3px] border-fg rounded-3xl shadow-sticker p-5 text-left">
         <p className="text-xs font-extrabold tracking-[0.18em] uppercase">Solo</p>
         <h3 className="font-display text-3xl leading-tight mt-0.5">La Tournée</h3>
-        <p className="text-sm font-bold mt-1 max-w-[62%]">Niveaux, étoiles et boss, à ton rythme.</p>
+        <p className="text-sm font-bold mt-1">Niveaux, étoiles et boss, à ton rythme.</p>
         <Link href="/solo" className="bg-inkSurface text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-3 font-display text-base flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60 mt-4">
           <IconMap size={26} /> Jouer en solo
         </Link>
