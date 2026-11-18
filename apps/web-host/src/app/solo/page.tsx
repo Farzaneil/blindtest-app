@@ -112,7 +112,6 @@ export default function SoloMapPage() {
             <ChevronRight className="w-5 h-5" strokeWidth={3} />
           </button>
         </div>
-        <p className="text-center text-sm font-bold mt-1 px-6">{world.tagline}</p>
 
         {!loaded ? null : world.playable ? (
           <WorldPath key={world.id} world={world} progress={progress} current={current} from={from} onSelect={setSelected} />
