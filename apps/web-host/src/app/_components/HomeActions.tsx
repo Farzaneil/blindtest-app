@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Mic2, Play, Plus, Smartphone } from "lucide-react";
+import { Map as MapIcon, Mic2, Play, Plus, Smartphone } from "lucide-react";
 import { confirmDialog } from "./ConfirmDialog";
 import { endHostGame, forgetHostGame, readOngoingHostGame, type OngoingHostGame } from "../../lib/hostSession";
 
@@ -103,6 +103,19 @@ export function HomeActions() {
           <span className="text-sm font-bold">Je suis joueur</span>
         </Link>
       </div>
+
+      <Link
+        href="/solo"
+        className="bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none text-left"
+      >
+        <span className="w-12 h-12 rounded-xl bg-logo border-[3px] border-fg flex items-center justify-center shrink-0">
+          <MapIcon className="w-6 h-6" strokeWidth={2.5} />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="block text-lg font-display leading-tight">Jouer en solo</span>
+          <span className="block text-sm font-bold text-inkMuted">La Tournée du Kazou Band : niveaux, étoiles et boss</span>
+        </span>
+      </Link>
     </div>
   );
 }
