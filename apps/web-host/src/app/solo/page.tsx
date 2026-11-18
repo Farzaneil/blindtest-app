@@ -201,11 +201,11 @@ function WorldPath({
         const node = (
           <span
             className={`relative flex items-center justify-center rounded-full border-4 font-display shadow-sticker ${
-              isCurrent ? "text-3xl bg-[#FFE14D] border-fg ring-8 ring-white/60" : open ? "text-2xl bg-white border-fg" : "bg-[#E3DDF5] border-[#7F7896]"
+              isCurrent ? "text-3xl bg-[#FFE14D] border-fg ring-8 ring-white/60" : open ? "text-2xl bg-white border-fg" : "text-2xl bg-[#E3DDF5] border-[#7F7896] text-[#9B93B5]"
             } ${justOpened && arrived ? "animate-[stickerPop_0.5s_ease-out]" : ""}`}
             style={{ width: size, height: size }}
           >
-            {open ? level.index : <IconLock size={28} />}
+            {level.index}
             {open && stars > 0 && (
               <span className="absolute -bottom-3 left-1/2 -translate-x-1/2">
                 <StarRow count={stars} size={20} />
