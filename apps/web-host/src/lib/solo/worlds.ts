@@ -45,7 +45,7 @@ export type LevelDef = {
 
 export type BossDef = {
   name: string; // « Le Videur »
-  art: "voisin" | "sono" | "videur"; // dessin (app/solo/_components/BossSprite.tsx)
+  art: "essoreuse" | "musette" | "barman" | "voisin" | "videur"; // dessin (app/solo/_components/BossSprite.tsx)
   badge: string; // texte du brassard
   color: string; // couleur du corps de l'enceinte
   accent: string;
@@ -189,19 +189,19 @@ export const WORLDS: WorldDef[] = [
     [
       ...GARAGE_LEVELS,
       {
-        name: "Le Voisin",
+        name: "L'Essoreuse",
         answer: "typed",
         tracks: 10,
         tiers: [1, 2],
         clip: full(10),
         answerSeconds: 25,
         boss: {
-          name: "Le Voisin",
-          art: "voisin",
-          badge: "CHUT !",
-          color: "#E9DCC4",
+          name: "L'Essoreuse",
+          art: "essoreuse",
+          badge: "ESSORAGE",
+          color: "#FFFFFF",
           accent: "#A8DCFF",
-          taunts: ["« Baissez le son ! »", "« Il est 22 h ! »", "« J'appelle le syndic ! »"],
+          taunts: ["« Cycle essorage ! »", "« 1 400 tours/minute ! »", "« Ça va tourner ! »"],
           phase2Clip: full(6),
           phase2AnswerSeconds: 20,
         },
@@ -222,19 +222,19 @@ export const WORLDS: WorldDef[] = [
     [
       ...FETE_LEVELS,
       {
-        name: "La Sono",
+        name: "Le Musette",
         answer: "typed",
         tracks: 10,
         tiers: [1, 2, 3],
         clip: full(8),
         answerSeconds: 25,
         boss: {
-          name: "La Sono",
-          art: "sono",
-          badge: "SONO",
-          color: "#FF6FB5",
+          name: "Le Musette",
+          art: "musette",
+          badge: "VALSE",
+          color: "#D7263D",
           accent: "#FFE14D",
-          taunts: ["« Larsen ! »", "« Un, deux, un, deux… »", "« Plus fort ! »"],
+          taunts: ["« Ici, c'est valse ou rien ! »", "« Et un, deux, trois ! »", "« Tout le monde danse ! »"],
           phase2Clip: full(5),
           phase2AnswerSeconds: 20,
         },
@@ -255,19 +255,19 @@ export const WORLDS: WorldDef[] = [
     [
       ...BOUM_LEVELS,
       {
-        name: "Le Videur",
+        name: "Le Barman",
         answer: "typed",
         tracks: 12,
         tiers: [2, 3],
         clip: intro(3),
         answerSeconds: 20,
         boss: {
-          name: "Le Videur",
-          art: "videur",
-          badge: "STAFF",
-          color: "#2B2B33",
+          name: "Le Barman",
+          art: "barman",
+          badge: "BAR",
+          color: "#C9D2DC",
           accent: "#FF6FB5",
-          taunts: ["« Pas de baskets ! »", "« T'es pas sur la liste. »", "« Circulez ! »"],
+          taunts: ["« Dernière commande ! »", "« On ferme ! »", "« C'est ma tournée ? Non. »"],
           phase2Clip: intro(1),
           phase2AnswerSeconds: 16,
         },
@@ -275,8 +275,8 @@ export const WORLDS: WorldDef[] = [
     ]
   ),
   ...[
-    ["camping", "Le Camping", "Le chrono se resserre : réponds vite, très vite.", "#FF6FB5"],
-    ["samedi", "Le Samedi matin", "Génériques de dessins animés et de séries : trouve leur nom.", "#FFE14D"],
+    ["camping", "L'Audition", "Le chrono se resserre : réponds vite, très vite.", "#FF6FB5"],
+    ["samedi", "La Soirée appart", "Génériques de dessins animés et de séries : trouve leur nom.", "#FFE14D"],
     ["cine", "Le Ciné-club", "Musiques de films et Disney : trouve le film.", "#A8DCFF"],
     ["radio", "La Radio", "Des morceaux moins connus, et l'année en bonus.", "#C9B6FF"],
     ["mariage", "Le Mariage", "Deux secondes d'écoute, tous les styles mélangés.", "#FF6FB5"],

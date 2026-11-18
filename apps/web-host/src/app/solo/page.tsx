@@ -9,6 +9,7 @@ import { starGoals } from "../../lib/solo/engine";
 import { currentLevel, emptyProgress, isUnlocked, isWorldUnlocked, loadProgress, totalStars, type SoloProgress } from "../../lib/solo/progress";
 import { BossSprite } from "./_components/BossSprite";
 import { SoloNav } from "./_components/SoloNav";
+import { WorldDecor } from "./_components/WorldDecor";
 import { primeAudio } from "./_components/useClipPlayer";
 import { IconLock, StarIcon, StarRow } from "./_components/SoloIcons";
 
@@ -179,6 +180,7 @@ function WorldPath({
           Bats le boss du monde précédent pour entrer ici.
         </p>
       )}
+      <WorldDecor worldId={world.id} nodes={levels.map((l) => nodePos(world, l))} bossY={BOSS_Y} />
       <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 100 ${height}`} preserveAspectRatio="none" aria-hidden>
         <polyline
           points={points.map((p) => `${p.x},${p.y}`).join(" ")}
@@ -244,7 +246,7 @@ function WorldPath({
             const inner = (
               <span
                 className={`relative flex items-center justify-center w-28 h-28 rounded-full border-[5px] border-fg shadow-sticker ${open ? "" : "grayscale"}`}
-                style={{ background: boss.boss.color === "#2B2B33" ? "#2B2B33" : "#fff" }}
+                style={{ background: "#fff" }}
               >
                 <span className="overflow-hidden rounded-full w-full h-full flex items-center justify-center">
                   <BossSprite boss={boss.boss} size={100} />

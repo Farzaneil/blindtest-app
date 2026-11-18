@@ -166,8 +166,11 @@ Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
 
 **Mondes** (`lib/solo/worlds.ts`)
 - 14 mondes prévus. **3 jouables** : le Garage, la Guinguette, le Bar, de
-  6 niveaux et un boss chacun. Les 11 autres s'affichent « Bientôt sur la
+  15 niveaux et un boss chacun. Les 11 autres s'affichent « Bientôt sur la
   tournée ».
+- **Décor de la carte** (`_components/WorldDecor.tsx`) : derrière le chemin,
+  des silhouettes ton sur ton des objets du lieu et, un niveau sur trois, un
+  autocollant en couleur, du côté opposé au niveau. Purement décoratif.
 - Un monde se distingue par sa **difficulté** plutôt que par ses morceaux :
   - tranches de popularité autorisées ;
   - durée d'écoute (extrait entier, intro de 5 à 1 s, plus tard extrait pris au
@@ -231,8 +234,10 @@ Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
   animations »).
 
 **Boss** (`BossDef` dans `worlds.ts`, dessin `_components/BossSprite.tsx`)
-- Le Voisin (Garage), la Sono (Guinguette), le Videur (Bar). Les Kazous
-  ne sont jamais des adversaires : ils encouragent.
+- L'Essoreuse (Garage, machine à laver), le Musette (Guinguette, accordéon),
+  le Barman (Bar, shaker). Prévus pour la suite : le Voisin (Soirée appart), le
+  Videur (Discothèque), la Mauvaise Onde (Radio), le Pass VIP (Festival)…
+  Les Kazous ne sont jamais des adversaires : ils encouragent.
 - Combat **sans limite de morceaux**, jusqu'au K.-O. du boss (victoire) ou au
   troisième cœur perdu (défaite) :
   - titre + artiste : coup de 14 à 20 points de vie selon la rapidité ;
@@ -240,8 +245,6 @@ Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
   - les deux faux ou temps écoulé : un cœur perdu.
 - Une seule aide pour tout le combat. Phase 2 sous 50 % de vie : extrait et temps de
   réponse raccourcis. Étoiles selon les cœurs restants.
-- Les dessins actuels sont provisoires (même enceinte, couleur et brassard
-  différents) ; les designs définitifs sont en maquette.
 
 **Progression** (`lib/solo/progress.ts`, `app/api/solo/progress`, migration 0039)
 - Enregistrée **sur le compte** (table `solo_progress`, un JSON par compte, lu et
@@ -566,7 +569,7 @@ En prod, il ne fait rien.
   - `connexion/` (e-mail et code) ;
   - `profil/` (espace joueur) ;
   - `solo/` (mode solo : carte `page.tsx`, niveau `[world]/[level]`, composants
-    `LevelGame`, `SoloGate`, `BossSprite`, `SoloNav`, `SoloIcons`, `AnswerInput`,
+    `LevelGame`, `SoloGate`, `BossSprite`, `WorldDecor`, `SoloNav`, `SoloIcons`, `AnswerInput`,
     `useClipPlayer`) ;
   - `rules/`, `about/`, `confidentialite/`, `cgu/`, `mentions-legales/` ;
   - `spotify-test/` (débogage de la connexion Spotify).
@@ -839,14 +842,12 @@ prévisualisations `*-git-*.vercel.app` restent accessibles).
   série, chanson + film).
 - Récap de fin de partie à partager.
 - Instagram @kazouband, stickers prêts à imprimer, marque déposée à l'INPI.
-- **Mode solo « La Tournée »** : carte, fiches de niveau, 3 mondes et leurs boss,
+- **Mode solo « La Tournée »** : carte décorée par monde, fiches de niveau, 3 mondes et leurs boss,
   réponses au choix ou tapées avec correction tolérante, étoiles, bonus,
   connexion obligatoire et progression sur le compte. Accueil à deux modes.
 
 🔜 **Prochaines étapes**
 - Mode solo :
-  - designs définitifs des boss (en maquette : porte grincheuse, ampli, poteau de
-    club), avec version phase 2 ;
   - plan clair des styles / playlists par monde, puis sous-titres des mondes ;
   - mondes 4 à 14 (mécaniques : chrono serré, génériques et films avec réponse
     « œuvre », extrait au milieu, featurings…) ;
