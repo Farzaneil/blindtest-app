@@ -89,7 +89,7 @@ function world(
  */
 // Le Garage : 80s, 90s et 00s Party Hits, Essentiels variété française, Rock Essentials.
 const GARAGE_POOL = ["1913763402", "2322259622", "1977689462", "1420459465", "1306931615"];
-// La Fête de la musique : la même chose + Rapstars 2010 (le rap reste une part
+// La Guinguette : la même chose + Rapstars 2010 (le rap reste une part
 // parmi six, voir le tirage équilibré par playlist dans engine.drawTracks).
 const FETE_POOL = [...GARAGE_POOL, "5175061384"];
 // Les tubes de soirée : 80s, 90s et 00s Party Hits.
@@ -137,7 +137,7 @@ const GARAGE_LEVELS: LevelSpec[] = [
   ty(6, [1, 2], full(12), 26),
   ty(7, [1, 2], full(10), 25),
 ];
-/** La Fête de la musique : 4 niveaux au choix piégeux, puis 11 à taper, de plus en plus pointus. */
+/** La Guinguette : 4 niveaux au choix piégeux, puis 11 à taper, de plus en plus pointus. */
 const FETE_LEVELS: LevelSpec[] = [
   ch(6, [1, 2], full(10), 14, "hard"),
   ch(7, [1, 2], full(10), 13, "hard"),
@@ -155,7 +155,7 @@ const FETE_LEVELS: LevelSpec[] = [
   ty(9, [2, 3], full(8), 22),
   ty(10, [2, 3], full(8), 22),
 ];
-/** La Boum : tout à taper, intro de 5 s qui descend à 2 s. */
+/** Le Bar : tout à taper, intro de 5 s qui descend à 2 s. */
 const BOUM_LEVELS: LevelSpec[] = [
   ty(6, [1], intro(5), 25),
   ty(6, [1], intro(5), 25),
@@ -212,7 +212,7 @@ export const WORLDS: WorldDef[] = [
     {
       id: "fete",
       number: 2,
-      name: "La Fête de la musique",
+      name: "La Guinguette",
       tagline: "Tous les styles, des tubes un peu moins évidents, et tu commences à taper tes réponses.",
       color: "#A8DCFF",
       playable: true,
@@ -245,7 +245,7 @@ export const WORLDS: WorldDef[] = [
     {
       id: "boum",
       number: 3,
-      name: "La Boum",
+      name: "Le Bar",
       tagline: "Les tubes de soirée des années 80 à 2000, avec des intros de plus en plus courtes.",
       color: "#C9B6FF",
       playable: true,
@@ -283,7 +283,7 @@ export const WORLDS: WorldDef[] = [
     ["disco", "La Discothèque", "L'extrait démarre au milieu du morceau.", "#FFE14D"],
     ["coulisses", "Les Coulisses", "Duos et featurings : tous les artistes comptent.", "#A8DCFF"],
     ["studio", "Le Studio", "Que des morceaux pointus, pour les vrais connaisseurs.", "#C9B6FF"],
-    ["monde", "La Tournée mondiale", "Des tubes venus du monde entier.", "#FF6FB5"],
+    ["monde", "L'Open Air", "Des tubes venus du monde entier.", "#FF6FB5"],
     ["festival", "Le Festival", "Le son grésille comme un vieux poste de radio.", "#FFE14D"],
     ["stade", "Le Stade", "Le grand final : tout ce que tu as appris sur la tournée.", "#A8DCFF"],
   ].map(([id, name, tagline, color], i) =>

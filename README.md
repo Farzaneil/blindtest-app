@@ -165,7 +165,7 @@ Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
   connexion.
 
 **Mondes** (`lib/solo/worlds.ts`)
-- 14 mondes prévus. **3 jouables** : le Garage, la Fête de la musique, la Boum, de
+- 14 mondes prévus. **3 jouables** : le Garage, la Guinguette, le Bar, de
   6 niveaux et un boss chacun. Les 11 autres s'affichent « Bientôt sur la
   tournée ».
 - Un monde se distingue par sa **difficulté** plutôt que par ses morceaux :
@@ -183,8 +183,7 @@ Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
   la réserve du monde, en écartant ceux de la tentative précédente et ceux déjà
   trouvés (`engine.drawTracks`). Impossible d'apprendre les réponses par cœur.
 - Réserve = morceaux jouables des **playlists d'exemple du multijoueur**
-  (`lib/themes.ts`) : les 7 « classiques » pour le Garage et la Fête de la
-  musique, les 3 Party Hits pour la Boum (`CLASSIC_POOL`, `PARTY_POOL`). Sans
+  (`lib/themes.ts`) : les playlists « classiques » pour le Garage et la Guinguette, les 3 Party Hits pour le Bar (`GARAGE_POOL`, `FETE_POOL`, `PARTY_POOL`). Sans
   doublon, mise en cache 6 h côté serveur.
 - Chaque morceau est classé en 3 tranches selon sa popularité Deezer (`rank`) :
   très connu, connu, pointu. La langue est devinée et les featurings du titre
@@ -232,7 +231,7 @@ Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
   animations »).
 
 **Boss** (`BossDef` dans `worlds.ts`, dessin `_components/BossSprite.tsx`)
-- Le Voisin (Garage), la Sono (Fête de la musique), le Videur (Boum). Les Kazous
+- Le Voisin (Garage), la Sono (Guinguette), le Videur (Bar). Les Kazous
   ne sont jamais des adversaires : ils encouragent.
 - Combat **sans limite de morceaux**, jusqu'au K.-O. du boss (victoire) ou au
   troisième cœur perdu (défaite) :
