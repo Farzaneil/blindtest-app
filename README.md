@@ -1,9 +1,14 @@
-# Kazou Band · le blind test entre potes
+# Kazou Band · le jeu de blind test
 
 **Kazou Band** (ex-« Blindtest App ») est une appli pour faire des blind tests entre potes sans personne dédiée au lancement
 des sons. Les téléphones des joueurs servent de buzzer. Un écran « hôte » (laptop
 projeté sur une TV, ordi ou même téléphone) diffuse la musique, affiche le code de
 partie et un QR code, les joueurs, qui a buzzé en premier et le classement.
+
+Deux modes, présentés côte à côte sur l'accueil (« Choisis ton mode ») :
+- **Multijoueur · Entre potes** : la partie décrite ci-dessus ;
+- **Solo · La Tournée** : une carte de niveaux façon Candy Crush, avec étoiles,
+  bonus et boss, à jouer seul à son rythme (voir [Mode solo](#mode-solo--la-tournée-)).
 
 Projet perso, pas encore commercialisé. `docs/architecture/blueprint.docx` contient
 le cadrage initial (concept, DA, roadmap, business plan). Ce README décrit l'état
@@ -19,6 +24,7 @@ seule la marque visible a changé.
 
 - [Ce que fait l'app aujourd'hui](#ce-que-fait-lapp-aujourdhui)
 - [Comment jouer](#comment-jouer)
+- [Mode solo « La Tournée »](#mode-solo--la-tournée-)
 - [Sources de musique](#sources-de-musique)
 - [Comptes joueurs, progression et cosmétiques](#comptes-joueurs-progression-et-cosmétiques)
 - [Design « Arcade autocollants »](#design--arcade-autocollants-)
@@ -130,8 +136,11 @@ réseaux différents, y compris tout depuis des téléphones.
 
 ## Comment jouer
 
-`/` est l'accueil : *Créer une partie* (`/host`), *Rejoindre une partie* (`/play`),
-choix du fond (jaune, ciel ou lilas) et accès au compte joueur.
+`/` est l'accueil : deux grandes cartes de mode (`_components/HomeActions.tsx`) :
+- **Multijoueur · Entre potes** : *Créer* (`/host`) et *Rejoindre* (`/play`) ;
+- **Solo · La Tournée** : *Jouer en solo* (`/solo`).
+
+On y choisit aussi le fond (jaune, ciel ou lilas) et on accède au compte joueur.
 
 - **En ligne** :
   - Hôte : `https://kazouband.fr/host`. Choisis un mode,
@@ -142,6 +151,111 @@ choix du fond (jaune, ciel ou lilas) et accès au compte joueur.
     [plus bas](#pourquoi-127001-et-pas-localhost).
   - Joueurs : d'autres onglets, ou un autre appareil sur le même réseau via
     `http://<IP locale>:3000/play`.
+
+## Mode solo « La Tournée »
+
+La carrière du Kazou Band, « du garage au stade » : une carte de niveaux à
+débloquer un par un, des étoiles, des bonus et un boss à la fin de chaque monde.
+Code : `app/solo/` (écrans), `lib/solo/` (règles), `app/api/solo/` (serveur).
+
+**Accès**
+- **Connexion obligatoire** (`app/solo/_components/SoloGate.tsx`, branché dans
+  `app/solo/layout.tsx`) : sans compte, toute page du mode solo affiche
+  « Connecte-toi pour partir en tournée », puis ramène au même endroit après la
+  connexion.
+
+**Mondes** (`lib/solo/worlds.ts`)
+- 14 mondes prévus. **3 jouables** : le Garage, la Fête de la musique, la Boum, de
+  6 niveaux et un boss chacun. Les 11 autres s'affichent « Bientôt sur la
+  tournée ».
+- Un monde se distingue par sa **difficulté** plutôt que par ses morceaux :
+  - tranches de popularité autorisées ;
+  - durée d'écoute (extrait entier, intro de 5 à 1 s, plus tard extrait pris au
+    milieu) ;
+  - type de réponse ;
+  - difficulté des propositions ;
+  - nombre d'extraits (5 à 10 par niveau, croissant).
+- Difficulté affichée (Facile / Moyen / Difficile) calculée d'après ces règles
+  (`levelDifficulty`).
+
+**Réserves de morceaux** (`app/api/solo/pool/[world]`)
+- Pas de liste figée par niveau : chaque tentative **tire de nouveaux morceaux** dans
+  la réserve du monde, en écartant ceux de la tentative précédente et ceux déjà
+  trouvés (`engine.drawTracks`). Impossible d'apprendre les réponses par cœur.
+- Réserve = morceaux jouables des **playlists d'exemple du multijoueur**
+  (`lib/themes.ts`) : les 7 « classiques » pour le Garage et la Fête de la
+  musique, les 3 Party Hits pour la Boum (`CLASSIC_POOL`, `PARTY_POOL`). Sans
+  doublon, mise en cache 6 h côté serveur.
+- Chaque morceau est classé en 3 tranches selon sa popularité Deezer (`rank`) :
+  très connu, connu, pointu. La langue est devinée et les featurings du titre
+  ajoutés aux artistes (le reste des artistes arrive avec l'extrait, via
+  `/api/deezer/track/[id]`).
+- Comme en multi : seuls identifiants, titres et artistes sont gardés, l'URL de
+  l'extrait est redemandée à chaque morceau (règles Deezer).
+
+**Un niveau** (`app/solo/_components/LevelGame.tsx`)
+- Toucher un niveau sur la carte ouvre sa **fiche** : étoiles et record, difficulté,
+  nombre d'extraits, type de réponse, écoute, objectif, bouton *Jouer*.
+- Le niveau **démarre seul** : le clic sur *Jouer* débloque le son pour tout le mode
+  solo (un seul `<audio>` partagé, `useClipPlayer.primeAudio`, pour Safari iOS).
+  Si le navigateur bloque quand même, le bouton ▶ relance l'extrait sans coûter de
+  bonus.
+- **Réponses** :
+  - **4 propositions** (premiers niveaux) : toujours les mêmes pour un morceau donné
+    (tirage déterminé par son identifiant), sinon on trouverait la bonne par
+    élimination. Trois difficultés (`Decoys`) : au hasard (tutoriel), morceaux
+    ressemblants (même playlist, même langue, popularité proche), ou autres titres
+    du même artiste.
+  - **Réponse tapée** : titre **et** artiste obligatoires, sans autocomplétion.
+    *Valider* passe toujours au morceau suivant ; un morceau à moitié trouvé
+    compte comme raté (« Titre ✅ · Artiste ❌ »).
+- **Correction tolérante** (`lib/solo/match.ts`) :
+  - accents, casse, ponctuation et article de tête ignorés ;
+  - mentions parasites retirées (« (feat. …) », « - Remastered », « - From … ») ;
+  - fautes de frappe acceptées selon la longueur (aucune jusqu'à 5 lettres),
+    inversion de deux lettres comptée comme une seule faute ;
+  - artiste : n'importe lequel des artistes du morceau, ou son nom de famille seul
+    (« Balavoine »).
+- Bonne réponse : enchaînement automatique. Raté : la bonne réponse reste affichée,
+  le morceau rejoue, et on passe avec *Morceau suivant →*.
+
+**Étoiles et bonus** (`lib/solo/engine.ts`, `lib/solo/progress.ts`)
+- Points : 100 par morceau trouvé, jusqu'à 50 de plus selon la rapidité.
+- Objectifs affichés en clair : 1 ★ = trouver environ 60 % des extraits (« 4 sur
+  6 »), 2 ★ et 3 ★ = un score. Étoiles dessinées dans la DA (`StarIcon`).
+- Bonus : +5 s, Indice (première lettre, ou 50/50 en choix multiples), Réécouter,
+  Passer. 1 de chaque au départ, 3 au maximum. On n'en gagne qu'un, la première
+  fois qu'un niveau est réussi avec 3 étoiles ou qu'un boss est battu.
+- Un niveau se débloque quand le précédent a au moins une étoile ; le monde
+  suivant, quand le boss est battu. Après un niveau réussi, retour à la carte où
+  le Kazou avance jusqu'au niveau suivant (animation désactivée si « Réduire les
+  animations »).
+
+**Boss** (`BossDef` dans `worlds.ts`, dessin `_components/BossSprite.tsx`)
+- Le Voisin (Garage), la Sono (Fête de la musique), le Videur (Boum). Les Kazous
+  ne sont jamais des adversaires : ils encouragent.
+- Combat **sans limite de morceaux**, jusqu'au K.-O. du boss (victoire) ou au
+  troisième cœur perdu (défaite) :
+  - titre + artiste : coup de 14 à 20 points de vie selon la rapidité ;
+  - titre **ou** artiste : demi-coup, aucun cœur perdu ;
+  - les deux faux ou temps écoulé : un cœur perdu.
+- Une seule aide pour tout le combat. Phase 2 sous 50 % de vie : extrait et temps de
+  réponse raccourcis. Étoiles selon les cœurs restants.
+- Les dessins actuels sont provisoires (même enceinte, couleur et brassard
+  différents) ; les designs définitifs sont en maquette.
+
+**Progression** (`lib/solo/progress.ts`, `app/api/solo/progress`, migration 0039)
+- Enregistrée **sur le compte** (table `solo_progress`, un JSON par compte, lu et
+  écrit seulement par le serveur) et gardée en copie sur l'appareil
+  (`localStorage`, une clé par compte) pour un affichage immédiat.
+- À l'ouverture du mode solo, `syncProgress` fusionne compte et appareil (meilleures
+  étoiles, records, morceaux trouvés ; les bonus du compte font foi), y compris une
+  progression jouée sans compte avant la connexion obligatoire.
+- Supprimée avec le compte (`on delete cascade`), donc aussi par la purge des comptes
+  inactifs.
+
+**Menu du bas** (`_components/SoloNav.tsx`, icônes `_components/SoloIcons.tsx`) :
+Tournée, Défi du jour et Collection (à venir), Musicien (profil).
 
 ## Sources de musique
 
@@ -442,6 +556,7 @@ En prod, il ne fait rien.
 | 0036 | Retours de la bêta (table `feedback`, écrite par le serveur seulement), purgés au bout de 12 mois |
 | 0037 | Suivi des stickers / QR (`acquisition_events` : visite, partie créée, partie rejointe par code `?src=`), purgé au bout de 12 mois |
 | 0038 | Types de réponse : `rounds.answer_mode` / `work`, `start_round` avec deux paramètres facultatifs (à exécuter **avant** de déployer le code) |
+| 0039 | Progression du mode solo (`solo_progress`, un JSON par compte, écrite par le serveur seulement, supprimée avec le compte) |
 
 ### `apps/web-host/src` en bref
 
@@ -451,6 +566,9 @@ En prod, il ne fait rien.
   - `play/` (buzzer) ;
   - `connexion/` (e-mail et code) ;
   - `profil/` (espace joueur) ;
+  - `solo/` (mode solo : carte `page.tsx`, niveau `[world]/[level]`, composants
+    `LevelGame`, `SoloGate`, `BossSprite`, `SoloNav`, `SoloIcons`, `AnswerInput`,
+    `useClipPlayer`) ;
   - `rules/`, `about/`, `confidentialite/`, `cgu/`, `mentions-legales/` ;
   - `spotify-test/` (débogage de la connexion Spotify).
 - **`app/_components/`** :
@@ -470,7 +588,9 @@ En prod, il ne fait rien.
   - `player-auth/*` (e-mail, confirm, verify-code, me, logout) ;
   - `player-account/*` (pseudo, avatar, skin, liaison du joueur de l'hôte,
     suppression) ;
-  - `host-features` (Spotify autorisé ou non).
+  - `host-features` (Spotify autorisé ou non) ;
+  - `solo/pool/[world]` (réserve de morceaux d'un monde) et `solo/progress`
+    (progression du compte).
 - **`lib/`** :
   - `rooms.ts` : toutes les opérations de partie et abonnements Realtime ;
   - `hostSession.ts` : partie en cours de l'onglet ;
@@ -490,7 +610,10 @@ En prod, il ne fait rien.
     avec cache) ;
   - `answers.ts` (types de réponse, œuvre devinée), `themes.ts` (thèmes, exemples,
     Mix surprise), `jokerIcon.ts` ;
-  - `feedback.ts`, `feedbackContext.ts`, `acquisition.ts`.
+  - `feedback.ts`, `feedbackContext.ts`, `acquisition.ts` ;
+  - `solo/` : `worlds.ts` (mondes, niveaux, boss, difficulté), `engine.ts`
+    (tirage, propositions, points, étoiles, dégâts), `match.ts` (correction des
+    réponses tapées), `progress.ts` (progression, bonus, synchronisation).
 
 ## Sécurité / RLS
 
@@ -717,8 +840,19 @@ prévisualisations `*-git-*.vercel.app` restent accessibles).
   série, chanson + film).
 - Récap de fin de partie à partager.
 - Instagram @kazouband, stickers prêts à imprimer, marque déposée à l'INPI.
+- **Mode solo « La Tournée »** : carte, fiches de niveau, 3 mondes et leurs boss,
+  réponses au choix ou tapées avec correction tolérante, étoiles, bonus,
+  connexion obligatoire et progression sur le compte. Accueil à deux modes.
 
 🔜 **Prochaines étapes**
+- Mode solo :
+  - designs définitifs des boss (en maquette : porte grincheuse, ampli, poteau de
+    club), avec version phase 2 ;
+  - plan clair des styles / playlists par monde, puis sous-titres des mondes ;
+  - mondes 4 à 14 (mécaniques : chrono serré, génériques et films avec réponse
+    « œuvre », extrait au milieu, featurings…) ;
+  - Défi du jour (liste fixe, une partie par jour) et Collection (trophées des
+    boss).
 - Redéfinir les règles de déblocage des skins (`lib/cosmetics.tsx`).
 - Fonctionnalité **amis**, avec un classement entre amis.
 - Passe de fiabilité : veille du téléphone, perte de réseau, hôte qui recharge en
