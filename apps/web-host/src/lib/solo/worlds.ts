@@ -95,6 +95,85 @@ const FETE_POOL = [...GARAGE_POOL, "5175061384"];
 // Les tubes de soirée : 80s, 90s et 00s Party Hits.
 const PARTY_POOL = ["1913763402", "2322259622", "1977689462"];
 
+type LevelSpec = Omit<LevelDef, "id" | "worldId" | "index">;
+/** Niveau à choix : extraits, tranches, écoute, temps de réponse, difficulté des propositions. */
+const ch = (tracks: number, tiers: Tier[], clip: Clip, answerSeconds: number, decoys: Decoys): LevelSpec => ({
+  name: "",
+  answer: "choice",
+  decoys,
+  tracks,
+  tiers,
+  clip,
+  answerSeconds,
+});
+/** Niveau à réponse tapée (titre + artiste). */
+const ty = (tracks: number, tiers: Tier[], clip: Clip, answerSeconds: number): LevelSpec => ({
+  name: "",
+  answer: "typed",
+  tracks,
+  tiers,
+  clip,
+  answerSeconds,
+});
+
+/**
+ * 15 niveaux par monde avant le boss. Le Garage : 10 niveaux au choix
+ * (propositions faciles, puis ressemblantes, puis piégeuses), puis 5 à taper.
+ */
+const GARAGE_LEVELS: LevelSpec[] = [
+  ch(5, [1], full(15), 20, "easy"),
+  ch(5, [1], full(15), 20, "easy"),
+  ch(6, [1], full(12), 18, "easy"),
+  ch(6, [1], full(12), 18, "easy"),
+  ch(6, [1], full(12), 16, "close"),
+  ch(7, [1, 2], full(12), 16, "close"),
+  ch(7, [1, 2], full(10), 15, "close"),
+  ch(8, [1, 2], full(10), 14, "close"),
+  ch(8, [1, 2], full(10), 13, "hard"),
+  ch(8, [1, 2], full(10), 12, "hard"),
+  ty(5, [1], full(15), 30),
+  ty(5, [1], full(15), 30),
+  ty(6, [1], full(12), 28),
+  ty(6, [1, 2], full(12), 26),
+  ty(7, [1, 2], full(10), 25),
+];
+/** La Fête de la musique : 4 niveaux au choix piégeux, puis 11 à taper, de plus en plus pointus. */
+const FETE_LEVELS: LevelSpec[] = [
+  ch(6, [1, 2], full(10), 14, "hard"),
+  ch(7, [1, 2], full(10), 13, "hard"),
+  ch(8, [1, 2], full(8), 12, "hard"),
+  ch(8, [2], full(8), 12, "hard"),
+  ty(5, [1], full(12), 30),
+  ty(6, [1], full(12), 28),
+  ty(6, [1, 2], full(10), 28),
+  ty(7, [1, 2], full(10), 26),
+  ty(7, [1, 2], full(10), 25),
+  ty(8, [1, 2], full(10), 25),
+  ty(8, [2], full(10), 24),
+  ty(8, [2], full(8), 24),
+  ty(9, [2], full(8), 23),
+  ty(9, [2, 3], full(8), 22),
+  ty(10, [2, 3], full(8), 22),
+];
+/** La Boum : tout à taper, intro de 5 s qui descend à 2 s. */
+const BOUM_LEVELS: LevelSpec[] = [
+  ty(6, [1], intro(5), 25),
+  ty(6, [1], intro(5), 25),
+  ty(7, [1, 2], intro(5), 24),
+  ty(7, [1, 2], intro(5), 24),
+  ty(8, [1, 2], intro(4), 23),
+  ty(8, [1, 2], intro(4), 22),
+  ty(8, [2], intro(4), 22),
+  ty(8, [2], intro(3), 22),
+  ty(9, [2], intro(3), 21),
+  ty(9, [2], intro(3), 21),
+  ty(9, [2, 3], intro(3), 20),
+  ty(10, [2, 3], intro(2), 20),
+  ty(10, [2, 3], intro(2), 20),
+  ty(10, [2, 3], intro(2), 20),
+  ty(10, [3], intro(2), 20),
+];
+
 export const WORLDS: WorldDef[] = [
   world(
     {
@@ -108,12 +187,7 @@ export const WORLDS: WorldDef[] = [
       searchQuery: "",
     },
     [
-      { name: "Première répète", answer: "choice", tracks: 5, tiers: [1], clip: full(15), answerSeconds: 20 },
-      { name: "Les classiques", answer: "choice", tracks: 6, tiers: [1], clip: full(12), answerSeconds: 18 },
-      { name: "On monte le son", answer: "choice", decoys: "close", tracks: 7, tiers: [1, 2], clip: full(12), answerSeconds: 16 },
-      { name: "Sans les mains", answer: "choice", decoys: "close", tracks: 8, tiers: [1, 2], clip: full(10), answerSeconds: 14 },
-      { name: "Bœuf entre potes", answer: "choice", decoys: "hard", tracks: 8, tiers: [1, 2], clip: full(10), answerSeconds: 12 },
-      { name: "La démo", answer: "typed", tracks: 5, tiers: [1], clip: full(15), answerSeconds: 30 },
+      ...GARAGE_LEVELS,
       {
         name: "Le Voisin",
         answer: "typed",
@@ -146,12 +220,7 @@ export const WORLDS: WorldDef[] = [
       searchQuery: "",
     },
     [
-      { name: "Premier trottoir", answer: "choice", decoys: "hard", tracks: 6, tiers: [1, 2], clip: full(10), answerSeconds: 14 },
-      { name: "Changement de scène", answer: "choice", decoys: "hard", tracks: 8, tiers: [1, 2], clip: full(8), answerSeconds: 12 },
-      { name: "À vos claviers", answer: "typed", tracks: 5, tiers: [1], clip: full(12), answerSeconds: 30 },
-      { name: "La place du village", answer: "typed", tracks: 6, tiers: [1, 2], clip: full(10), answerSeconds: 28 },
-      { name: "Le kiosque", answer: "typed", tracks: 8, tiers: [1, 2], clip: full(10), answerSeconds: 25 },
-      { name: "Jusqu'au bout de la nuit", answer: "typed", tracks: 9, tiers: [2], clip: full(10), answerSeconds: 25 },
+      ...FETE_LEVELS,
       {
         name: "La Sono",
         answer: "typed",
@@ -184,12 +253,7 @@ export const WORLDS: WorldDef[] = [
       searchQuery: "",
     },
     [
-      { name: "Intro 5 s", answer: "typed", tracks: 6, tiers: [1], clip: intro(5), answerSeconds: 25 },
-      { name: "Le premier slow", answer: "typed", tracks: 7, tiers: [1, 2], clip: intro(5), answerSeconds: 25 },
-      { name: "Intro express", answer: "typed", tracks: 8, tiers: [1, 2], clip: intro(3), answerSeconds: 22 },
-      { name: "Lumières tamisées", answer: "typed", tracks: 9, tiers: [1, 2], clip: intro(3), answerSeconds: 20 },
-      { name: "Boule à facettes", answer: "typed", tracks: 10, tiers: [2], clip: intro(2), answerSeconds: 20 },
-      { name: "Dernière danse", answer: "typed", tracks: 10, tiers: [2, 3], clip: intro(2), answerSeconds: 20 },
+      ...BOUM_LEVELS,
       {
         name: "Le Videur",
         answer: "typed",

@@ -159,6 +159,14 @@ function WorldPath({
     return () => clearTimeout(t);
   }, [arrived]);
 
+  // 15 niveaux : la carte est longue, on la fait défiler jusqu'au niveau en
+  // cours (ou jusqu'au niveau terminé, d'où part l'animation).
+  const focusId = (fromLevel ?? current)?.id;
+  useEffect(() => {
+    if (!focusId) return;
+    document.getElementById(`lvl-${focusId}`)?.scrollIntoView({ block: "center" });
+  }, [focusId]);
+
   const guideLevel = !arrived && fromLevel ? fromLevel : current;
   const guidePos = guideLevel ? nodePos(world, guideLevel) : null;
   // Le chemin s'arrête sous le médaillon du boss (sans le traverser).
@@ -206,7 +214,7 @@ function WorldPath({
           </span>
         );
         return (
-          <div key={level.id} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: y }}>
+          <div key={level.id} id={`lvl-${level.id}`} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${x}%`, top: y }}>
             {open ? (
               <button type="button" onClick={() => onSelect(level)} aria-label={`Niveau ${level.index}`} className="block hover:-translate-y-0.5 transition-transform">
                 {node}
