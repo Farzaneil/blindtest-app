@@ -7,8 +7,8 @@ import { ThemePicker } from "./_components/ThemePicker";
 import { HomeActions } from "./_components/HomeActions";
 
 /**
- * Page d'accueil : présente les deux chemins (créer une partie / en
- * rejoindre une), le choix de la couleur du fond et les pages d'info.
+ * Page d'accueil : présente les deux modes (multijoueur entre potes :
+ * créer / rejoindre une partie ; solo : La Tournée), le choix de la couleur du fond et les pages d'info.
  *
  * Direction "Arcade autocollants" (maquette validée, canvas "Blindtest —
  * Refonte Arcade") : logo Kazou Band en deux autocollants inclinés (voir
@@ -25,7 +25,7 @@ export default function HomePage() {
       <div className="flex flex-col items-center gap-5">
         <KazouBandLogo />
         <p className="bg-inkSurface border-2 border-fg rounded-full px-4 py-1.5 font-bold text-sm shadow-sticker-sm">
-          le blind test entre potes
+          le jeu de blind test
         </p>
       </div>
 

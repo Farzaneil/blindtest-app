@@ -35,11 +35,11 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://kazouband.fr";
 
 export const metadata = {
   metadataBase: new URL(SITE_URL),
-  title: { default: "Kazou Band · le blind test entre potes", template: "%s · Kazou Band" },
-  description: "Le blind test entre potes : un téléphone lance la musique, tous les téléphones servent de buzzers. Rien à installer.",
+  title: { default: "Kazou Band · le jeu de blind test", template: "%s · Kazou Band" },
+  description: "Le jeu de blind test : entre potes, un téléphone lance la musique et tous les téléphones servent de buzzers ; en solo, La Tournée et ses niveaux. Rien à installer.",
   applicationName: "Kazou Band",
   openGraph: {
-    title: "Kazou Band · le blind test entre potes",
+    title: "Kazou Band · le jeu de blind test",
     description: "Un téléphone lance la musique, tous les téléphones buzzent. Rien à installer.",
     siteName: "Kazou Band",
     locale: "fr_FR",

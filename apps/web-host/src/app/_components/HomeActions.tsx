@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Map as MapIcon, Mic2, Play, Plus, Smartphone } from "lucide-react";
+import { Mic2, Play, Plus, Smartphone } from "lucide-react";
+import { Kazou, KazouForTheme } from "../../lib/kazou";
+import { IconMap } from "../solo/_components/SoloIcons";
 import { confirmDialog } from "./ConfirmDialog";
 import { endHostGame, forgetHostGame, readOngoingHostGame, type OngoingHostGame } from "../../lib/hostSession";
 
@@ -72,50 +74,45 @@ export function HomeActions() {
         </section>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {ongoing ? (
-          <button
-            type="button"
-            onClick={startNewGame}
-            disabled={ending}
-            className="bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-6 py-7 flex flex-col items-center gap-2 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none disabled:opacity-60"
-          >
-            <Plus className="w-8 h-8" strokeWidth={2.5} />
-            <span className="text-xl font-display">{ending ? "Fermeture…" : "Nouvelle partie"}</span>
-            <span className="text-sm font-bold text-inkMuted">Termine celle en cours</span>
-          </button>
-        ) : (
-          <Link
-            href="/host"
-            className="bg-sage text-fg border-[3px] border-fg rounded-2xl px-6 py-7 flex flex-col items-center gap-2 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none"
-          >
-            <Mic2 className="w-8 h-8" strokeWidth={2.5} />
-            <span className="text-xl font-display">Créer une partie</span>
-            <span className="text-sm font-bold">Je suis l’hôte</span>
-          </Link>
-        )}
-        <Link
-          href="/play"
-          className="bg-info text-fg border-[3px] border-fg rounded-2xl px-6 py-7 flex flex-col items-center gap-2 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none"
-        >
-          <Smartphone className="w-8 h-8" strokeWidth={2.5} />
-          <span className="text-xl font-display">Rejoindre</span>
-          <span className="text-sm font-bold">Je suis joueur</span>
-        </Link>
-      </div>
+      <h2 className="font-display text-2xl">Choisis ton mode</h2>
 
-      <Link
-        href="/solo"
-        className="bg-inkSurface text-fg border-[3px] border-fg rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sticker transition-transform hover:-translate-y-0.5 active:translate-x-1 active:translate-y-1 active:shadow-none text-left"
-      >
-        <span className="w-12 h-12 rounded-xl bg-logo border-[3px] border-fg flex items-center justify-center shrink-0">
-          <MapIcon className="w-6 h-6" strokeWidth={2.5} />
+      {/* Multijoueur : couleur d'action du thème (jamais celle du fond). */}
+      <section className="relative overflow-hidden bg-sage text-fg border-[3px] border-fg rounded-3xl shadow-sticker p-5 text-left">
+        <span className="absolute -right-2 top-2 pointer-events-none" aria-hidden>
+          <KazouForTheme mood="joie" size={88} />
         </span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-lg font-display leading-tight">Jouer en solo</span>
-          <span className="block text-sm font-bold text-inkMuted">La Tournée du Kazou Band : niveaux, étoiles et boss</span>
+        <p className="text-xs font-extrabold tracking-[0.18em] uppercase">Multijoueur</p>
+        <h3 className="font-display text-3xl leading-tight mt-0.5">Entre potes</h3>
+        <p className="text-sm font-bold mt-1 max-w-[62%]">Un téléphone chacun : l’hôte lance la musique, le plus rapide buzze.</p>
+        <div className="grid grid-cols-2 gap-3 mt-4">
+          {ongoing ? (
+            <button type="button" onClick={startNewGame} disabled={ending} className="bg-inkSurface text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-3 font-display text-base flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60">
+              <Plus className="w-5 h-5 shrink-0" strokeWidth={2.5} />
+              {ending ? "Fermeture…" : "Nouvelle partie"}
+            </button>
+          ) : (
+            <Link href="/host" className="bg-inkSurface text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-3 font-display text-base flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60">
+              <Mic2 className="w-5 h-5 shrink-0" strokeWidth={2.5} /> Créer
+            </Link>
+          )}
+          <Link href="/play" className="bg-inkSurface text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-3 font-display text-base flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60">
+            <Smartphone className="w-5 h-5 shrink-0" strokeWidth={2.5} /> Rejoindre
+          </Link>
+        </div>
+      </section>
+
+      {/* Solo : rose, couleur qui n'est jamais un fond de l'app. */}
+      <section className="relative overflow-hidden bg-logo text-fg border-[3px] border-fg rounded-3xl shadow-sticker p-5 text-left">
+        <span className="absolute -right-2 top-2 pointer-events-none" aria-hidden>
+          <Kazou who="zou" mood="joie" size={88} />
         </span>
-      </Link>
+        <p className="text-xs font-extrabold tracking-[0.18em] uppercase">Solo</p>
+        <h3 className="font-display text-3xl leading-tight mt-0.5">La Tournée</h3>
+        <p className="text-sm font-bold mt-1 max-w-[62%]">Niveaux, étoiles et boss, à ton rythme.</p>
+        <Link href="/solo" className="bg-inkSurface text-fg border-[3px] border-fg rounded-xl shadow-sticker-sm px-3 py-3 font-display text-base flex items-center justify-center gap-2 transition-transform hover:-translate-y-0.5 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-60 mt-4">
+          <IconMap size={26} /> Jouer en solo
+        </Link>
+      </section>
     </div>
   );
 }

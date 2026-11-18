@@ -5,7 +5,7 @@ import { kazouSvgString } from "../lib/kazou";
  * Image d'aperçu quand on partage le lien (WhatsApp, Messenger, réseaux) :
  * le logo Kazou Band, le trio et la signature. Générée au build.
  */
-export const alt = "Kazou Band, le blind test entre potes";
+export const alt = "Kazou Band, le jeu de blind test";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -55,7 +55,7 @@ export default async function OpengraphImage() {
           {sticker("KAZOU", "#FF6FB5", "#111111", -4)}
           {sticker("BAND", "#4D7CFF", "#FFFFFF", 3, 150)}
           <div style={{ display: "flex", marginTop: 44, background: "#FFFFFF", border: "5px solid #111111", borderRadius: 999, boxShadow: "7px 7px 0 #111111", padding: "14px 30px", fontSize: 38, transform: "rotate(-2deg)" }}>
-            le blind test entre potes
+            le jeu de blind test
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
