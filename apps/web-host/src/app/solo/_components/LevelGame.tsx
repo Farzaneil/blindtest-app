@@ -194,15 +194,32 @@ function Game({ world, level, onReplay }: { world: WorldDef; level: LevelDef; on
     [boss, level.answerSeconds, level.clip, level.tiers, player, pool, previewFor]
   );
 
-  // Lancement direct dès que les morceaux sont prêts (le clic sur « Jouer »
-  // de la carte a déjà débloqué le son, voir useClipPlayer.primeAudio).
+  // Compte à rebours « 3, 2, 1, GO ! » à l'ouverture du niveau : il occupe
+  // l'écran pendant le chargement de la réserve et du premier extrait, au lieu
+  // d'un « Chargement… » qui ressemble à un bug. 3 → 2 → 1 → 0 (= GO !).
+  const [count, setCount] = useState(3);
+  useEffect(() => {
+    if (count <= 0) return;
+    const t = setTimeout(() => setCount((c) => c - 1), 750);
+    return () => clearTimeout(t);
+  }, [count]);
+
+  // Pendant le décompte : on précharge les premiers extraits.
+  useEffect(() => {
+    if (phase !== "ready") return;
+    tracks.slice(0, 2).forEach((t) => previewFor(t).catch(() => {}));
+  }, [phase, tracks, previewFor]);
+
+  // Lancement direct à la fin du décompte, dès que les morceaux sont prêts (le
+  // clic sur « Jouer » de la carte a déjà débloqué le son, voir
+  // useClipPlayer.primeAudio).
   const started = useRef(false);
   useEffect(() => {
-    if (phase !== "ready" || started.current) return;
+    if (phase !== "ready" || count > 0 || started.current) return;
     started.current = true;
-    const t = setTimeout(() => void startTrack(0, tracks), 0);
+    const t = setTimeout(() => void startTrack(0, tracks), 450);
     return () => clearTimeout(t);
-  }, [phase, startTrack, tracks]);
+  }, [phase, count, startTrack, tracks]);
 
   const unblock = () => {
     const cur = currentUrl.current;
@@ -366,6 +383,10 @@ function Game({ world, level, onReplay }: { world: WorldDef; level: LevelDef; on
     );
   }
 
+  if (phase === "loading" || phase === "ready") {
+    return <Countdown world={world} level={level} count={count} />;
+  }
+
   if (phase === "done" && result) {
     return <EndScreen world={world} level={level} result={result} outcomes={outcomes} gained={gained} onReplay={onReplay} />;
   }
@@ -448,7 +469,7 @@ function Game({ world, level, onReplay }: { world: WorldDef; level: LevelDef; on
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-1.5">
-              <b className="text-sm">{phase === "loading" || phase === "ready" ? "Chargement…" : blocked ? "Touche ▶ pour le son" : boss ? `Morceau ${index + 1}` : `Morceau ${index + 1} / ${tracks.length}`}</b>
+              <b className="text-sm">{blocked ? "Touche ▶ pour le son" : boss ? `Morceau ${index + 1}` : `Morceau ${index + 1} / ${tracks.length}`}</b>
               <span className="font-display text-xs bg-logo border-[3px] border-fg rounded-full px-2 py-0.5">{clipLabel(clip)}</span>
             </div>
             <div className="flex items-center gap-1 h-10" aria-hidden>
@@ -727,5 +748,44 @@ function Goals({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Écran de lancement d'un niveau : « 3, 2, 1, GO ! » en gros autocollants qui
+ * rebondissent, pendant que la réserve et le premier extrait se chargent. Si
+ * le chargement dure, « GO ! » reste affiché jusqu'au premier morceau.
+ */
+function Countdown({ world, level, count }: { world: WorldDef; level: LevelDef; count: number }) {
+  const boss = level.boss;
+  const dark = boss?.color === "#2B2B33";
+  return (
+    <main
+      className={`min-h-dvh flex flex-col items-center justify-center gap-6 px-4 text-center ${dark ? "text-white" : "text-fg"}`}
+      style={{ background: dark ? "#2B2B33" : world.color }}
+      aria-live="polite"
+    >
+      <div>
+        <p className="text-xs font-extrabold tracking-[0.18em] uppercase">
+          Monde {world.number} · {world.name}
+        </p>
+        <h1 className="font-display text-3xl leading-tight mt-1">{boss ? boss.name : `Niveau ${level.index}`}</h1>
+      </div>
+      {boss ? <BossSprite boss={boss} size={140} /> : null}
+      <span
+        key={count}
+        className={`font-display leading-none bg-inkSurface text-fg border-[6px] border-fg rounded-[36px] shadow-sticker-lg flex items-center justify-center animate-[stickerPop_0.45s_ease-out] ${
+          count > 0 ? "w-44 h-44 text-[120px]" : "px-10 h-44 text-[96px] bg-[#FFE14D] -rotate-3"
+        }`}
+      >
+        {count > 0 ? count : "GO !"}
+      </span>
+      {!boss && (
+        <span className="pointer-events-none" aria-hidden>
+          <Kazou who={world.color === "#A8DCFF" ? "zazou" : "zou"} mood={count > 0 ? "joie" : "champion"} size={96} />
+        </span>
+      )}
+      <p className="font-bold text-sm">{boss ? "Mets-le K.-O. avant de perdre tes 3 cœurs !" : `Objectif : ${starGoals(level.tracks).need} extraits sur ${level.tracks}`}</p>
+    </main>
   );
 }
