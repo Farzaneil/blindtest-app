@@ -45,6 +45,7 @@ export type LevelDef = {
 
 export type BossDef = {
   name: string; // « Le Videur »
+  art: "voisin" | "sono" | "videur"; // dessin (app/solo/_components/BossSprite.tsx)
   badge: string; // texte du brassard
   color: string; // couleur du corps de l'enceinte
   accent: string;
@@ -119,6 +120,7 @@ export const WORLDS: WorldDef[] = [
         answerSeconds: 25,
         boss: {
           name: "Le Voisin",
+          art: "voisin",
           badge: "CHUT !",
           color: "#E9DCC4",
           accent: "#A8DCFF",
@@ -156,6 +158,7 @@ export const WORLDS: WorldDef[] = [
         answerSeconds: 25,
         boss: {
           name: "La Sono",
+          art: "sono",
           badge: "SONO",
           color: "#FF6FB5",
           accent: "#FFE14D",
@@ -193,6 +196,7 @@ export const WORLDS: WorldDef[] = [
         answerSeconds: 20,
         boss: {
           name: "Le Videur",
+          art: "videur",
           badge: "STAFF",
           color: "#2B2B33",
           accent: "#FF6FB5",

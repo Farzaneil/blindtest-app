@@ -161,7 +161,8 @@ function WorldPath({
 
   const guideLevel = !arrived && fromLevel ? fromLevel : current;
   const guidePos = guideLevel ? nodePos(world, guideLevel) : null;
-  const points = [...levels.map((l) => nodePos(world, l)), { x: 50, y: BOSS_Y }];
+  // Le chemin s'arrête sous le médaillon du boss (sans le traverser).
+  const points = [...levels.map((l) => nodePos(world, l)), { x: 50, y: BOSS_Y + 60 }];
 
   return (
     <div className="relative mt-4 w-full" style={{ height }}>
@@ -234,7 +235,7 @@ function WorldPath({
             const stars = progress.stars[boss.id] ?? 0;
             const inner = (
               <span
-                className={`relative flex items-center justify-center w-28 h-28 rounded-full border-[5px] border-fg shadow-sticker ${open ? "" : "grayscale opacity-70"}`}
+                className={`relative flex items-center justify-center w-28 h-28 rounded-full border-[5px] border-fg shadow-sticker ${open ? "" : "grayscale"}`}
                 style={{ background: boss.boss.color === "#2B2B33" ? "#2B2B33" : "#fff" }}
               >
                 <span className="overflow-hidden rounded-full w-full h-full flex items-center justify-center">
